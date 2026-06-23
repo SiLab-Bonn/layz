@@ -1,0 +1,2 @@
+klayout==0.30.9
+kicad-pycbnew==1.0.1
