@@ -93,14 +93,18 @@ python gds2pcb.py input.gds output.kicad_pcb --net-name /GND
 - Generated zones include both `polygon` and matching `filled_polygon` sections. Avoid manually refilling zones in KiCad if you need to preserve the exact GDS-derived fill geometry.
 - `--flip-y` exists for coordinate-system experiments, but the default is no mirroring.
 
-## Validate with KiCad CLI
+## Generate a preview SVG
 
-If KiCad is installed, you can verify that KiCad can load/render the generated board:
+The converter itself only writes the KiCad PCB file. The `preview.svg` image in this README was generated from the converted board using KiCad CLI:
 
 ```sh
-kicad-cli pcb export svg output.kicad_pcb \
-  --output output.svg \
+python gds2pcb.py example.gds example.kicad_pcb
+
+kicad-cli pcb export svg example.kicad_pcb \
+  --output preview.svg \
   --layers F.Cu,In1.Cu,B.Cu,F.Mask \
   --page-size-mode 2 \
   --exclude-drawing-sheet
 ```
+
+KiCad / `kicad-cli` is only needed for opening, validating, or exporting the generated `.kicad_pcb` file; it is not needed to run `gds2pcb.py`.
