@@ -6,37 +6,45 @@ The converter uses KLayout to read and polygonize GDS shapes, then writes KiCad 
 
 ## Preview
 
-Example output from the test GDS conversion:
+Example output generated from `example.gds`:
 
-![Generated KiCad PCB preview](docs/preview.svg)
+![Generated KiCad PCB preview](preview.svg)
 
 ## Install
 
-Python 3.12 was used during development. Create a virtual environment and install dependencies:
-
-```sh
-python3 -m venv .venv
-. .venv/bin/activate
-pip install -r requirements.txt
-```
-
-Dependencies:
+Python 3.12 was used during development. The runtime dependencies are normal Python packages installed from PyPI via `pip`:
 
 - `klayout`
 - `kicad-pycbnew`
 
-KiCad is not required to run the converter, but it is required to open the generated `.kicad_pcb` file or to validate/export it with `kicad-cli`.
+Create a virtual environment and install the project dependencies from `pyproject.toml`:
+
+```sh
+python3 -m venv .venv
+. .venv/bin/activate
+pip install .
+```
+
+No separate KiCad GUI application package is required to run the converter itself. KiCad is only needed if you want to open the generated `.kicad_pcb` file graphically or validate/export it with `kicad-cli`.
 
 ## Usage
 
+Convert the included example GDS file:
+
 ```sh
-python gds2pcb.py input.gds output.kicad_pcb
+python gds2pcb.py example.gds example.kicad_pcb
 ```
 
-If no arguments are provided, the script defaults to:
+If no arguments are provided, the script uses those same defaults:
 
 ```sh
-python gds2pcb.py conversion_test.gds conversion_test_pycbnew.kicad_pcb
+python gds2pcb.py
+```
+
+Convert another GDS file:
+
+```sh
+python gds2pcb.py input.gds output.kicad_pcb
 ```
 
 ## Default layer mapping

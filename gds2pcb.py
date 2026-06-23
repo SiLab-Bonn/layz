@@ -317,10 +317,8 @@ def normalize_layer_block(pcb_path: Path) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("gds", nargs="?", default="conversion_test.gds", type=Path)
-    parser.add_argument(
-        "pcb", nargs="?", default="conversion_test_pycbnew.kicad_pcb", type=Path
-    )
+    parser.add_argument("gds", nargs="?", default="example.gds", type=Path)
+    parser.add_argument("pcb", nargs="?", default="example.kicad_pcb", type=Path)
     parser.add_argument(
         "--layer-map",
         action="append",
