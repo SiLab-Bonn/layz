@@ -472,7 +472,7 @@ def build_graph(root: Form, all_copper: list[str], tolerance: float, seed_footpr
     return nodes, union_find, layer_geometries, pad_nodes
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Assign KiCad zone/via nets from a selected footprint's authoritative pad nets."
     )
@@ -488,7 +488,7 @@ def main() -> int:
         "--tolerance-mm", type=float, default=0.001,
         help="Maximum extra gap bridged between copper shapes (default: 0.001 mm; use 0 for exact touch/overlap)",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     if args.tolerance_mm < 0:
         parser.error("--tolerance-mm must be >= 0")

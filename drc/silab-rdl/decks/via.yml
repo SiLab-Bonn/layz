@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: Apache-2.0
+# SiLab RDL. Lengths in µm, areas in µm² (1e-6 below the rule: compared in floating point).
+rules:
+  - id: RDL.Via1.size
+    check: min_width
+    layers: [Via1]
+    value: 10.0
+  - id: RDL.Via1.space
+    check: min_space
+    layers: [Via1]
+    value: 10.0
+  - id: RDL.Via2.size
+    check: min_width
+    layers: [Via2]
+    value: 10.0
+  - id: RDL.Via2.space
+    check: min_space
+    layers: [Via2]
+    value: 10.0
+  - id: RDL.Via3.size
+    check: min_width
+    layers: [Via3]
+    value: 10.0
+  - id: RDL.Via3.space
+    check: min_space
+    layers: [Via3]
+    value: 10.0

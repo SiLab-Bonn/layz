@@ -1,110 +1,210 @@
-# gds2kicad
+# layz
 
-Convert selected GDS geometry into a KiCad `.kicad_pcb` board file.
+Layout tools for SiLab's FR4 PCBs, in-house RDL chips (maskless lithography) and the flex PCBs
+that connect them, as one command line tool:
 
-The converter uses KLayout to read and polygonize GDS shapes, then writes KiCad PCB objects using `kicad-pycbnew`. GDS polygons are emitted as KiCad zones with cached `filled_polygon` data, so downstream exports can use the generated filled geometry without asking KiCad to recalculate zone fills.
+```
+layz drc       design rule check of a GDS (gdscheck, with the kit's deck)
+layz gds2pcb   GDS -> KiCad .kicad_pcb (copper zones, footprints, vias, outline, stackup)
+layz nets      assign zone/via nets from a seed footprint's pad nets
+layz hyp       .kicad_pcb or GDS -> HyperLynx .hyp (for SI/PI)
+layz svg       GDS -> SVG preview
+layz pex       3-D capacitance matrix with FasterCap/FastCap2 (.kicad_pcb, or GDS + stack)
+layz field     electric field and potential from a `layz pex --charges` run
+layz view      open a result: DRC report in KLayout, or ParaView renders of a field run
+layz doctor    which external tools this machine has
+```
 
-## Preview
-
-Example output generated from `example.gds`:
-
-![Generated KiCad PCB preview](preview.svg)
+`layz <command> -h` shows each command's options.
 
 ## Install
 
-Python 3.12 was used during development. The runtime dependencies are normal Python packages installed from PyPI via `pip`:
+layz is a Python package managed with [uv](https://docs.astral.sh/uv/). It also uses tools that
+are not on PyPI:
 
-- `klayout`
-- `kicad-pycbnew`
+| Tool | Needed for | Get it |
+| --- | --- | --- |
+| KiCad (its `pcbnew` Python module, `kicad-cli`) | `gds2pcb` checks, `hyp`, `pex` on boards, schematic netlists | install KiCad |
+| FasterCap (default) / FastCap2 | `pex` | `scripts/build_solvers.sh` |
+| KLayout GUI | viewing GDS, DRC results | install KLayout |
+| gdscheck | `drc` | `cargo install --git https://github.com/aesc-silicon/gdscheck gdscheck` |
+| ParaView | `view` | `sudo apt install paraview` |
 
-Create a virtual environment and install the project dependencies from `pyproject.toml`:
-
-```sh
-python3 -m venv .venv
-. .venv/bin/activate
-pip install .
-```
-
-No separate KiCad GUI application package is required to run the converter itself. KiCad is only needed if you want to open the generated `.kicad_pcb` file graphically or validate/export it with `kicad-cli`.
-
-## Usage
-
-Convert the included example GDS file:
+KLayout's Python module, KLayout-PEX, Shapely and the rest come from PyPI. Install `layz` as a
+command with uv, on the Python that KiCad's `pcbnew` module was built for (the system Python:
+3.14 on Ubuntu 26.04); `--editable` makes changes in this repo take effect without reinstalling:
 
 ```sh
-python gds2pcb.py example.gds example.kicad_pcb
+# Linux (KiCad from the distribution's packages)
+uv tool install --editable . --python /usr/bin/python3
+
+# macOS: KiCad brings its own Python, so build the tool on that one (not yet tested on a Mac)
+uv tool install --editable . \
+  --python /Applications/KiCad/KiCad.app/Contents/Frameworks/Python.framework/Versions/Current/bin/python3
+
+layz doctor                 # checks klayout, kicad-cli and FasterCap on PATH, and more
 ```
 
-If no arguments are provided, the script uses those same defaults:
+Without uv, `source workspace.sh` does the same for the current shell: it makes `.venv/` with the
+system Python and pip on first use, installs layz into it, and puts `layz` on `PATH`. Keep the
+clone (editable install): the DRC decks (`drc/`) and stacks (`stacks/`) are read from it. If `layz` isn't found
+afterwards, run `uv tool update-shell` once: it puts uv's tool folder (`~/.local/bin`) on `PATH`.
+
+layz finds KiCad's `pcbnew` by itself (it isn't on PyPI, so the tool's own environment can't
+contain it); set `LAYZ_KICAD_PYTHONPATH` to the folder holding `pcbnew.py` if it's somewhere
+unusual. `layz doctor` exits with an error when a required tool is missing, and warns about
+optional ones (HyperLynx via `LAYZ_HYPERLYNX`, FastCap2, ParaView).
+
+On Ubuntu also `sudo apt install cmake g++ libomp-dev libopenblas-dev`, then
+`scripts/build_solvers.sh`: it builds FasterCap (iic-jku fork, headless), FastCap2 and a
+wxWidgets base library into `~/.local/share/layz` and links the solvers into `~/.local/bin`.
+layz finds them on `PATH`, or through `LAYZ_FASTERCAP` / `LAYZ_FASTCAP2`. On macOS see the notes
+at the top of the script.
+
+For working on layz itself (tests), use the project venv:
 
 ```sh
-python gds2pcb.py
+uv venv --python /usr/bin/python3 --system-site-packages
+uv sync
+uv run pytest
 ```
 
-Convert another GDS file:
+## Stack files
+
+A GDS carries only 2-D shapes; heights, thicknesses and permittivities come from a **stack
+file**, one per process, in `stacks/`. It lists the layers top to bottom; z positions are derived
+from the order. Every tool reads the same file:
+
+```toml
+name = "SiLab RDL, 4 copper"
+outline = "70/0"              # GDS layer of the board/die outline
+
+[[layer]]
+name = "F.Mask"
+type = "mask"                 # mask | copper | dielectric
+thickness_um = 1.0
+er = 3.3
+
+[[layer]]
+name = "F.Cu"                 # KiCad names: F.Cu, In1.Cu, ..., B.Cu
+type = "copper"
+thickness_um = 0.5
+gds = "8/0"
+pads = true                   # GDS sub-cells with these shapes become footprint pads
+zones = false                 # top-level shapes become copper zones (default true)
+
+[[layer]]
+name = "DE_F.Cu"
+type = "dielectric"
+thickness_um = 4.0
+er = 4.5
+material = "FR4"
+# ... more layers ...
+
+[[via]]
+gds = "7/0"
+top = "F.Cu"
+bottom = "In1.Cu"
+```
+
+`layz gds2pcb --stack` writes the stack into the board as its KiCad physical stackup, so the
+`.kicad_pcb`, the `.hyp` and the FasterCap model all carry it. A board made in KiCad uses its
+own stackup (Board Setup > Physical Stackup). The full format is documented in
+[src/layz/stack.py](src/layz/stack.py).
+
+| Stack file | Process | Source |
+| --- | --- | --- |
+| `silab_rdl.toml` | SiLab RDL, 4 copper (obelix1) | colleagues' GDS mapping, stackup from their KiCad `.hyp`; dielectric εr to confirm |
+| `multicb_4L-01.toml` | Multi-CB 4-layer FR4, 1.6 mm | Multi-CB defined buildup 4L-01 (mask assumed: 10 µm, εr 3.3) |
+| `multicb_4L-02.toml` | Multi-CB 4-layer FR4, 1.0 mm | Multi-CB defined buildup 4L-02 (mask assumed) |
+| `multicb_flex_2F-l.toml` | Multi-CB 2-layer flex, adhesiveless, 161 µm | Multi-CB standard 2F-l |
+| `multicb_flex_2F-a.toml` | Multi-CB 2-layer flex, adhesive-bonded, 187 µm | Multi-CB standard 2F-a |
+
+The Multi-CB files are their published standard buildups; for a board ordered with a custom
+buildup, copy the closest one and enter the ordered thicknesses and materials.
+
+## GDS -> KiCad -> HyperLynx
 
 ```sh
-python gds2pcb.py input.gds output.kicad_pcb
+layz hyp example_files/obelix1_ivtx_ladder_v2.gds --stack stacks/silab_rdl.toml   # one step
 ```
 
-## Default layer mapping
+or step by step, to edit the board in between:
 
-The current defaults are tailored for the prototype process stack:
+```sh
+layz gds2pcb design.gds design.kicad_pcb --stack stacks/silab_rdl.toml
+# KiCad: Update PCB from Schematic (references and the seed footprint's pad nets)
+layz nets design.kicad_pcb --seed-footprint VTX2       # -> design_nets_assigned.kicad_pcb
+layz hyp design_nets_assigned.kicad_pcb               # -> design_nets_assigned.hyp
+```
 
-| GDS layer/datatype | KiCad output |
+`gds2pcb`: GDS cells with pad-layer shapes become footprints (one per cell and orientation),
+top-level copper becomes filled zones, via layers become blind/buried vias, the outline layer
+becomes Edge.Cuts; Y is flipped so the board shows the GDS top view. `nets`: nets propagate from
+the seed footprint's pads through touching copper and vias. `hyp`: a re-implementation of KiCad's
+HyperLynx exporter (KiCad has it only in the GUI), same records and number format: board
+outline, stackup, devices, padstacks, and per net its pins, vias, tracks and zone fills.
+
+## Design rule check
+
+```sh
+layz drc --lay design.gds --kit silab-rdl                  # -> design.lyrdb
+layz view design.lyrdb --lay design.gds                     # KLayout with the violation markers
+```
+
+Decks are gdscheck PDKs in its own YAML format, one per kit in `drc/<kit>/`. `drc/silab-rdl/`
+is the in-house RDL (maskless lithography) on the obelix1 4-copper layer mapping:
+
+| Rule | Value |
 | --- | --- |
-| `3/0` | filled zone on `In1.Cu` |
-| `6/0` | filled zone on `F.Cu` |
-| `7/0` | filled zone on `F.Mask` |
-| `2/0` | blind via from `B.Cu` to `In1.Cu` |
-| `4/0` | blind via from `In1.Cu` to `F.Cu` |
+| metal width, spacing, notch (all four copper layers) | ≥ 10 µm |
+| metal area (minimum feature 10 × 10 µm) | ≥ 100 µm² |
+| via size / via spacing (spacing assumed = metal spacing) | ≥ 10 µm |
+| via enclosure by the metal above and below, every side | ≥ 10 µm (pads ≥ 30 × 30 µm) |
+| metal density in any 1 × 1 mm window (step 500 µm), inside the outline 70/0 | ≤ 95 % |
 
-The default generated net name is empty.
+`--suite geometry` leaves out density. The obelix1 ladder GDS takes about 2 minutes (18 threads)
+and currently reports 2317 violations, mostly via enclosure (1896 on 2/0 by 68/0).
 
-## Override mappings
-
-Map GDS polygon layers to KiCad layers:
-
-```sh
-python gds2pcb.py input.gds output.kicad_pcb \
-  --layer-map 3/0=In1.Cu \
-  --layer-map 6/0=F.Cu
-```
-
-Map GDS via layers to KiCad via layer pairs:
+## Capacitance and fields
 
 ```sh
-python gds2pcb.py input.gds output.kicad_pcb \
-  --via-map 2/0=B.Cu,In1.Cu \
-  --via-map 4/0=In1.Cu,F.Cu
+layz pex board.kicad_pcb                              # stack from the board
+layz pex chip.gds --stack stacks/silab_rdl.toml       # stack from the file
+layz pex board.kicad_pcb --charges --out run          # also keep charges for fields
+layz field run --voltage TOP=1                        # 3-D grid -> run/field.vtk
+layz field run --voltage TOP=1 --plane y=5000         # cross-section, PNG + VTK
+layz view section run/section_y5000_edge.vtk          # ParaView: heatmap + field lines
+layz view geometry run                                # ParaView: the 3-D model
 ```
 
-Set a KiCad net name:
+A conductor is any copper that touches or is joined by vias (no LVS, no netlist), named by net
+(KiCad), by GDS texts or `--name NAME=LAYER@X,Y`. The 3-D model (extrusion, dielectric interfaces,
+triangulation into FasterCap's `.lst`/`.geo`) comes from KLayout-PEX's `FasterCapModelBuilder`.
+Results: `maxwell_matrix_fF.csv` (Maxwell sign convention: diagonal total, off-diagonal
+−mutual) and `spice_caps_fF.csv`.
 
-```sh
-python gds2pcb.py input.gds output.kicad_pcb --net-name /GND
-```
+**Keep `--tolerance` at 1 % or tighter** (the default). With dielectrics FasterCap's first passes
+can be far off: plates with εr = 4 gave 2336 fF at 5 % and 3591 fF at 1 %, without an error.
+layz warns when FasterCap stops after a single pass.
 
-## Notes
+`--voltage` sets conductor voltages when computing fields; any bias is a superposition of the
+solved columns, so it needs no new solve. On Ubuntu ParaView needs `HWLOC_COMPONENTS=-gl`
+(`layz view` sets it).
 
-- GDS boxes, polygons, and paths are all converted through KLayout's `shape.dpolygon` representation.
-- KiCad native via objects are circular. For each GDS via polygon, the converter uses the bounding-box center and `min(width, height)` as the via diameter.
-- The via drill defaults to `diameter - 10 µm`; adjust with `--drill-shrink-um`.
-- Generated zones include both `polygon` and matching `filled_polygon` sections. Avoid manually refilling zones in KiCad if you need to preserve the exact GDS-derived fill geometry.
-- `--flip-y` exists for coordinate-system experiments, but the default is no mirroring.
+## Checks
 
-## Generate a preview SVG
+`uv run pytest` (about 3 s):
 
-The converter itself only writes the KiCad PCB file. The `preview.svg` image in this README was generated from the converted board using KiCad CLI:
+- GDS -> `.hyp` of the obelix1 RDL design gives the same STACKUP section as the `.hyp` KiCad's GUI
+  exported (`example_files/obelix1_ivtx_ladder_with_nets_v3.1.hyp`).
+- `tests/plates.gds`, two 1 mm² plates 10 µm apart in vacuum: 918.8 fF (ideal 885 fF + fringe).
+- `tests/pcb_plates.kicad_pcb` (two 10 × 10 mm, 35 µm plates on 0.2 mm FR4, from
+  `tests/make_pcb_plates.py`) builds the validated 3-D model. Solved at 1 %: 21.54 pF against
+  ~21.7 pF from Palmer's edge-corrected formula, 5.16 kV/m in the FR4 at 1 V (ideal 5.0).
+- Stack files: heights, validation, KiCad stackup round trip.
 
-```sh
-python gds2pcb.py example.gds example.kicad_pcb
+## Files
 
-kicad-cli pcb export svg example.kicad_pcb \
-  --output preview.svg \
-  --layers F.Cu,In1.Cu,B.Cu,F.Mask \
-  --page-size-mode 2 \
-  --exclude-drawing-sheet
-```
-
-KiCad / `kicad-cli` is only needed for opening, validating, or exporting the generated `.kicad_pcb` file; it is not needed to run `gds2pcb.py`.
+- `src/layz/` the package; `stacks/` process stacks; `example_files/` reference designs
+  (GDS, KiCad schematic, a KiCad-exported `.hyp`); `tests/`; `scripts/build_solvers.sh`.

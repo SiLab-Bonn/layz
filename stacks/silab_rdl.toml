@@ -1,0 +1,89 @@
+# SiLab in-house RDL, 4 copper layers (obelix1 iVTX ladder).
+#
+# GDS mapping: from gds2pcb v3 (the colleagues' converter defaults).
+# Thicknesses and εr: from the stackup in example_files/obelix1_ivtx_ladder_with_nets_v3.1.hyp,
+# which was set by hand in KiCad. TO CHECK with the cleanroom process: the dielectrics are
+# entered as "FR4", εr 4.5 there; an RDL dielectric is more likely a polyimide/BCB (εr ~2.7-3.5).
+#
+# Layers top to bottom, thicknesses in µm; z is derived from the order (layz/stack.py).
+
+name = "SiLab RDL, 4 copper"
+outline = "70/0"
+halo_um = 200
+
+[[layer]]
+name = "F.Mask"
+type = "mask"
+thickness_um = 1.0
+er = 3.3
+material = "Solder Mask"
+
+[[layer]]
+name = "F.Cu"
+type = "copper"
+thickness_um = 0.5
+gds = "8/0"
+pads = true      # chip-side pads: GDS cells with 8/0 shapes become front footprints
+zones = false
+
+[[layer]]
+name = "DE_F.Cu"
+type = "dielectric"
+thickness_um = 4.0
+er = 4.5
+material = "FR4"
+
+[[layer]]
+name = "In1.Cu"
+type = "copper"
+thickness_um = 4.0
+gds = "6/0"
+
+[[layer]]
+name = "DE_In1.Cu"
+type = "dielectric"
+thickness_um = 10.0
+er = 4.5
+material = "FR4"
+
+[[layer]]
+name = "In2.Cu"
+type = "copper"
+thickness_um = 4.0
+gds = "3/0"
+
+[[layer]]
+name = "DE_In2.Cu"
+type = "dielectric"
+thickness_um = 10.0
+er = 4.5
+material = "FR4"
+
+[[layer]]
+name = "B.Cu"
+type = "copper"
+thickness_um = 4.0
+gds = "68/0"
+pads = true      # back-side pads (and zones)
+
+[[layer]]
+name = "B.Mask"
+type = "mask"
+thickness_um = 10.0
+er = 3.3
+material = "Solder Mask"
+
+[[via]]
+gds = "7/0"
+top = "F.Cu"
+bottom = "In1.Cu"
+
+[[via]]
+gds = "4/0"
+top = "In1.Cu"
+bottom = "In2.Cu"
+
+[[via]]
+gds = "2/0"
+top = "In2.Cu"
+bottom = "B.Cu"

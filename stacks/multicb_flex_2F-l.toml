@@ -1,0 +1,46 @@
+# Multi-CB standard 2-layer flex, adhesiveless base material: buildup 2F-l, 161 µm.
+#
+# Source: https://www.multi-circuit-boards.eu/en/pcb-design-aid/layer-buildup/flexible-pcb.html
+# (stack-up image "2F-l", standard column). Coverlay options: PI 13/25/50 µm, adhesive
+# 20/25/50/75 µm; copper 18/35 µm; polyimide core 25/50/75 µm. Standard values below.
+#
+# εr from Multi-CB's material list (https://www.multi-circuit-boards.eu/en/pcb-design-aid/
+# layer-buildup/pcb-materials.html): polyimide adhesiveless (DuPont Pyralux AP) 3.4,
+# coverlay (DuPont Pyralux FR) 3.5. Multi-CB doesn't say which material a given order uses.
+#
+# Each coverlay (25 µm polyimide + 25 µm adhesive) is one 50 µm "mask" layer: KiCad's stackup
+# allows nothing between the mask and the outer copper, and Pyralux FR is specified as the
+# polyimide+adhesive composite.
+
+name = "Multi-CB 2F-l, 2-layer flex, adhesiveless"
+
+[[layer]]
+name = "F.Mask"         # PI coverlay 25 µm + coverlay adhesive 25 µm
+type = "mask"
+thickness_um = 50
+er = 3.5
+material = "Coverlay"
+
+[[layer]]
+name = "F.Cu"           # base copper + button plating
+type = "copper"
+thickness_um = 18
+
+[[layer]]
+name = "polyimide"
+type = "dielectric"
+thickness_um = 25
+er = 3.4
+material = "Polyimide"
+
+[[layer]]
+name = "B.Cu"           # base copper + button plating
+type = "copper"
+thickness_um = 18
+
+[[layer]]
+name = "B.Mask"         # coverlay adhesive 25 µm + PI coverlay 25 µm
+type = "mask"
+thickness_um = 50
+er = 3.5
+material = "Coverlay"

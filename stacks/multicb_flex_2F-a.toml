@@ -1,0 +1,43 @@
+# Multi-CB standard 2-layer flex, adhesive-bonded base material: buildup 2F-a, 187 µm.
+#
+# Source: https://www.multi-circuit-boards.eu/en/pcb-design-aid/layer-buildup/flexible-pcb.html
+# (stack-up image "2F-a", standard column). Base adhesive options 13/20 µm, polyimide core
+# 13/25/50 µm, copper 18/35 µm, coverlay as in 2F-l. Standard values below.
+#
+# εr from Multi-CB's material list: polyimide with adhesive (Shengyi SF305) 3.6, coverlay
+# (DuPont Pyralux FR) 3.5. The core is 13 µm adhesive + 25 µm polyimide + 13 µm adhesive, kept
+# as one 51 µm dielectric at the SF305 value, since Multi-CB gives εr for the base material as a
+# whole. Each coverlay (25 µm PI + 25 µm adhesive) is one 50 µm mask layer, as in 2F-l.
+
+name = "Multi-CB 2F-a, 2-layer flex, adhesive-bonded"
+
+[[layer]]
+name = "F.Mask"         # PI coverlay 25 µm + coverlay adhesive 25 µm
+type = "mask"
+thickness_um = 50
+er = 3.5
+material = "Coverlay"
+
+[[layer]]
+name = "F.Cu"           # base copper + button plating
+type = "copper"
+thickness_um = 18
+
+[[layer]]
+name = "base"           # base adhesive 13 µm + polyimide 25 µm + base adhesive 13 µm
+type = "dielectric"
+thickness_um = 51
+er = 3.6
+material = "Polyimide+adhesive"
+
+[[layer]]
+name = "B.Cu"           # base copper + button plating
+type = "copper"
+thickness_um = 18
+
+[[layer]]
+name = "B.Mask"         # coverlay adhesive 25 µm + PI coverlay 25 µm
+type = "mask"
+thickness_um = 50
+er = 3.5
+material = "Coverlay"

@@ -1,0 +1,71 @@
+# Multi-CB defined 4-layer buildup 4L-02, 1.0 mm, FR4.
+#
+# Source: Multi-CB "Defined layer buildup / layout examples for impedance" (Feb 2023),
+# https://www.multi-circuit-boards.eu/fileadmin/pdf/leiterplatten_lagenaufbau/Multi-CB_Definierter_Lagenaufbau_Impedanzen_en.pdf
+# Multi-CB's layer names TOP / IN2 / IN3 / BOT are KiCad's F.Cu / In1.Cu / In2.Cu / B.Cu.
+# Prepreg thicknesses are after pressing, at ~80 % copper on the inner layers; outer copper is
+# 18 µm base + plating = 35 µm. Df ~0.02. Estimated final thickness 1.0 mm ±10 %.
+# Not published by Multi-CB: solder mask thickness and εr (KiCad defaults used: 10 µm, 3.3).
+#
+# Multi-CB's own impedance examples for this buildup (TOP over IN2, or BOT over IN3):
+#   50 Ω single-ended 395 µm; 90 Ω diff 230/120/230 µm; 100 Ω diff 180/130/180 µm.
+
+name = "Multi-CB 4L-02, 1.0 mm FR4"
+
+[[layer]]
+name = "F.Mask"
+type = "mask"
+thickness_um = 10       # assumed (not published)
+er = 3.3                # assumed (not published)
+material = "Solder Mask"
+
+[[layer]]
+name = "F.Cu"           # TOP: 18 µm + plating
+type = "copper"
+thickness_um = 35
+
+[[layer]]
+name = "prepreg top"    # 2x prepreg 2116
+type = "dielectric"
+thickness_um = 230
+er = 4.25
+loss_tangent = 0.02
+material = "FR4 prepreg 2x2116"
+
+[[layer]]
+name = "In1.Cu"         # IN2
+type = "copper"
+thickness_um = 35
+
+[[layer]]
+name = "core"
+type = "dielectric"
+thickness_um = 400
+er = 4.50
+loss_tangent = 0.02
+material = "FR4 core"
+
+[[layer]]
+name = "In2.Cu"         # IN3
+type = "copper"
+thickness_um = 35
+
+[[layer]]
+name = "prepreg bottom" # 2x prepreg 2116
+type = "dielectric"
+thickness_um = 230
+er = 4.25
+loss_tangent = 0.02
+material = "FR4 prepreg 2x2116"
+
+[[layer]]
+name = "B.Cu"           # BOT: 18 µm + plating
+type = "copper"
+thickness_um = 35
+
+[[layer]]
+name = "B.Mask"
+type = "mask"
+thickness_um = 10       # assumed (not published)
+er = 3.3                # assumed (not published)
+material = "Solder Mask"

@@ -6,3 +6,6 @@ venv/
 *.kicad_prl
 *.lck
 *-drc.rpt
+run_*/
+*.egg-info/
+.DS_Store

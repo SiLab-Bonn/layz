@@ -584,6 +584,32 @@ def convert_gds_to_kicad(
         print(f"skipped shapes: {skipped}")
 
 
+def write_stackup(pcb_path: Path, process) -> None:
+    """Put the process's stackup into the board's (setup ...) and set the board thickness, so
+    KiCad, `layz hyp` and `layz pex` all read the same stack from the .kicad_pcb."""
+    text = pcb_path.read_text()
+    # board thickness first, in (general ...), before the stackup adds its own (thickness ...)
+    mm = f"{process.thickness_um / 1000:.6g}"
+    g = text.find("(general")
+    if g >= 0:
+        g_end = text.find("\n    )", g)
+        head, n = re.subn(r"\(thickness [0-9.]+\)", f"(thickness {mm})", text[g:g_end], count=1)
+        text = text[:g] + (head if n else head.replace("(general", f"(general\n        (thickness {mm})", 1)) + text[g_end:]
+    else:  # pycbnew writes no (general ...): it goes right before the layer table
+        k = text.find("    (layers")
+        text = text[:k] + f"    (general\n        (thickness {mm})\n    )\n" + text[k:]
+    i = text.find("(setup")
+    if i >= 0:
+        i += len("(setup")
+        text = text[:i] + "\n" + process.kicad_stackup() + text[i:]
+    else:  # pycbnew writes no (setup ...): KiCad's order puts it right after the layer table
+        j = text.find("\n    (net")
+        if j < 0:
+            raise ValueError(f"{pcb_path}: can't find where to put the (setup ...) section")
+        text = text[:j] + "\n    (setup\n" + process.kicad_stackup() + "    )" + text[j:]
+    pcb_path.write_text(text)
+
+
 def normalize_layer_block(pcb_path: Path) -> None:
     """Replace the generated layers block with the KiCad-accepted numbering."""
     text = pcb_path.read_text()
@@ -594,10 +620,16 @@ def normalize_layer_block(pcb_path: Path) -> None:
     pcb_path.write_text(text[:start] + KICAD_LAYER_BLOCK + text[end:])
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("gds", nargs="?", default="example.gds", type=Path)
-    parser.add_argument("pcb", nargs="?", default="example.kicad_pcb", type=Path)
+    parser.add_argument("gds", type=Path)
+    parser.add_argument("pcb", type=Path)
+    parser.add_argument(
+        "--stack", type=Path,
+        help="layz process stack (.toml): sets the GDS layer mapping (copper zones, footprint pad "
+             "layers, vias, outline) and is written into the board as its KiCad stackup; "
+             "--layer-map/--via-map then override single entries",
+    )
     parser.add_argument(
         "--layer-map", action="append", default=[],
         help="Map a GDS polygon layer/datatype to a KiCad layer, e.g. --layer-map 3/0=In2.Cu",
@@ -616,10 +648,26 @@ def main() -> None:
         "--no-flip-y", action="store_true",
         help="Do not flip Y (raw GDS->KiCad coordinate mapping; v1 behavior)",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
-    polygon_layer_map = {**DEFAULT_POLYGON_LAYER_MAP, **parse_layer_map(args.layer_map)}
-    via_layer_map = {**DEFAULT_VIA_LAYER_MAP, **parse_via_map(args.via_map)}
+    global FRONT_PAD_LAYER, BACK_PAD_LAYER, BOARD_OUTLINE_LAYER
+    process = None
+    zones, vias = DEFAULT_POLYGON_LAYER_MAP, DEFAULT_VIA_LAYER_MAP
+    if args.stack:
+        from layz import stack as stackfile
+        process = stackfile.load(args.stack)
+        process.check_kicad()
+        if len(process.copper) != 4:
+            parser.error("gds2pcb writes 4-copper boards (F.Cu, In1.Cu, In2.Cu, B.Cu) for now; "
+                         f"{args.stack} has {len(process.copper)} copper layers")
+        zones, vias, pads = process.gds_layer_maps()
+        side_pads = {name: key for key, name in pads.items()}
+        FRONT_PAD_LAYER = side_pads.get("F.Cu", (-1, -1))
+        BACK_PAD_LAYER = side_pads.get("B.Cu", (-1, -1))
+        if process.outline:
+            BOARD_OUTLINE_LAYER = tuple(int(x) for x in process.outline.split("/"))
+    polygon_layer_map = {**zones, **parse_layer_map(args.layer_map)}
+    via_layer_map = {**vias, **parse_via_map(args.via_map)}
 
     convert_gds_to_kicad(
         args.gds,
@@ -631,6 +679,10 @@ def main() -> None:
         flip_y=not args.no_flip_y,
         net_name=args.net_name,
     )
+    if process is not None:
+        write_stackup(args.pcb, process)
+        print(f"stackup: {process.name} ({len(process.layers)} layers, "
+              f"{process.thickness_um:g} µm) written into the board")
 
 
 if __name__ == "__main__":
