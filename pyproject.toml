@@ -12,6 +12,7 @@ dependencies = [
     "klayout>=0.30.12",
     "kicad-pycbnew==1.0.1",
     "shapely>=2.0",        # layz nets
+    "pyyaml",              # layz drc --profile
     "klayout-pex>=0.7.0",  # layz pex: 3-D model builder for FasterCap
     "numpy",
     "matplotlib",

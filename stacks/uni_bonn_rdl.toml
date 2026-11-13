@@ -1,0 +1,81 @@
+# Uni Bonn RDL (in-house, maskless lithography), as used by the obelix1 iVTX ladder:
+# aluminium redistribution layers on polyimide, built on the chip surface.
+#
+# Thicknesses: asiclab tech/uni-bonn-rdl (.lyd25 / .xs, "Set UniBonnRDL polyimide to 6 um"):
+#   chip pad 68/0 (z -1..0) | M1 Al 1 µm | P1 PI 6 | M2 Al 6 | P2 PI 6 + P2.5 PI 6 | M3 Al 6 | P3 PI 5
+# KiCad layer mapping: the obelix1 converter (gds2pcb v3), which matches asiclab's layers:
+#   B.Cu = 68/0 chip pads, In2.Cu = 3/0 M2, In1.Cu = 6/0 M3, F.Cu = 8/0 top pads;
+#   vias 2/0 = V1 (In2-B), 4/0 = V2 (In1-In2), 7/0 = P3 pad opening (F-In1).
+#
+# TO CONFIRM: polyimide εr (3.3 here, a typical value; not in asiclab); 8/0 (not in asiclab's
+# tech: top pad metal on the P3 openings? thickness 0.5 µm from the KiCad stackup);
+# M1 (1/0) isn't drawn in obelix1, so V1 goes from M2 down to the chip pads and the P1 layer
+# plus the M1 level make the 7 µm between them; V2 is drawn on 4/0 alone (asiclab: 4/0 AND
+# 5/0). Copper layers are aluminium; capacitance doesn't depend on the metal.
+
+name = "Uni Bonn RDL, M2 + M3 (obelix1)"
+outline = "70/0"
+halo_um = 200
+
+[[layer]]
+name = "F.Cu"           # 8/0 top pads, on the P3 openings
+type = "copper"
+thickness_um = 0.5      # to confirm
+gds = "8/0"
+pads = true
+zones = false
+
+[[layer]]
+name = "P3"
+type = "dielectric"
+thickness_um = 5.0
+er = 3.3                # polyimide, to confirm
+material = "Polyimide"
+
+[[layer]]
+name = "In1.Cu"         # M3 Al
+type = "copper"
+thickness_um = 6.0
+gds = "6/0"
+
+[[layer]]
+name = "P2+P2.5"
+type = "dielectric"
+thickness_um = 12.0
+er = 3.3
+material = "Polyimide"
+
+[[layer]]
+name = "In2.Cu"         # M2 Al
+type = "copper"
+thickness_um = 6.0
+gds = "3/0"
+
+[[layer]]
+name = "P1+M1"          # P1 polyimide 6 µm + the (undrawn) M1 level 1 µm
+type = "dielectric"
+thickness_um = 7.0
+er = 3.3
+material = "Polyimide"
+
+[[layer]]
+name = "B.Cu"           # 68/0 chip top-metal pads
+type = "copper"
+thickness_um = 1.0
+gds = "68/0"
+pads = true
+
+[[via]]
+gds = "7/0"             # P3 pad opening
+top = "F.Cu"
+bottom = "In1.Cu"
+
+[[via]]
+gds = "4/0"             # V2 (P2 opening)
+top = "In1.Cu"
+bottom = "In2.Cu"
+
+[[via]]
+gds = "2/0"             # V1 (P1 opening, onto the chip pads)
+top = "In2.Cu"
+bottom = "B.Cu"

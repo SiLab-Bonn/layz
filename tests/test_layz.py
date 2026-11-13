@@ -13,7 +13,8 @@ from layz import cli, stack
 ROOT = Path(__file__).resolve().parents[1]
 TESTS = ROOT / "tests"
 EXAMPLES = ROOT / "example_files"
-RDL = ROOT / "stacks" / "silab_rdl.toml"
+RDL = ROOT / "stacks" / "uni_bonn_rdl.toml"
+OBELIX_KICAD = TESTS / "obelix_kicad_stack.toml"
 REF_HYP = EXAMPLES / "obelix1_ivtx_ladder_with_nets_v3.1.hyp"
 
 try:
@@ -36,10 +37,11 @@ def test_cli_lists_commands(capsys):
 def test_stack_heights_from_order():
     p = stack.load(RDL)
     assert [l.name for l in p.copper] == ["F.Cu", "In1.Cu", "In2.Cu", "B.Cu"]
-    assert p.thickness_um == pytest.approx(47.5)
-    assert p.by_name("B.Mask").z_um == 0
-    assert p.by_name("B.Cu").z_um == pytest.approx(10)
-    assert p.by_name("F.Mask").z_um == pytest.approx(46.5)
+    # asiclab's z: chip pad top at 0 (here 1), M2 7..13, M3 25..31, P3 to 36 (here 37)
+    assert p.thickness_um == pytest.approx(37.5)
+    assert p.by_name("B.Cu").z_um == 0
+    assert p.by_name("In2.Cu").z_um == pytest.approx(8)
+    assert p.by_name("In1.Cu").z_um == pytest.approx(26)
 
 
 def test_stack_rejects_bad_files(tmp_path):
@@ -81,10 +83,10 @@ def test_multicb_totals(name, total_um):
 
 @needs_kicad
 def test_gds_to_hyp_stackup_matches_kicad_gui(tmp_path):
-    """The obelix1 RDL GDS through gds2pcb --stack and layz hyp gives the same STACKUP section
-    that KiCad's GUI exporter wrote into the colleagues' reference .hyp."""
+    """The obelix1 RDL GDS through gds2pcb --stack and layz hyp, with the stackup that was typed
+    into KiCad, gives the same STACKUP section that KiCad's GUI exporter wrote."""
     hyp = tmp_path / "ob.hyp"
-    assert cli.main(["hyp", str(EXAMPLES / "obelix1_ivtx_ladder_v2.gds"), "--stack", str(RDL),
+    assert cli.main(["hyp", str(EXAMPLES / "obelix1_ivtx_ladder_v2.gds"), "--stack", str(OBELIX_KICAD),
                      "-o", str(hyp)]) == 0
     section = lambda f: re.search(r"\{STACKUP\n.*?\n\}", Path(f).read_text(), re.S).group(0)
     assert section(hyp) == section(REF_HYP)

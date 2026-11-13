@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
-# SiLab RDL. Lengths in µm, areas in µm² (1e-6 below the rule: compared in floating point).
+# Uni Bonn RDL. Lengths in µm, areas in µm² (1e-6 below the rule: compared in floating point).
 rules:
-  - id: RDL.Cu1.density
+  - id: RDL.M1.density
     check: max_density
-    layers: [Cu1]
+    layers: [M1]
     value: 95.0
     params:
       scope: window
@@ -11,9 +11,9 @@ rules:
       step: 500.0
     layer_params:
       boundary: Outline
-  - id: RDL.Cu2.density
+  - id: RDL.M2.density
     check: max_density
-    layers: [Cu2]
+    layers: [M2]
     value: 95.0
     params:
       scope: window
@@ -21,19 +21,9 @@ rules:
       step: 500.0
     layer_params:
       boundary: Outline
-  - id: RDL.Cu3.density
+  - id: RDL.M3.density
     check: max_density
-    layers: [Cu3]
-    value: 95.0
-    params:
-      scope: window
-      window: 1000.0
-      step: 500.0
-    layer_params:
-      boundary: Outline
-  - id: RDL.Cu4.density
-    check: max_density
-    layers: [Cu4]
+    layers: [M3]
     value: 95.0
     params:
       scope: window

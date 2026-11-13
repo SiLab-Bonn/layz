@@ -1,0 +1,51 @@
+# SPDX-License-Identifier: Apache-2.0
+# Uni Bonn RDL. Lengths in µm, areas in µm² (1e-6 below the rule: compared in floating point).
+rules:
+  - id: RDL.M1.width
+    check: min_width
+    layers: [M1]
+    value: 10.0
+  - id: RDL.M1.space
+    check: min_space
+    layers: [M1]
+    value: 10.0
+  - id: RDL.M1.notch
+    check: min_notch
+    layers: [M1]
+    value: 10.0
+  - id: RDL.M1.area
+    check: min_area
+    layers: [M1]
+    value: 99.999999
+  - id: RDL.M2.width
+    check: min_width
+    layers: [M2]
+    value: 10.0
+  - id: RDL.M2.space
+    check: min_space
+    layers: [M2]
+    value: 10.0
+  - id: RDL.M2.notch
+    check: min_notch
+    layers: [M2]
+    value: 10.0
+  - id: RDL.M2.area
+    check: min_area
+    layers: [M2]
+    value: 99.999999
+  - id: RDL.M3.width
+    check: min_width
+    layers: [M3]
+    value: 10.0
+  - id: RDL.M3.space
+    check: min_space
+    layers: [M3]
+    value: 10.0
+  - id: RDL.M3.notch
+    check: min_notch
+    layers: [M3]
+    value: 10.0
+  - id: RDL.M3.area
+    check: min_area
+    layers: [M3]
+    value: 99.999999

@@ -1,9 +1,6 @@
-# SiLab in-house RDL, 4 copper layers (obelix1 iVTX ladder).
-#
-# GDS mapping: from gds2pcb v3 (the colleagues' converter defaults).
-# Thicknesses and εr: from the stackup in example_files/obelix1_ivtx_ladder_with_nets_v3.1.hyp,
-# which was set by hand in KiCad. TO CHECK with the cleanroom process: the dielectrics are
-# entered as "FR4", εr 4.5 there; an RDL dielectric is more likely a polyimide/BCB (εr ~2.7-3.5).
+# The stackup typed into KiCad for example_files/obelix1_ivtx_ladder_with_nets_v3.1.hyp
+# (FR4 and copper placeholders, not the real RDL: see stacks/uni_bonn_rdl.toml). Kept as a
+# test fixture: layz hyp must write exactly the STACKUP that KiCad's GUI wrote from it.
 #
 # Layers top to bottom, thicknesses in µm; z is derived from the order (layz/stack.py).
 

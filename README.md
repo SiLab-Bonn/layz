@@ -114,7 +114,7 @@ own stackup (Board Setup > Physical Stackup). The full format is documented in
 
 | Stack file | Process | Source |
 | --- | --- | --- |
-| `silab_rdl.toml` | SiLab RDL, 4 copper (obelix1) | colleagues' GDS mapping, stackup from their KiCad `.hyp`; dielectric εr to confirm |
+| `uni_bonn_rdl.toml` | Uni Bonn RDL, Al on polyimide (obelix1: M2 + M3 on the chip pads) | asiclab `tech/uni-bonn-rdl` thicknesses, obelix1 KiCad mapping; polyimide εr and 8/0 to confirm |
 | `multicb_4L-01.toml` | Multi-CB 4-layer FR4, 1.6 mm | Multi-CB defined buildup 4L-01 (mask assumed: 10 µm, εr 3.3) |
 | `multicb_4L-02.toml` | Multi-CB 4-layer FR4, 1.0 mm | Multi-CB defined buildup 4L-02 (mask assumed) |
 | `multicb_flex_2F-l.toml` | Multi-CB 2-layer flex, adhesiveless, 161 µm | Multi-CB standard 2F-l |
@@ -126,13 +126,13 @@ buildup, copy the closest one and enter the ordered thicknesses and materials.
 ## GDS -> KiCad -> HyperLynx
 
 ```sh
-layz hyp example_files/obelix1_ivtx_ladder_v2.gds --stack stacks/silab_rdl.toml   # one step
+layz hyp example_files/obelix1_ivtx_ladder_v2.gds --stack stacks/uni_bonn_rdl.toml   # one step
 ```
 
 or step by step, to edit the board in between:
 
 ```sh
-layz gds2pcb design.gds design.kicad_pcb --stack stacks/silab_rdl.toml
+layz gds2pcb design.gds design.kicad_pcb --stack stacks/uni_bonn_rdl.toml
 # KiCad: Update PCB from Schematic (references and the seed footprint's pad nets)
 layz nets design.kicad_pcb --seed-footprint VTX2       # -> design_nets_assigned.kicad_pcb
 layz hyp design_nets_assigned.kicad_pcb               # -> design_nets_assigned.hyp
@@ -148,29 +148,37 @@ outline, stackup, devices, padstacks, and per net its pins, vias, tracks and zon
 ## Design rule check
 
 ```sh
-layz drc --lay design.gds --kit silab-rdl                  # -> design.lyrdb
+layz drc --lay design.gds --kit uni-bonn-rdl                  # -> design.lyrdb
 layz view design.lyrdb --lay design.gds                     # KLayout with the violation markers
 ```
 
-Decks are gdscheck PDKs in its own YAML format, one per kit in `drc/<kit>/`. `drc/silab-rdl/`
-is the in-house RDL (maskless lithography) on the obelix1 4-copper layer mapping:
+Decks are gdscheck PDKs in its own YAML format, one per kit in `drc/<kit>/`.
+`drc/uni-bonn-rdl/` is the in-house RDL (maskless lithography), with the layers of asiclab's
+`tech/uni-bonn-rdl`: chip pads 68/0, Al M1 1/0, M2 3/0, M3 6/0, polyimide openings V1 2/0,
+V2 4/0, pad openings 7/0, outline 70/0.
 
 | Rule | Value |
 | --- | --- |
-| metal width, spacing, notch (all four copper layers) | ≥ 10 µm |
-| metal area (minimum feature 10 × 10 µm) | ≥ 100 µm² |
-| via size / via spacing (spacing assumed = metal spacing) | ≥ 10 µm |
-| via enclosure by the metal above and below, every side | ≥ 10 µm (pads ≥ 30 × 30 µm) |
+| M1, M2, M3 width, spacing, notch | ≥ 10 µm |
+| M1, M2, M3 area (minimum feature 10 × 10 µm) | ≥ 100 µm² |
+| V1, V2, pad opening size / spacing (spacing assumed = metal spacing) | ≥ 10 µm |
+| V1 by M2, V2 by M2 and M3, pad openings by M3, every side | ≥ 10 µm (pads ≥ 30 × 30 µm) |
+| V1 landing on M1 or a chip pad | contained |
 | metal density in any 1 × 1 mm window (step 500 µm), inside the outline 70/0 | ≤ 95 % |
 
-`--suite geometry` leaves out density. The obelix1 ladder GDS takes about 2 minutes (18 threads)
-and currently reports 2317 violations, mostly via enclosure (1896 on 2/0 by 68/0).
+Chip pads (68/0) are the chip's and aren't checked. V2 is the 4/0 opening alone (asiclab's
+tech has 4/0 AND 5/0; designs draw V2 on 4/0). `--suite geometry` leaves out density. `--benchmark` times each rule on its own (slowest first):
+on the obelix1 ladder the M2 and M3 width checks are 98 % of the run. `--tile` is gdscheck's
+merge tile; layz uses 20 mm, about 5x faster than 2 mm on the ladder's long planes. The
+obelix1 ladder GDS takes about 35 s (18 threads) and reports 261 violations: V2 enclosure
+by M2 (52) and M3 (138), density in 19 + 20 windows on M2/M3, 19 notches, 1 width, and 12 at V1
+and pad openings.
 
 ## Capacitance and fields
 
 ```sh
 layz pex board.kicad_pcb                              # stack from the board
-layz pex chip.gds --stack stacks/silab_rdl.toml       # stack from the file
+layz pex chip.gds --stack stacks/uni_bonn_rdl.toml       # stack from the file
 layz pex board.kicad_pcb --charges --out run          # also keep charges for fields
 layz field run --voltage TOP=1                        # 3-D grid -> run/field.vtk
 layz field run --voltage TOP=1 --plane y=5000         # cross-section, PNG + VTK

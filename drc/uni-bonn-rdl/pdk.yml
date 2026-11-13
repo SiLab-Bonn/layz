@@ -1,0 +1,87 @@
+# Uni Bonn RDL (in-house, maskless lithography): gdscheck rule deck.
+#
+# Layers and process from asiclab's tech/uni-bonn-rdl (uni-bonn-rdl.lyt / .lyd25 / .xs):
+# aluminium redistribution layers on polyimide, built on the chip surface (z = 0):
+#   68/0 ChipPad  the chip's own top-metal pads (z -1..0): defined by the chip, not checked here
+#   1/0  M1  Al 1 µm      2/0 P1 opening = V1 (M1 -> M2), PI 6 µm
+#   3/0  M2  Al 6 µm      4/0 P2 opening = V2 (M2 -> M3), through P2 + P2.5 PI 6 + 6 µm
+#   6/0  M3  Al 6 µm      7/0 P3 pad opening on M3, PI 5 µm
+#   70/0 ladder outline   80/7 notes/net labels
+#
+# Rules, as given by the process owners:
+#   - minimum feature size, wire width and metal spacing: 10 µm
+#   - minimum via 10 x 10 µm, enclosed by 10 µm of metal on every side (pads >= 30 x 30 µm)
+#   - no minimum density; maximum metal density 95 % in any 1 x 1 mm window (larger solid areas
+#     trap bubbles in the metal)
+# V2 is the 4/0 opening alone (process owners' choice; asiclab's .lyt has 4/0 AND 5/0, but
+# designs such as obelix1 draw V2 on 4/0 only and no 5/0).
+# Assumed, to confirm: opening-to-opening spacing = the 10 µm metal spacing; V1 lands on M1 or,
+# where no M1 is drawn (obelix1), inside a chip pad (containment only); pad openings (7/0) are
+# enclosed by M3 like vias.
+#
+#   gdscheck run --pdk-path drc -p uni-bonn-rdl -s main -t TOP --tile 2000 -i design.gds -r design.lyrdb
+#   (or: layz drc --lay design.gds --kit uni-bonn-rdl)
+
+name: Uni Bonn RDL
+version: "0.2"
+
+suites:
+  - name: main
+    path: suites/main.yml
+    description: Geometry, via enclosure and maximum density
+  - name: geometry
+    path: suites/geometry.yml
+    description: Geometry and via enclosure, without density
+
+decks:
+  - name: metal
+    path: decks/metal.yml
+    description: Metal width, spacing, notch and area (M1, M2, M3)
+  - name: via
+    path: decks/via.yml
+    description: Via and pad-opening size and spacing
+  - name: enclosure
+    path: decks/enclosure.yml
+    description: Via and pad-opening enclosure
+  - name: density
+    path: decks/density.yml
+    description: Maximum metal density in 1 x 1 mm windows
+
+connectivity:
+  - connector: V1
+    layers: [V1Landing]
+  - connector: V1
+    layers: [M2]
+  - connector: V2
+    layers: [M2]
+  - connector: V2
+    layers: [M3]
+
+virtual_layers:
+  V1Landing: M1 or ChipPad
+
+layers:
+  - name: ChipPad
+    gds_layer: 68
+    gds_datatype: 0
+  - name: M1
+    gds_layer: 1
+    gds_datatype: 0
+  - name: V1
+    gds_layer: 2
+    gds_datatype: 0
+  - name: M2
+    gds_layer: 3
+    gds_datatype: 0
+  - name: V2
+    gds_layer: 4
+    gds_datatype: 0
+  - name: M3
+    gds_layer: 6
+    gds_datatype: 0
+  - name: PadOpen
+    gds_layer: 7
+    gds_datatype: 0
+  - name: Outline
+    gds_layer: 70
+    gds_datatype: 0

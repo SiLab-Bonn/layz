@@ -15,7 +15,7 @@ the same records, in the same order and number format.
                       every copper object without a net gets its own EmptyNet<n>
 
     layz hyp board.kicad_pcb [-o board.hyp]
-    layz hyp design.gds --stack stacks/silab_rdl.toml [-o design.hyp]   (via layz gds2pcb)
+    layz hyp design.gds --stack stacks/uni_bonn_rdl.toml [-o design.hyp]   (via layz gds2pcb)
 """
 
 from __future__ import annotations
