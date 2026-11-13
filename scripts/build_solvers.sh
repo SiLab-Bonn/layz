@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build the field solvers used by `layz pex` into $TOOLS (default: ~/.local/share/layz) and link
 # them into ~/.local/bin, where layz finds them on PATH (or set LAYZ_FASTERCAP / LAYZ_FASTCAP2).
-# The Python side is the repo's own venv (README: uv venv ... && uv sync).
+# The Python side is the repo's own venv (README: python3 -m venv ... && pip install).
 #
 #   tools/src/FastFieldSolvers/build/FasterCap   iic-jku/FasterCap, headless   (LGPL-2.1)
 #   tools/src/FastCap2/build/fastcap       martinjankoehler/FastCap2           (MIT license)
@@ -53,4 +53,4 @@ ln -sf "$TOOLS/src/FastCap2/build/fastcap" "$HOME/.local/bin/fastcap"
 echo
 echo "FasterCap: $TOOLS/src/FastFieldSolvers/build/FasterCap -> ~/.local/bin/FasterCap"
 echo "FastCap2:  $TOOLS/src/FastCap2/build/fastcap -> ~/.local/bin/fastcap"
-echo "check with: uv run layz doctor"
+echo "check with: layz doctor"

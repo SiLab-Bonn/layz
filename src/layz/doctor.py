@@ -15,16 +15,16 @@ import sys
 # (what, (kind, name), required, needed for, how to get it)
 CHECKS = [
     ("klayout", ("program", "klayout"), True, "DRC/LVS, viewing GDS and DRC results",
-     "install KLayout (https://www.klayout.de/build.html)"),
+     "https://www.klayout.de/build.html"),
     ("kicad-cli", ("program", "kicad-cli"), True, "schematic netlists, KiCad boards",
-     "install KiCad"),
+     "https://www.kicad.org/download/"),
     ("FasterCap", ("solver", "fastercap"), True, "layz field / pex (3-D capacitance)",
      "scripts/build_solvers.sh (links it into ~/.local/bin)"),
     ("gdscheck", ("program", "gdscheck"), True, "layz drc",
      "cargo install --git https://github.com/aesc-silicon/gdscheck gdscheck"),
-    ("klayout (Python)", ("module", "klayout.db"), True, "everything", "uv sync"),
-    ("klayout-pex", ("module", "klayout_pex"), True, "layz pex / field", "uv sync"),
-    ("shapely", ("module", "shapely"), True, "layz nets", "uv sync"),
+    ("klayout (Python)", ("module", "klayout.db"), True, "everything", "pip install --editable . (README)"),
+    ("klayout-pex", ("module", "klayout_pex"), True, "layz pex / field", "pip install --editable . (README)"),
+    ("shapely", ("module", "shapely"), True, "layz nets", "pip install --editable . (README)"),
     ("pcbnew (KiCad)", ("module", "pcbnew"), True, "layz hyp, KiCad boards",
      "install KiCad; layz must run on the Python KiCad was built for (README); or set "
      "LAYZ_KICAD_PYTHONPATH to the folder with pcbnew.py"),
@@ -32,7 +32,7 @@ CHECKS = [
      "Siemens HyperLynx (licensed); set LAYZ_HYPERLYNX to its executable if it isn't on PATH"),
     ("FastCap2", ("solver", "fastcap2"), False, "--solver fastcap2", "scripts/build_solvers.sh"),
     ("pvpython (ParaView)", ("program", "pvpython"), False, "layz view of field results",
-     "sudo apt install paraview"),
+     "https://www.paraview.org/download/"),
 ]
 
 

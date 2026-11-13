@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+# Install layz with Python's own venv and pip, and put the `layz` command on PATH for good.
+# Run from the repo root (bash or zsh, Linux or macOS):
+#
+#     ./install.sh               install, or update after a pull (safe to re-run)
+#     ./install.sh --test        also install pytest, for `.venv/bin/python -m pytest`
+#     ./install.sh --uninstall   remove the `layz` link (keeps .venv/)
+#
+# It makes .venv/ with the Python that KiCad's pcbnew module is built for (Linux: python3;
+# macOS: KiCad's own Python), installs layz into it editable (changes in this repo apply
+# directly), links .venv/bin/layz into ~/.local/bin and, if that folder isn't on PATH yet, adds
+# it in ~/.bashrc or ~/.zshrc. Override the Python with LAYZ_PYTHON=/path/to/python3.
+set -eu
+
+here="$(cd "$(dirname "$0")" && pwd)"
+bin="$HOME/.local/bin"
+link="$bin/layz"
+
+if [ "${1:-}" = "--uninstall" ]; then
+    if [ -L "$link" ]; then rm "$link"; echo "removed $link"; else echo "no layz link in $bin"; fi
+    exit 0
+fi
+
+# --- the Python: KiCad's pcbnew only works with the Python it was built for
+python="${LAYZ_PYTHON:-}"
+mac_kicad=/Applications/KiCad/KiCad.app/Contents/Frameworks/Python.framework/Versions/Current/bin/python3
+if [ -z "$python" ]; then
+    if [ "$(uname)" = "Darwin" ] && [ -x "$mac_kicad" ]; then python="$mac_kicad"
+    else python="$(command -v python3 || true)"; fi
+fi
+if [ -z "$python" ] || [ ! -x "$python" ]; then
+    echo "layz: no python3 found; set LAYZ_PYTHON=/path/to/python3" >&2; exit 1
+fi
+version="$("$python" -c 'import sys; print("%d.%d" % sys.version_info[:2])')"
+case "$version" in
+    3.12|3.13|3.14|3.15) ;;
+    *) echo "layz: $python is Python $version; layz needs 3.12 to 3.15" >&2; exit 1 ;;
+esac
+"$python" -c 'import pcbnew' 2>/dev/null \
+    || echo "layz: note: $python can't import KiCad's pcbnew; layz looks for it at run time too (layz doctor)"
+
+# --- venv + pip
+if [ ! -x "$here/.venv/bin/python" ]; then
+    echo "layz: making $here/.venv with $python (Python $version)"
+    "$python" -m venv --system-site-packages "$here/.venv"
+fi
+"$here/.venv/bin/python" -m pip install --quiet --upgrade pip
+target="$here"
+[ "${1:-}" = "--test" ] && target="$here[test]"
+echo "layz: pip install --editable $target"
+"$here/.venv/bin/python" -m pip install --quiet --editable "$target"
+
+# --- on PATH
+mkdir -p "$bin"
+ln -sf "$here/.venv/bin/layz" "$link"
+echo "layz: linked $link -> $here/.venv/bin/layz"
+
+case ":$PATH:" in
+    *":$bin:"*) echo "layz: ready, try: layz doctor" ;;
+    *)
+        case "${SHELL:-}" in
+            */zsh) rc="$HOME/.zshrc" ;;
+            *) rc="$HOME/.bashrc" ;;
+        esac
+        line='export PATH="$HOME/.local/bin:$PATH"'
+        if ! grep -qsF "$line" "$rc"; then
+            printf '\n# added by layz install.sh\n%s\n' "$line" >> "$rc"
+            echo "layz: added ~/.local/bin to PATH in $rc"
+        fi
+        echo "layz: open a new terminal (or: source $rc), then: layz doctor"
+        ;;
+esac

@@ -62,7 +62,7 @@ def view(argv: list[str]) -> int:
         return 2
     pvpython = shutil.which("pvpython")
     if not pvpython:
-        print("pvpython not found: install ParaView (Ubuntu: sudo apt install paraview)", file=sys.stderr)
+        print("pvpython not found: install ParaView, https://www.paraview.org/download/", file=sys.stderr)
         return 2
     script = Path(__file__).parent / "paraview" / VIEWS[argv[0]]
     env = dict(os.environ)

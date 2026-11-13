@@ -1,4 +1,4 @@
-"""layz checks: `uv run pytest` (solver tests are skipped when FasterCap/KiCad are missing)."""
+"""layz checks: `.venv/bin/python -m pytest` (solver tests are skipped when FasterCap/KiCad are missing)."""
 
 from __future__ import annotations
 

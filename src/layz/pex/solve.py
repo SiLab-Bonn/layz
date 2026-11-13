@@ -399,35 +399,67 @@ def build_model(bodies: list[Body], stack: Stack, amax_um2: float, delaunay_b: f
     return mb.generate()
 
 
-def run_solver(args, lst: Path, log: Path):
-    if args.solver == "fastercap" and args.charges:
-        # own call: kpex's runner has no -c. Charge files land in the run directory.
-        import subprocess
+@dataclass
+class CapacitanceMatrix:
+    """A solver's capacitance matrix: conductor names and rows, in F."""
+    conductor_names: list[str]
+    rows: list[list[float]]
 
-        from klayout_pex.fastercap.fastercap_runner import fastercap_parse_capacitance_matrix
+    def __getitem__(self, i):
+        return self.rows[i]
 
-        cmd = [solvers.find("fastercap"), "-b", "-i", f"-a{args.tolerance}", f"-d{args.d_coeff}",
-               f"-m{args.mesh}", "-ap", "-c", *(["-g"] if args.galerkin else []), lst.name]
-        with open(log, "w") as f:
-            rc = subprocess.run(cmd, cwd=lst.parent, stdout=f, stderr=subprocess.STDOUT).returncode
-        if rc != 0:
-            raise SystemExit(f"FasterCap failed with exit code {rc}, see {log}")
-        return fastercap_parse_capacitance_matrix(str(log))
+
+# FasterCap 6.2 exit codes (iic-jku fork); earlier versions exit 0 or 1
+FASTERCAP_EXIT = {1: "other error", 64: "wrong command line", 65: "NaN or infinite results",
+                  66: "input file can't be opened", 71: "out of memory", 74: "input can't be read",
+                  75: "GMRES didn't converge", 97: "can't go out-of-core", 98: "unexpected exception",
+                  125: "stopped"}
+
+
+def run_solver(args, lst: Path, log: Path) -> CapacitanceMatrix:
+    """Run FasterCap or FastCap2 on the model's .lst in its own folder; the log goes to `log`.
+
+    layz starts the solvers itself (only KLayout-PEX's 3-D model builder is used from it), so a
+    newer KLayout-PEX can't change how the solvers are called or read."""
+    import subprocess
+
     if args.solver == "fastercap":
-        from klayout_pex.fastercap.fastercap_runner import (
-            fastercap_parse_capacitance_matrix, run_fastercap)
+        cmd = [solvers.find("fastercap"), "-b", "-i", f"-a{args.tolerance}", f"-d{args.d_coeff}",
+               f"-m{args.mesh}", "-ap", *(["-c"] if args.charges else []),
+               *(["-g"] if args.galerkin else []), lst.name]
+    else:
+        cmd = [solvers.find("fastcap2"), "-o2", "-p1.0", f"-t{args.tolerance}", f"-l{lst.name}"]
+    with open(log, "w") as f:
+        rc = subprocess.run(cmd, cwd=lst.parent, stdin=subprocess.DEVNULL, stdout=f,
+                            stderr=subprocess.STDOUT).returncode
+    if rc != 0:
+        why = FASTERCAP_EXIT.get(rc, "") if args.solver == "fastercap" else ""
+        raise SystemExit(f"{cmd[0]} failed with exit code {rc}{f' ({why})' if why else ''}, see {log}")
+    return parse_fastercap(log) if args.solver == "fastercap" else parse_fastcap2(log)
 
-        run_fastercap(exe_path=solvers.find("fastercap"), lst_file_path=str(lst), log_path=str(log),
-                      tolerance=args.tolerance, d_coeff=args.d_coeff,
-                      mesh_refinement_value=args.mesh, ooc_condition=None,
-                      auto_preconditioner=True, galerkin_scheme=args.galerkin,
-                      jacobi_preconditioner=False)
-        return fastercap_parse_capacitance_matrix(str(log))
-    from klayout_pex.fastcap.fastcap_runner import run_fastcap
 
-    run_fastcap(exe_path=solvers.find("fastcap2"), lst_file_path=str(lst), log_path=str(log),
-                expansion_order=2, iterative_tolerance=args.tolerance)
-    return parse_fastcap2(log)
+def parse_fastercap(log: Path) -> CapacitanceMatrix:
+    """Last capacitance matrix of a FasterCap log, in F (geometry in µm, the solver assumes m).
+
+        Capacitance matrix is:
+        Dimension 2 x 2
+        g1_bot  9.21794e-07 -9.01492e-07
+        g2_top  -9.01492e-07 9.21794e-07
+    """
+    lines = log.read_text(errors="replace").splitlines()
+    starts = [i for i, l in enumerate(lines) if l.strip() == "Capacitance matrix is:"]
+    if not starts:
+        raise SystemExit(f"no capacitance matrix in {log}")
+    i = starts[-1]
+    m = re.match(r"Dimension (\d+) x (\d+)", lines[i + 1].strip())
+    if not m:
+        raise SystemExit(f"can't read the matrix dimension in {log}")
+    names, rows = [], []
+    for line in lines[i + 2:i + 2 + int(m.group(1))]:
+        cells = line.split()
+        names.append(cells[0])
+        rows.append([float(c) * 1e-6 for c in cells[1:]])
+    return CapacitanceMatrix(conductor_names=names, rows=rows)
 
 
 FASTCAP2_UNITS = {"farads": 1.0, "millifarads": 1e-3, "microfarads": 1e-6,
@@ -435,11 +467,9 @@ FASTCAP2_UNITS = {"farads": 1.0, "millifarads": 1e-3, "microfarads": 1e-6,
                   "attofarads": 1e-18}
 
 
-def parse_fastcap2(log: Path):
+def parse_fastcap2(log: Path) -> CapacitanceMatrix:
     """Last capacitance matrix of a FastCap2 log, in F (geometry in µm, solver assumes m)."""
-    from klayout_pex.common.capacitance_matrix import CapacitanceMatrix
-
-    lines = log.read_text().splitlines()
+    lines = log.read_text(errors="replace").splitlines()
     starts = [i for i, l in enumerate(lines) if l.startswith("CAPACITANCE MATRIX, ")]
     if not starts:
         raise SystemExit(f"no capacitance matrix in {log}")
@@ -527,11 +557,14 @@ def add_flow_args(ap: argparse.ArgumentParser) -> None:
 
 
 def setup_logging(verbose: bool) -> None:
-    from klayout_pex.log import LogLevel, set_log_level
-    from klayout_pex.log.logger import configure_logger
-
-    configure_logger()
-    set_log_level(LogLevel.SUBPROCESS if verbose else LogLevel.WARNING)
+    """Quiet KLayout-PEX's model builder unless -v (its logging API is internal: best effort)."""
+    try:
+        from klayout_pex.log import LogLevel, set_log_level
+        from klayout_pex.log.logger import configure_logger
+        configure_logger()
+        set_log_level(LogLevel.SUBPROCESS if verbose else LogLevel.WARNING)
+    except (ImportError, AttributeError):
+        pass
 
 
 def run_flow(args, layout: db.Layout, top: db.Cell, stack: Stack, out: Path,

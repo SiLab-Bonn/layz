@@ -7,8 +7,8 @@ import importlib.util as _util
 import os as _os
 import sys as _sys
 
-# KiCad's `pcbnew` Python module ships with KiCad, not on PyPI, so a `uv tool install` (an
-# isolated venv) can't see it. Find it and append its folder to sys.path: appended, so layz's
+# KiCad's `pcbnew` Python module ships with KiCad, not on PyPI, so an isolated venv (one made
+# without --system-site-packages) can't see it. Find it and append its folder to sys.path: appended, so layz's
 # own dependencies always come first. Override with LAYZ_KICAD_PYTHONPATH. The module is built for
 # one Python version (Ubuntu 26.04: 3.14), so install layz with that Python (see README).
 _KICAD_PATHS = [

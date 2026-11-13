@@ -4,7 +4,7 @@ B.Cu of a 0.2 mm FR4 core (εr 4.5), with 10 µm solder mask (εr 3.3) on both s
 
 Ideal (no fringing): C = eps0 * 4.5 * (10 mm)^2 / 0.2 mm = 19.92 pF.
 
-Run in the repo's venv (needs KiCad's pcbnew):  uv run python tests/make_pcb_plates.py [out.kicad_pcb]
+Run in the repo's venv (needs KiCad's pcbnew):  python tests/make_pcb_plates.py [out.kicad_pcb]
 """
 
 import sys

@@ -19,41 +19,46 @@ layz doctor    which external tools this machine has
 
 ## Install
 
-layz is a Python package managed with [uv](https://docs.astral.sh/uv/). It also uses tools that
-are not on PyPI:
+layz is a standard Python package (`pyproject.toml`, Python 3.12 to 3.15), installed with
+Python's own `venv` and `pip`. It also uses tools that are not on PyPI:
 
-| Tool | Needed for | Get it |
-| --- | --- | --- |
-| KiCad (its `pcbnew` Python module, `kicad-cli`) | `gds2pcb` checks, `hyp`, `pex` on boards, schematic netlists | install KiCad |
-| FasterCap (default) / FastCap2 | `pex` | `scripts/build_solvers.sh` |
-| KLayout GUI | viewing GDS, DRC results | install KLayout |
-| gdscheck | `drc` | `cargo install --git https://github.com/aesc-silicon/gdscheck gdscheck` |
-| ParaView | `view` | `sudo apt install paraview` |
+| Tool | Needed for | Linux | macOS |
+| --- | --- | --- | --- |
+| KiCad (its `pcbnew` Python module, `kicad-cli`) | `gds2pcb`, `hyp`, `pex` on boards, schematic netlists | [kicad.org/download/linux](https://www.kicad.org/download/linux/) | [kicad.org/download/macos](https://www.kicad.org/download/macos/) |
+| KLayout | viewing GDS and DRC results | [klayout.de/build.html](https://www.klayout.de/build.html) | [klayout.de/build.html](https://www.klayout.de/build.html) |
+| FasterCap (default) / FastCap2 | `pex`, `field` | `scripts/build_solvers.sh` (sources: [FasterCap](https://github.com/iic-jku/FasterCap), [FastCap2](https://github.com/martinjankoehler/FastCap2)) | [FasterCap releases](https://github.com/iic-jku/FasterCap/releases) (or `scripts/build_solvers.sh`) |
+| gdscheck | `drc` | [github.com/aesc-silicon/gdscheck](https://github.com/aesc-silicon/gdscheck), with Rust's `cargo` ([rust-lang.org/tools/install](https://www.rust-lang.org/tools/install)) | same |
+| ParaView (optional) | `view` of field results | [paraview.org/download](https://www.paraview.org/download/) | [paraview.org/download](https://www.paraview.org/download/) |
 
-KLayout's Python module, KLayout-PEX, Shapely and the rest come from PyPI. Install `layz` as a
-command with uv, on the Python that KiCad's `pcbnew` module was built for (the system Python:
-3.14 on Ubuntu 26.04); `--editable` makes changes in this repo take effect without reinstalling:
+gdscheck installs with `cargo install --git https://github.com/aesc-silicon/gdscheck gdscheck`.
+
+KLayout's Python module, KLayout-PEX, Shapely and the rest come from PyPI. From the repo root:
 
 ```sh
-# Linux (KiCad from the distribution's packages)
-uv tool install --editable . --python /usr/bin/python3
-
-# macOS: KiCad brings its own Python, so build the tool on that one (not yet tested on a Mac)
-uv tool install --editable . \
-  --python /Applications/KiCad/KiCad.app/Contents/Frameworks/Python.framework/Versions/Current/bin/python3
-
-layz doctor                 # checks klayout, kicad-cli and FasterCap on PATH, and more
+./install.sh                # once; again after a pull that changes dependencies
+layz doctor                 # checks klayout, kicad-cli, FasterCap and gdscheck, and more
 ```
 
-Without uv, `source workspace.sh` does the same for the current shell: it makes `.venv/` with the
-system Python and pip on first use, installs layz into it, and puts `layz` on `PATH`. Keep the
-clone (editable install): the DRC decks (`drc/`) and stacks (`stacks/`) are read from it. If `layz` isn't found
-afterwards, run `uv tool update-shell` once: it puts uv's tool folder (`~/.local/bin`) on `PATH`.
+`install.sh` (bash; works from zsh too, on Linux and macOS) makes `.venv/` with the Python that
+KiCad's `pcbnew` module is built for (Linux: `python3`, 3.14 on Ubuntu 26.04; macOS: KiCad's own),
+checks it's Python 3.12 to 3.15, installs layz into it with `pip install --editable .` (changes in
+this repo take effect directly), links `layz` into `~/.local/bin`, and adds that folder to `PATH`
+in `~/.bashrc` or `~/.zshrc` if it isn't there yet. `./install.sh --test` also installs pytest,
+`./install.sh --uninstall` removes the link. Keep the clone: the DRC decks (`drc/`) and stacks
+(`stacks/`) are read from it.
 
-layz finds KiCad's `pcbnew` by itself (it isn't on PyPI, so the tool's own environment can't
-contain it); set `LAYZ_KICAD_PYTHONPATH` to the folder holding `pcbnew.py` if it's somewhere
-unusual. `layz doctor` exits with an error when a required tool is missing, and warns about
-optional ones (HyperLynx via `LAYZ_HYPERLYNX`, FastCap2, ParaView).
+By hand, the same is:
+
+```sh
+python3 -m venv --system-site-packages .venv      # system packages: pcbnew comes with KiCad
+.venv/bin/pip install --editable .
+ln -sf "$PWD/.venv/bin/layz" ~/.local/bin/layz
+```
+
+layz finds KiCad's `pcbnew` by itself, also from a venv without the system's packages; set
+`LAYZ_KICAD_PYTHONPATH` to the folder holding `pcbnew.py` if it's somewhere unusual.
+`layz doctor` exits with an error when a required tool is missing, and warns about optional
+ones (HyperLynx via `LAYZ_HYPERLYNX`, FastCap2, ParaView).
 
 On Ubuntu also `sudo apt install cmake g++ libomp-dev libopenblas-dev`, then
 `scripts/build_solvers.sh`: it builds FasterCap (iic-jku fork, headless), FastCap2 and a
@@ -61,12 +66,11 @@ wxWidgets base library into `~/.local/share/layz` and links the solvers into `~/
 layz finds them on `PATH`, or through `LAYZ_FASTERCAP` / `LAYZ_FASTCAP2`. On macOS see the notes
 at the top of the script.
 
-For working on layz itself (tests), use the project venv:
+Tests run in the same venv:
 
 ```sh
-uv venv --python /usr/bin/python3 --system-site-packages
-uv sync
-uv run pytest
+./install.sh --test
+.venv/bin/python -m pytest
 ```
 
 ## Stack files
@@ -202,7 +206,7 @@ solved columns, so it needs no new solve. On Ubuntu ParaView needs `HWLOC_COMPON
 
 ## Checks
 
-`uv run pytest` (about 3 s):
+`.venv/bin/python -m pytest` (about 3 s):
 
 - GDS -> `.hyp` of the obelix1 RDL design gives the same STACKUP section as the `.hyp` KiCad's GUI
   exported (`example_files/obelix1_ivtx_ladder_with_nets_v3.1.hyp`).
