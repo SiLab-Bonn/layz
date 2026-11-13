@@ -622,8 +622,9 @@ def normalize_layer_block(pcb_path: Path) -> None:
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("gds", type=Path)
-    parser.add_argument("pcb", type=Path)
+    parser.add_argument("--lay", type=Path, required=True, help="layout (.gds)")
+    parser.add_argument("-o", "--out", type=Path,
+                        help="KiCad board (default: the layout's name with .kicad_pcb)")
     parser.add_argument(
         "--stack", type=Path,
         help="layz process stack (.toml): sets the GDS layer mapping (copper zones, footprint pad "
@@ -649,6 +650,8 @@ def main(argv: list[str] | None = None) -> None:
         help="Do not flip Y (raw GDS->KiCad coordinate mapping; v1 behavior)",
     )
     args = parser.parse_args(argv)
+    args.gds = args.lay
+    args.pcb = args.out or args.lay.with_suffix(".kicad_pcb")
 
     global FRONT_PAD_LAYER, BACK_PAD_LAYER, BOARD_OUTLINE_LAYER
     process = None

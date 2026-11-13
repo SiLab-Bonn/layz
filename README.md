@@ -5,7 +5,7 @@ that connect them, as one command line tool:
 
 ```
 layz drc       design rule check of a GDS (gdscheck, with the kit's deck)
-layz gds2pcb   GDS -> KiCad .kicad_pcb (copper zones, footprints, vias, outline, stackup)
+layz pcb       GDS -> KiCad .kicad_pcb (copper zones, footprints, vias, outline, stackup)
 layz nets      assign zone/via nets from a seed footprint's pad nets
 layz hyp       .kicad_pcb or GDS -> HyperLynx .hyp (for SI/PI)
 layz svg       GDS -> SVG preview
@@ -24,7 +24,7 @@ Python's own `venv` and `pip`. It also uses tools that are not on PyPI:
 
 | Tool | Needed for | Linux | macOS |
 | --- | --- | --- | --- |
-| KiCad (its `pcbnew` Python module, `kicad-cli`) | `gds2pcb`, `hyp`, `pex` on boards, schematic netlists | [kicad.org/download/linux](https://www.kicad.org/download/linux/) | [kicad.org/download/macos](https://www.kicad.org/download/macos/) |
+| KiCad (its `pcbnew` Python module, `kicad-cli`) | `pcb`, `hyp`, `pex` on boards, schematic netlists | [kicad.org/download/linux](https://www.kicad.org/download/linux/) | [kicad.org/download/macos](https://www.kicad.org/download/macos/) |
 | KLayout | viewing GDS and DRC results | [klayout.de/build.html](https://www.klayout.de/build.html) | [klayout.de/build.html](https://www.klayout.de/build.html) |
 | FasterCap (default) / FastCap2 | `pex`, `field` | `scripts/build_solvers.sh` (sources: [FasterCap](https://github.com/iic-jku/FasterCap), [FastCap2](https://github.com/martinjankoehler/FastCap2)) | [FasterCap releases](https://github.com/iic-jku/FasterCap/releases) (or `scripts/build_solvers.sh`) |
 | gdscheck | `drc` | [github.com/aesc-silicon/gdscheck](https://github.com/aesc-silicon/gdscheck), with Rust's `cargo` ([rust-lang.org/tools/install](https://www.rust-lang.org/tools/install)) | same |
@@ -111,7 +111,7 @@ top = "F.Cu"
 bottom = "In1.Cu"
 ```
 
-`layz gds2pcb --stack` writes the stack into the board as its KiCad physical stackup, so the
+`layz pcb --stack` writes the stack into the board as its KiCad physical stackup, so the
 `.kicad_pcb`, the `.hyp` and the FasterCap model all carry it. A board made in KiCad uses its
 own stackup (Board Setup > Physical Stackup). The full format is documented in
 [src/layz/stack.py](src/layz/stack.py).
@@ -136,13 +136,13 @@ layz hyp example_files/obelix1_ivtx_ladder_v2.gds --stack stacks/uni_bonn_rdl.to
 or step by step, to edit the board in between:
 
 ```sh
-layz gds2pcb design.gds design.kicad_pcb --stack stacks/uni_bonn_rdl.toml
+layz pcb --lay design.gds --stack stacks/uni_bonn_rdl.toml          # -> design.kicad_pcb
 # KiCad: Update PCB from Schematic (references and the seed footprint's pad nets)
 layz nets design.kicad_pcb --seed-footprint VTX2       # -> design_nets_assigned.kicad_pcb
 layz hyp design_nets_assigned.kicad_pcb               # -> design_nets_assigned.hyp
 ```
 
-`gds2pcb`: GDS cells with pad-layer shapes become footprints (one per cell and orientation),
+`layz pcb`: GDS cells with pad-layer shapes become footprints (one per cell and orientation),
 top-level copper becomes filled zones, via layers become blind/buried vias, the outline layer
 becomes Edge.Cuts; Y is flipped so the board shows the GDS top view. `nets`: nets propagate from
 the seed footprint's pads through touching copper and vias. `hyp`: a re-implementation of KiCad's

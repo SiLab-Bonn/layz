@@ -3,7 +3,7 @@
 A stack lists the physical layers top to bottom, each with its thickness; heights (z) are
 derived from the order, never typed. Copper layers name the GDS layer they're drawn on, via
 layers the two copper layers they join. From this one description layz writes the KiCad board
-stackup (`layz gds2pcb --stack`), so the .kicad_pcb, the HyperLynx .hyp (`layz hyp`) and the
+stackup (`layz pcb --stack`), so the .kicad_pcb, the HyperLynx .hyp (`layz hyp`) and the
 FasterCap model (`layz pex`) all carry the same stack; a GDS can also go to `layz pex --stack`
 directly.
 
@@ -24,8 +24,8 @@ directly.
     type = "copper"
     thickness_um = 0.5
     gds = "8/0"                      # GDS layer/datatype drawn on this copper layer
-    pads = true                      # gds2pcb: shapes in sub-cells become footprint pads
-    zones = false                    # gds2pcb: top-level shapes become copper zones (default true)
+    pads = true                      # layz pcb: shapes in sub-cells become footprint pads
+    zones = false                    # layz pcb: top-level shapes become copper zones (default true)
 
     [[via]]
     gds = "7/0"
@@ -136,7 +136,7 @@ class Process:
         return "\n".join(out) + "\n"
 
     def gds_layer_maps(self):
-        """gds2pcb's maps: zones {gds: copper}, vias {gds: (a, b)}, pads {gds: copper}."""
+        """layz pcb's maps: zones {gds: copper}, vias {gds: (a, b)}, pads {gds: copper}."""
         key = lambda s: tuple(int(x) for x in s.split("/"))
         zones = {key(l.gds): l.name for l in self.copper if l.gds and l.zones}
         pads = {key(l.gds): l.name for l in self.copper if l.gds and l.pads}

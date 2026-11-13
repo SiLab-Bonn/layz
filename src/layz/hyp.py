@@ -8,14 +8,14 @@ the same records, in the same order and number format.
     {VERSION=2.14} / {UNITS=ENGLISH LENGTH}    lengths in inches, Y negated
     {BOARD ...}       PERIMETER_SEGMENT per board-outline segment
     {STACKUP ...}     SIGNAL per copper layer, DIELECTRIC per dielectric/mask (from the
-                      board's stackup: `layz gds2pcb --stack` writes it)
+                      board's stackup: `layz pcb --stack` writes it)
     {DEVICES ...}     one per footprint
     {PADSTACK=n ...}  pad and via padstacks, deduplicated, numbered in order of first use
     {NET="..." ...}   per net: PIN, VIA, SEG, ARC, and zone fills as POLYGON / POLYVOID;
                       every copper object without a net gets its own EmptyNet<n>
 
     layz hyp board.kicad_pcb [-o board.hyp]
-    layz hyp design.gds --stack stacks/uni_bonn_rdl.toml [-o design.hyp]   (via layz gds2pcb)
+    layz hyp design.gds --stack stacks/uni_bonn_rdl.toml [-o design.hyp]   (via layz pcb)
 """
 
 from __future__ import annotations
@@ -267,7 +267,7 @@ def board_process(pcb_path: Path, board):
         cu = [board.GetLayerName(l) for l in board.GetEnabledLayers().CuStack()]
         board_mm = board.GetDesignSettings().GetBoardThickness() / 1e6
         print(f"warning: {pcb_path.name} has no stackup: writing KiCad's default {board_mm:g} mm FR4 "
-              "stack; use `layz gds2pcb --stack` or set it in Board Setup > Physical Stackup",
+              "stack; use `layz pcb --stack` or set it in Board Setup > Physical Stackup",
               file=sys.stderr)
         process = stackfile.kicad_default(cu, board_mm)
     return process
@@ -284,7 +284,7 @@ def write_hyp(pcb_path: Path, hyp_path: Path, refill: bool = False) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("input", type=Path, help=".kicad_pcb board, or a GDS (converted with layz gds2pcb)")
+    ap.add_argument("input", type=Path, help=".kicad_pcb board, or a GDS (converted with layz pcb)")
     ap.add_argument("-o", "--out", type=Path, help="output .hyp (default: next to the input)")
     ap.add_argument("--stack", type=Path, help="GDS input: layz process stack (.toml)")
     ap.add_argument("--keep-pcb", action="store_true",
@@ -302,7 +302,7 @@ def main(argv: list[str] | None = None) -> int:
         from layz import gds2pcb
         with tempfile.TemporaryDirectory() as tmp:
             pcb = out.with_suffix(".kicad_pcb") if args.keep_pcb else Path(tmp) / (out.stem + ".kicad_pcb")
-            gds2pcb.main([str(args.input), str(pcb), "--stack", str(args.stack)])
+            gds2pcb.main(["--lay", str(args.input), "-o", str(pcb), "--stack", str(args.stack)])
             write_hyp(pcb, out, refill=args.refill)
     print(f"wrote {out}")
     return 0

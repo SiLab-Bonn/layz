@@ -1,7 +1,7 @@
 """layz: layout tools for SiLab's FR4 PCBs, RDL chips and flex PCBs.
 
     layz drc       design rule check of a GDS (gdscheck, the kit's deck)
-    layz gds2pcb   GDS -> KiCad .kicad_pcb (copper zones, footprints, vias, outline)
+    layz pcb       GDS -> KiCad .kicad_pcb (copper zones, footprints, vias, outline)
     layz nets      assign zone/via nets from a seed footprint's pad nets
     layz hyp       KiCad .kicad_pcb -> HyperLynx .hyp
     layz svg       GDS -> SVG preview
@@ -25,7 +25,7 @@ from pathlib import Path
 # command -> (module, one-line help); modules load lazily, so `layz svg` doesn't import pcbnew
 COMMANDS = {
     "drc": ("layz.drc", "design rule check of a GDS"),
-    "gds2pcb": ("layz.gds2pcb", "GDS -> KiCad .kicad_pcb"),
+    "pcb": ("layz.gds2pcb", "GDS -> KiCad .kicad_pcb"),
     "nets": ("layz.nets", "assign zone/via nets from a seed footprint's pad nets"),
     "hyp": ("layz.hyp", "KiCad .kicad_pcb -> HyperLynx .hyp"),
     "svg": ("layz.svg", "GDS -> SVG preview"),

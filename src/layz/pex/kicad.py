@@ -151,7 +151,7 @@ def load_board(pcb_path: Path, refill: bool) -> tuple[db.Layout, db.Cell, Stack,
         board_mm = board.GetDesignSettings().GetBoardThickness() / 1e6
         warnings.append(f"{pcb_path.name} has no stackup: using KiCad's default {board_mm:g} mm FR4 "
                         "stack; set the real one in Board Setup > Physical Stackup, or write the "
-                        "board with `layz gds2pcb --stack`")
+                        "board with `layz pcb --stack`")
         process = stackfile.kicad_default(cu_names, board_mm)
     process.halo_um = 1000.0
     return layout, top, stack_from_process(process, gds=False, via_spans=via_spans), warnings
@@ -170,7 +170,7 @@ def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("pcb", type=Path, help=".kicad_pcb board")
     ap.add_argument("--no-fill", action="store_true",
-                    help="don't fill unfilled zones (keeps cached fills, e.g. from gds2pcb.py)")
+                    help="don't fill unfilled zones (keeps cached fills, e.g. from layz pcb)")
     add_flow_args(ap)
     args = ap.parse_args(argv)
     setup_logging(args.verbose)

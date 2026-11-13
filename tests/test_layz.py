@@ -30,7 +30,7 @@ needs_fastercap = pytest.mark.skipif(not HAVE_FASTERCAP, reason="FasterCap not o
 def test_cli_lists_commands(capsys):
     assert cli.main(["--help"]) == 0
     out = capsys.readouterr().out
-    for cmd in ("gds2pcb", "nets", "hyp", "pex", "field", "view", "doctor"):
+    for cmd in ("pcb", "nets", "hyp", "pex", "field", "view", "doctor"):
         assert f"layz {cmd}" in out
 
 
@@ -83,7 +83,7 @@ def test_multicb_totals(name, total_um):
 
 @needs_kicad
 def test_gds_to_hyp_stackup_matches_kicad_gui(tmp_path):
-    """The obelix1 RDL GDS through gds2pcb --stack and layz hyp, with the stackup that was typed
+    """The obelix1 RDL GDS through layz pcb --stack and layz hyp, with the stackup that was typed
     into KiCad, gives the same STACKUP section that KiCad's GUI exporter wrote."""
     hyp = tmp_path / "ob.hyp"
     assert cli.main(["hyp", str(EXAMPLES / "obelix1_ivtx_ladder_v2.gds"), "--stack", str(OBELIX_KICAD),

@@ -10,3 +10,4 @@ run_*/
 *.egg-info/
 .DS_Store
 *.lyrdb
+uv.lock
