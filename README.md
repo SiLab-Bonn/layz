@@ -30,7 +30,10 @@ Python's own `venv` and `pip`. It also uses tools that are not on PyPI:
 | gdscheck | `drc` | [github.com/aesc-silicon/gdscheck](https://github.com/aesc-silicon/gdscheck), with Rust's `cargo` ([rust-lang.org/tools/install](https://www.rust-lang.org/tools/install)) | same |
 | ParaView (optional) | `view` of field results | [paraview.org/download](https://www.paraview.org/download/) | [paraview.org/download](https://www.paraview.org/download/) |
 
-gdscheck installs with `cargo install --git https://github.com/aesc-silicon/gdscheck gdscheck`.
+gdscheck installs with `cargo install --git https://github.com/aesc-silicon/gdscheck gdscheck`,
+into `~/.cargo/bin`. layz finds it there even when that folder isn't on `PATH` (cargo warns
+about it when Rust comes from the distribution's packages rather than rustup); to run
+`gdscheck` yourself, add `export PATH="$HOME/.cargo/bin:$PATH"` to `~/.bashrc` or `~/.zshrc`.
 
 KLayout's Python module, KLayout-PEX, Shapely and the rest come from PyPI. From the repo root:
 
@@ -60,7 +63,8 @@ layz finds KiCad's `pcbnew` by itself, also from a venv without the system's pac
 `layz doctor` exits with an error when a required tool is missing, and warns about optional
 ones (HyperLynx via `LAYZ_HYPERLYNX`, FastCap2, ParaView).
 
-On Ubuntu also `sudo apt install cmake g++ libomp-dev libopenblas-dev`, then
+On Debian, Ubuntu and Kali also `sudo apt install cmake g++ make git curl libopenblas-dev`
+(the script checks these first and prints the command for Fedora, Arch and macOS too), then
 `scripts/build_solvers.sh`: it builds FasterCap (iic-jku fork, headless), FastCap2 and a
 wxWidgets base library into `~/.local/share/layz` and links the solvers into `~/.local/bin`.
 layz finds them on `PATH`, or through `LAYZ_FASTERCAP` / `LAYZ_FASTCAP2`. On macOS see the notes

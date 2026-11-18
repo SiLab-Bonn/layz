@@ -101,10 +101,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("-v", "--verbose", action="store_true", help="every violation's message")
     args = ap.parse_args(argv)
 
-    gdscheck = shutil.which("gdscheck")
-    if not gdscheck:
-        raise SystemExit("gdscheck not found on PATH: "
-                         "cargo install --git https://github.com/aesc-silicon/gdscheck gdscheck")
+    from layz import solvers
+    gdscheck = solvers.find("gdscheck")
     if args.kit not in kits():
         raise SystemExit(f"no DRC deck for kit {args.kit!r}; have: {', '.join(kits())}")
     top = args.topcell or top_cell(args.lay)
