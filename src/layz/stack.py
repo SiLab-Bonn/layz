@@ -26,6 +26,9 @@ directly.
     gds = "8/0"                      # GDS layer/datatype drawn on this copper layer
     pads = true                      # layz pcb: shapes in sub-cells become footprint pads
     zones = false                    # layz pcb: top-level shapes become copper zones (default true)
+    labels = ["8/1"]                 # layz lvs: text layers naming this copper's nets; default:
+                                     # the drawing layer's datatype 1 (8/0 -> 8/1), [] for none;
+                                     # texts on the drawing layer itself always count
 
     [[via]]
     gds = "7/0"
@@ -62,6 +65,7 @@ class Layer:
     gds: str | None = None        # copper only: "L/D"
     pads: bool = False            # copper only: sub-cell shapes become footprint pads
     zones: bool = True            # copper only: top-level shapes become zones
+    labels: list[str] = field(default_factory=list)  # copper only: text layers naming its nets
     z_um: float = 0.0             # bottom face, filled in by Process (z = 0 at the bottom)
 
     @property
@@ -157,6 +161,9 @@ def _check(p: Process, path: str) -> Process:
             raise ValueError(f"{path}: mask layer {l.name} must be the first or last layer")
         if l.gds and not re.fullmatch(r"\d+/\d+", l.gds):
             raise ValueError(f"{path}: layer {l.name}: gds must look like \"8/0\"")
+        for lab in l.labels:
+            if not re.fullmatch(r"\d+/\d+", lab):
+                raise ValueError(f"{path}: layer {l.name}: labels entries must look like \"8/25\"")
     copper = {l.name for l in p.copper}
     for v in p.vias:
         if v.top not in copper or v.bottom not in copper:
@@ -166,6 +173,11 @@ def _check(p: Process, path: str) -> Process:
     return p
 
 
+def _pin_layer(gds: str | None) -> list[str]:
+    """The default label layer of a copper drawing layer: its datatype 1 (6/0 -> 6/1)."""
+    return [f"{gds.split('/')[0]}/1"] if gds else []
+
+
 def load(path: str | Path) -> Process:
     d = tomllib.loads(Path(path).read_text())
     if "layer" not in d:
@@ -173,7 +185,8 @@ def load(path: str | Path) -> Process:
     layers = [Layer(name=x["name"], type=x["type"], thickness_um=float(x["thickness_um"]),
                     er=x.get("er"), material=x.get("material"), loss_tangent=x.get("loss_tangent"),
                     gds=x.get("gds"),
-                    pads=bool(x.get("pads", False)), zones=bool(x.get("zones", True)))
+                    pads=bool(x.get("pads", False)), zones=bool(x.get("zones", True)),
+                    labels=[str(v) for v in x["labels"]] if "labels" in x else _pin_layer(x.get("gds")))
               for x in d["layer"]]
     vias = [ViaLayer(gds=v["gds"], top=v["top"], bottom=v["bottom"]) for v in d.get("via", [])]
     return _check(Process(name=d.get("name", Path(path).stem), layers=layers, vias=vias,

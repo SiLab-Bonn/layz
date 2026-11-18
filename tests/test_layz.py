@@ -116,3 +116,112 @@ def test_kicad_board_model(tmp_path):
     count = lambda files: sum(f.read_text().count("\nT ") for f in files)
     assert count(geo) == 3788
     assert count([f for f in geo if "net=" in f.name]) == 1888
+
+
+# ------------------------------------------------------------------ pours -> traces (layz.traces)
+
+def _l_route(w=0.04, pad=0.3):
+    """An L-shaped 40 µm strip (2 mm then 1 mm) with a square pad at its start (mm)."""
+    from shapely.geometry import LineString, box
+    from shapely.ops import unary_union
+    strip = LineString([(0, 0), (2, 0), (2, 1)]).buffer(w / 2, cap_style="flat", join_style="mitre")
+    return unary_union([strip, box(-pad / 2, -pad / 2, pad / 2, pad / 2)])
+
+
+def test_traces_l_route_with_pad():
+    from shapely.geometry import Point
+    from layz.traces import split_route
+    segs, keep = split_route(_l_route(), [Point(0, 0)])
+    length = sum(((s.x2 - s.x1) ** 2 + (s.y2 - s.y1) ** 2) ** 0.5 for s in segs)
+    assert all(abs(s.width - 0.04) < 0.002 for s in segs)
+    assert abs(length - 3.0) < 0.1                     # runs into the pad's pin, to the strip's end
+    assert keep == []                                  # the pad holds the pin: its padstack models it
+    ends = {(round(s.x1, 3), round(s.y1, 3)) for s in segs} | {(round(s.x2, 3), round(s.y2, 3)) for s in segs}
+    assert (0.0, 0.0) in ends                          # reaches the pin
+
+
+def test_traces_leave_planes_alone():
+    from shapely.geometry import box
+    from layz.traces import split_route
+    assert split_route(box(0, 0, 5, 3)) is None        # a plane is not a route
+
+
+def test_hyp_traces_pass_converts_signal_keeps_supply():
+    from layz.hyp import add_traces
+
+    def poly(pid, pts):
+        lines = [f'  {{POLYGON T=POUR L="In1.Cu" ID={pid} X={pts[0][0]:.6f} Y={pts[0][1]:.6f}\n']
+        lines += [f"    (LINE X={x:.6f} Y={y:.6f})\n" for x, y in pts + [pts[0]]]
+        return "".join(lines) + "  }\n"
+
+    inch = 1 / 25.4
+    strip = [(0, 0), (4 * inch, 0), (4 * inch, 0.04 * inch), (0, 0.04 * inch)]   # 4 mm x 40 µm
+    plane = [(0, 1 * inch), (4 * inch, 1 * inch), (4 * inch, 2 * inch), (0, 2 * inch)]
+    hyp = ("{VERSION=2.14}\n{UNITS=ENGLISH LENGTH}\n\n"
+           '{NET="SIG"\n  (PIN X=0.000000 Y=0.000787 R="U1.1" P=0)\n'
+           f'  (PIN X={4 * inch:.6f} Y=0.000787 R="U2.1" P=0)\n' + poly(1, strip) + "}\n\n"
+           '{NET="VDD"\n  (PIN X=0.01 Y=0.05 R="U1.2" P=0)\n  (PIN X=0.1 Y=0.05 R="U2.2" P=0)\n'
+           + poly(2, plane) + "}\n\n")
+    out, report = add_traces(hyp)
+    sig = out.split('{NET="SIG"')[1].split("}\n\n")[0]
+    vdd = out.split('{NET="VDD"')[1]
+    assert [r[0] for r in report] == ["SIG"]
+    assert "(SEG" in sig and "{POLYGON" not in sig
+    assert "{POLYGON" in vdd and "(SEG" not in vdd
+    assert abs(report[0][2] - 4.0) < 0.05 and abs(report[0][3] - 0.04) < 0.002   # mm
+    assert add_traces(hyp, "none")[0] == hyp
+
+
+@needs_kicad
+def test_hyp_traces_obelix_signal_nets(tmp_path):
+    """Andreas' KiCad export: every signal route converts, supplies stay pours."""
+    from layz.hyp import add_traces
+    out, report = add_traces(REF_HYP.read_text(encoding="utf-8"))
+    names = {r[0] for r in report}
+    assert {"/CLK_P", "/CMD_N", "/D4_N", "/ADC_1", "/rst"} <= names
+    assert not names & {"/3V_1", "/GND1", "/PWell", "/PSUB"}
+    lengths = {r[0]: r[2] for r in report}
+    assert 125 < lengths["/CLK_P"] < 135 and 100 < lengths["/D4_N"] < 112
+
+
+# ------------------------------------------------------------------ layz lvs
+
+def test_lvs_finds_open_short_unknown(tmp_path):
+    import klayout.db as kdb
+    from layz import lvs
+    (tmp_path / "stack.toml").write_text(
+        'name = "t"\n[[layer]]\nname = "F.Cu"\ntype = "copper"\nthickness_um = 1\ngds = "6/0"\n'
+        '[[layer]]\nname = "D"\ntype = "dielectric"\nthickness_um = 5\n'
+        '[[layer]]\nname = "B.Cu"\ntype = "copper"\nthickness_um = 1\ngds = "3/0"\n'
+        '[[via]]\ngds = "4/0"\ntop = "F.Cu"\nbottom = "B.Cu"\n')
+    (tmp_path / "sch.net").write_text(
+        '(export (nets (net (code "1") (name "/A") (node (ref "U1") (pin "1")) (node (ref "U2") (pin "1")))'
+        ' (net (code "2") (name "/B") (node (ref "U1") (pin "2")) (node (ref "U2") (pin "2")))'
+        ' (net (code "3") (name "/C") (node (ref "U1") (pin "3")))'
+        ' (net (code "4") (name "/D") (node (ref "U2") (pin "3")))))')
+    ly = kdb.Layout()
+    ly.dbu = 0.001
+    top = ly.create_cell("TOP")
+    m3, m2, v, l3 = (ly.layer(*ld) for ld in ((6, 0), (3, 0), (4, 0), (6, 1)))  # 6/1: M3's pin layer
+    um = lambda *a: kdb.Box(*[int(x * 1000) for x in a])  # noqa: E731
+    top.shapes(m3).insert(um(0, 0, 100, 10)); top.shapes(v).insert(um(95, 0, 100, 10))
+    top.shapes(m2).insert(um(95, 0, 200, 10))                                   # A: across the via
+    top.shapes(l3).insert(kdb.Text("U1.1", kdb.Trans(5000, 5000)))
+    top.shapes(m2).insert(kdb.Text("U2.1", kdb.Trans(195000, 5000)))           # text on a drawing layer
+    top.shapes(m3).insert(um(0, 30, 90, 40)); top.shapes(m3).insert(um(110, 30, 200, 40))  # B: open
+    top.shapes(l3).insert(kdb.Text("U1.2", kdb.Trans(5000, 35000)))
+    top.shapes(l3).insert(kdb.Text("U2.2", kdb.Trans(195000, 35000)))
+    top.shapes(m3).insert(um(0, 60, 200, 70))                                    # C and D: short
+    top.shapes(l3).insert(kdb.Text("C", kdb.Trans(5000, 65000)))
+    top.shapes(l3).insert(kdb.Text("/D", kdb.Trans(195000, 65000)))
+    top.shapes(l3).insert(kdb.Text("NOPE", kdb.Trans(100000, 5000)))
+    ly.write(str(tmp_path / "t.gds"))
+    rc = lvs.main(["--lay", str(tmp_path / "t.gds"), "--stack", str(tmp_path / "stack.toml"),
+                   "--sch", str(tmp_path / "sch.net"), "--report", str(tmp_path / "r.lyrdb")])
+    nets, labels, _ = lvs.extract(tmp_path / "t.gds", stack.load(tmp_path / "stack.toml"), [])
+    findings, stats = lvs.compare(lvs.read_netlist((tmp_path / "sch.net").read_text()), labels)
+    kinds = sorted(f.kind for f in findings)
+    assert rc == 1 and kinds == ["open", "short", "unknown"]
+    assert "/B" in next(f.what for f in findings if f.kind == "open")
+    assert stats["checked nets"] == 4
+    assert (tmp_path / "r.lyrdb").read_text().count("<item>") == 5

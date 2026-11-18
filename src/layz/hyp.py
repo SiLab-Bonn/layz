@@ -16,6 +16,12 @@ the same records, in the same order and number format.
 
     layz hyp board.kicad_pcb [-o board.hyp]
     layz hyp design.gds --stack stacks/uni_bonn_rdl.toml [-o design.hyp]   (via layz pcb)
+    layz hyp exported.hyp -o with_traces.hyp                             (pours -> traces only)
+
+Signal routes drawn as polygons (every GDS route, and KiCad zones made from them) become pours,
+which HyperLynx BoardSim cannot model as transmission lines (no length, loss or crosstalk). By
+default (--traces auto) strip-shaped pours of signal nets are written as traces instead: their
+centreline as SEG records, as wide as the strip (layz.traces). Supplies and planes stay pours.
 """
 
 from __future__ import annotations
@@ -261,6 +267,129 @@ class HypWriter:
         self.nets()
 
 
+# ---------------------------------------------------------------- pours -> traces
+
+TRACE_MAX_WIDTH_MM = 0.08  # auto: nets whose strips are at most this wide (signals, not supplies)
+
+
+def _parse_nets(lines: list[str]):
+    """Each {NET=...} block of a .hyp: (name, first line, last line, polygons per layer, anchors,
+    pin count, whether it has voids/arcs in its pours)."""
+    import re
+
+    from shapely.geometry import Point, Polygon
+    nets = []
+    i = 0
+    num = re.compile(r"\b([XY])=([-\d.eE+]+)")
+    while i < len(lines):
+        if not lines[i].startswith("{NET="):
+            i += 1
+            continue
+        name = lines[i][len('{NET="'):].split('"')[0]
+        start, polys, anchors, pins, odd = i, {}, [], 0, False
+        i += 1
+        while i < len(lines) and not lines[i].startswith("}"):
+            s = lines[i].strip()
+            if s.startswith(("(PIN", "(VIA")):
+                xy = dict(num.findall(s))
+                anchors.append(Point(float(xy["X"]), float(xy["Y"])))
+                pins += s.startswith("(PIN")
+            elif s.startswith("{POLYVOID"):
+                odd = True
+            elif s.startswith("{POLYGON"):
+                layer = re.search(r'L="([^"]*)"', s).group(1)
+                pts, j = [], i + 1
+                while not lines[j].strip().startswith("}"):
+                    t = lines[j].strip()
+                    if t.startswith("(LINE"):
+                        xy = dict(num.findall(t))
+                        pts.append((float(xy["X"]), float(xy["Y"])))
+                    else:
+                        odd = True  # CURVE: not a plain outline
+                    j += 1
+                if len(pts) >= 3:
+                    polys.setdefault(layer, []).append((i, j, Polygon(pts).buffer(0)))
+                i = j
+            i += 1
+        nets.append((name, start, i, polys, anchors, pins, odd))
+        i += 1
+    return nets
+
+
+def add_traces(text: str, select: str = "auto", max_width_mm: float = TRACE_MAX_WIDTH_MM,
+               warn=print) -> tuple[str, list[tuple[str, int, float, float]]]:
+    """Rewrite a .hyp's strip-shaped pours as traces (SEG records), net by net; see layz.traces.
+
+    ``select``: "auto" (nets with >= 2 pins, >= 95 % of their copper strips, no strip wider than
+    ``max_width_mm``), "none", or comma-separated net names (converted whatever their width).
+    A converted net keeps its PIN/VIA records; each strip becomes SEGs, pad-like copper holding a
+    via/pin is dropped (the padstack models it), other leftovers stay pours. Returns the new text
+    and, per converted net, (name, segments, trace length, width) in mm."""
+    from shapely.ops import unary_union
+
+    from layz import traces as tr
+    if select == "none":
+        return text, []
+    lines = text.splitlines(keepends=True)
+    if not any(l.startswith("{UNITS=ENGLISH") for l in lines[:5]):
+        raise ValueError("pours -> traces needs a .hyp in ENGLISH units (inches), as KiCad and layz write")
+    named = None if select == "auto" else {n.strip() for n in select.split(",") if n.strip()}
+    max_w = max_width_mm / 25.4
+    poly_id = max([int(m) for l in lines for m in __import__("re").findall(r"\bID=(\d+)", l)] or [0]) + 1
+    out, done, report = [], 0, []
+    for name, start, end, polys, anchors, pins, odd in _parse_nets(lines):
+        if named is not None and name not in named:
+            continue
+        if named is None and pins < 2 or not polys:
+            continue
+        if odd:
+            warn(f"{name}: pours with voids or arcs, left as pours")
+            continue
+        segs_by_layer, keep_by_layer, area, conv = {}, {}, 0.0, 0.0
+        drop = set()
+        for layer, items in polys.items():
+            merged = unary_union([p for _, _, p in items])
+            for part in getattr(merged, "geoms", [merged]):
+                area += part.area
+                tr.REJECTED.clear()
+                res = tr.split_route(part, anchors)
+                if res is None:
+                    keep_by_layer.setdefault(layer, []).append(part)
+                    continue
+                conv += part.area
+                segs_by_layer.setdefault(layer, []).extend(res[0])
+                keep_by_layer.setdefault(layer, []).extend(res[1])
+            drop.update((a, b) for a, b, _ in items)
+        widths = [s.width for v in segs_by_layer.values() for s in v]
+        if not widths:
+            continue
+        if named is None and (conv < 0.95 * area or max(widths) > max_w):
+            continue
+        # replace this net's POLYGON blocks by its SEGs and leftover pours
+        body = []
+        skip = {k for a, b in drop for k in range(a, b + 1)}
+        for k in range(start + 1, end):
+            if k not in skip:
+                body.append(lines[k])
+        for layer, segs in segs_by_layer.items():
+            for s in segs:
+                body.append('  (SEG X1=%.10f Y1=%.10f X2=%.10f Y2=%.10f W=%.10f L="%s")\n' % (
+                    s.x1, s.y1, s.x2, s.y2, s.width, layer))
+        for layer, parts in keep_by_layer.items():
+            for p in parts:
+                pts = list(p.exterior.coords)
+                body.append('  {POLYGON T=POUR L="%s" ID=%d X=%.10f Y=%.10f\n' % (layer, poly_id, *pts[0]))
+                body += ["    (LINE X=%.10f Y=%.10f)\n" % q for q in pts]
+                body.append("  }\n")
+                poly_id += 1
+        out += lines[done:start + 1] + body
+        done = end
+        length = sum(((s.x2 - s.x1) ** 2 + (s.y2 - s.y1) ** 2) ** 0.5 for v in segs_by_layer.values() for s in v)
+        report.append((name, len(widths), length * 25.4, max(widths) * 25.4))
+    out += lines[done:]
+    return "".join(out), report
+
+
 def board_process(pcb_path: Path, board):
     process = stackfile.from_kicad_pcb(pcb_path)
     if process is None:
@@ -282,19 +411,45 @@ def write_hyp(pcb_path: Path, hyp_path: Path, refill: bool = False) -> None:
         HypWriter(board, f, warn=lambda m: print(f"warning: {m}", file=sys.stderr)).run(process)
 
 
+def traces_pass(hyp_path: Path, select: str, max_width_mm: float) -> None:
+    """Rewrite ``hyp_path`` in place with its strip-shaped pours as traces, and say what changed."""
+    text, report = add_traces(hyp_path.read_text(encoding="utf-8"), select, max_width_mm,
+                              warn=lambda m: print(f"warning: {m}", file=sys.stderr))
+    hyp_path.write_text(text, encoding="utf-8")
+    if report:
+        print(f"pours -> traces: {len(report)} net(s)")
+        for name, n, length, width in report:
+            print(f"  {name:20} {n:4d} segments, {length:8.2f} mm, {width * 1e3:5.1f} um wide")
+    elif select != "none":
+        print("pours -> traces: no net qualified (see --traces)")
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("input", type=Path, help=".kicad_pcb board, or a GDS (converted with layz pcb)")
+    ap.add_argument("input", type=Path,
+                    help=".kicad_pcb board, a GDS (converted with layz pcb), or a .hyp to rewrite")
     ap.add_argument("-o", "--out", type=Path, help="output .hyp (default: next to the input)")
     ap.add_argument("--stack", type=Path, help="GDS input: layz process stack (.toml)")
     ap.add_argument("--keep-pcb", action="store_true",
                     help="GDS input: keep the intermediate .kicad_pcb next to the .hyp")
     ap.add_argument("--refill", action="store_true",
                     help="refill zones with KiCad's zone filler first (default: use the fills as saved)")
+    ap.add_argument("--traces", default="auto", metavar="auto|none|NET,...",
+                    help="write strip-shaped pours as traces (centreline + width), so HyperLynx models "
+                         "their transmission lines, loss and crosstalk: 'auto' (default) every net that "
+                         "is >= 95 %% strips no wider than --trace-max-width, 'none' (KiCad's own output), "
+                         "or the nets named")
+    ap.add_argument("--trace-max-width", type=float, default=TRACE_MAX_WIDTH_MM, metavar="MM",
+                    help=f"auto: widest strip of a net made traces (default {TRACE_MAX_WIDTH_MM} mm)")
     args = ap.parse_args(argv)
+    suffix = args.input.suffix.lower()
     out = args.out or args.input.with_suffix(".hyp")
 
-    if args.input.suffix.lower() == ".kicad_pcb":
+    if suffix == ".hyp":
+        if out.resolve() == args.input.resolve():
+            ap.error("a .hyp input needs -o (a different file): the input is not overwritten")
+        out.write_text(args.input.read_text(encoding="utf-8"), encoding="utf-8")
+    elif suffix == ".kicad_pcb":
         write_hyp(args.input, out, refill=args.refill)
     else:
         if not args.stack:
@@ -304,6 +459,7 @@ def main(argv: list[str] | None = None) -> int:
             pcb = out.with_suffix(".kicad_pcb") if args.keep_pcb else Path(tmp) / (out.stem + ".kicad_pcb")
             gds2pcb.main(["--lay", str(args.input), "-o", str(pcb), "--stack", str(args.stack)])
             write_hyp(pcb, out, refill=args.refill)
+    traces_pass(out, args.traces, args.trace_max_width)
     print(f"wrote {out}")
     return 0
 
