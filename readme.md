@@ -1,7 +1,5 @@
 <p align="center"><img src="docs/logo.svg" alt="layz" width="360"></p>
 
-# layz
-
 Layout tools for SiLab's FR4 PCBs, in-house RDL chips (maskless lithography) and the flex PCBs
 that connect them, as one command line tool. Install: [install.md](install.md).
 
