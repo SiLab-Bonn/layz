@@ -20,7 +20,7 @@ CHECKS = [
      "https://www.kicad.org/download/"),
     ("FasterCap", ("solver", "fastercap"), True, "layz field / pex (3-D capacitance)",
      "scripts/build_solvers.sh (links it into ~/.local/bin)"),
-    ("gdscheck", ("program", "gdscheck"), True, "layz drc",
+    ("gdscheck", ("solver", "gdscheck"), True, "layz drc",
      "cargo install --git https://github.com/aesc-silicon/gdscheck gdscheck"),
     ("klayout (Python)", ("module", "klayout.db"), True, "everything", "pip install --editable . (README)"),
     ("klayout-pex", ("module", "klayout_pex"), True, "layz pex / field", "pip install --editable . (README)"),
