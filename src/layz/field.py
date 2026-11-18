@@ -17,7 +17,7 @@ Writes into the run directory:
     panels.vtk    the refined panels with their charge density, conductor/dielectric id
     field.html    interactive preview: conductors + |E| on cut planes (open in a browser)
 
-Run in the repo's venv (see README):
+Run in the repo's venv (see install.md):
     layz field run_board --voltage TOP=1 --voltage BOT=0
 """
 

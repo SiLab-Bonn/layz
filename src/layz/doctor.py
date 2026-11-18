@@ -22,11 +22,11 @@ CHECKS = [
      "scripts/build_solvers.sh (links it into ~/.local/bin)"),
     ("gdscheck", ("solver", "gdscheck"), True, "layz drc",
      "cargo install --git https://github.com/aesc-silicon/gdscheck gdscheck"),
-    ("klayout (Python)", ("module", "klayout.db"), True, "everything", "pip install --editable . (README)"),
-    ("klayout-pex", ("module", "klayout_pex"), True, "layz pex / field", "pip install --editable . (README)"),
-    ("shapely", ("module", "shapely"), True, "layz nets", "pip install --editable . (README)"),
+    ("klayout (Python)", ("module", "klayout.db"), True, "everything", "./install.sh (install.md)"),
+    ("klayout-pex", ("module", "klayout_pex"), True, "layz pex / field", "./install.sh (install.md)"),
+    ("shapely", ("module", "shapely"), True, "layz nets", "./install.sh (install.md)"),
     ("pcbnew (KiCad)", ("module", "pcbnew"), True, "layz hyp, KiCad boards",
-     "install KiCad; layz must run on the Python KiCad was built for (README); or set "
+     "install KiCad; layz must run on the Python KiCad was built for (install.md); or set "
      "LAYZ_KICAD_PYTHONPATH to the folder with pcbnew.py"),
     ("HyperLynx", ("hyperlynx", ""), False, "opening layz hyp's .hyp files for SI/PI",
      "Siemens HyperLynx (licensed); set LAYZ_HYPERLYNX to its executable if it isn't on PATH"),

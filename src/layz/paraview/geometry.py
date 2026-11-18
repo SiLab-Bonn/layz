@@ -6,7 +6,7 @@ by fieldview.py). Saves a PNG and a ParaView state.
     paraview --state RUN/geometry.pvsm
 
 --mesh draws the solver's triangle edges on the conductors.
-(On Ubuntu, ParaView needs HWLOC_COMPONENTS=-gl in the environment; see README.)
+(On Ubuntu, ParaView needs HWLOC_COMPONENTS=-gl in the environment; `layz view` sets it.)
 """
 
 import argparse

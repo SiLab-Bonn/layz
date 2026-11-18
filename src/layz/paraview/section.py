@@ -9,7 +9,7 @@ fieldview.py writes next to the section (section_*_seeds.vtk): points just outsi
 conductor's outline, denser where the field is stronger, so this works for any geometry. In the
 GUI, add ParaView's own Stream Tracer (line or point-cloud seeds) for more lines, recolour the
 section, add a Contour on phi for equipotentials, etc.
-(On Ubuntu, ParaView needs HWLOC_COMPONENTS=-gl in the environment; see README.)
+(On Ubuntu, ParaView needs HWLOC_COMPONENTS=-gl in the environment; `layz view` sets it.)
 """
 
 import argparse

@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "layz"
 version = "0.2.0"
 description = "Layout tools for SiLab FR4 PCBs, RDL chips and flex PCBs: GDS -> KiCad -> HyperLynx, and 3-D capacitance and field extraction."
-readme = "README.md"
+readme = "readme.md"
 requires-python = ">=3.12,<3.16"
 classifiers = [
     "Programming Language :: Python :: 3",
@@ -26,7 +26,7 @@ dependencies = [
     "plotly",
 ]
 # KiCad's `pcbnew` module isn't on PyPI: it comes with the KiCad package. Create the venv on the
-# system Python with its packages visible (README):
+# system Python with its packages visible (install.md):
 #   python3 -m venv --system-site-packages .venv && .venv/bin/pip install --editable .
 
 [project.optional-dependencies]

@@ -10,7 +10,7 @@ import sys as _sys
 # KiCad's `pcbnew` Python module ships with KiCad, not on PyPI, so an isolated venv (one made
 # without --system-site-packages) can't see it. Find it and append its folder to sys.path: appended, so layz's
 # own dependencies always come first. Override with LAYZ_KICAD_PYTHONPATH. The module is built for
-# one Python version (Ubuntu 26.04: 3.14), so install layz with that Python (see README).
+# one Python version (Ubuntu 26.04: 3.14), so install layz with that Python (see install.md).
 _KICAD_PATHS = [
     "/usr/lib/python3/dist-packages",                                   # Debian, Ubuntu
     f"/usr/lib/python3.{_sys.version_info.minor}/site-packages",       # Arch

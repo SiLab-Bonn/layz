@@ -12,7 +12,7 @@ No LVS and no netlist are involved: a conductor is every set of shapes that touc
 or are joined by vias. Name conductors with texts on the conductor layer or with
 --name NAME=LAYER@X,Y; unnamed bodies are numbered n1, n2, ... and listed with their location.
 
-Run in the repo's venv (see README):
+Run in the repo's venv (see install.md):
     layz pex example_files/conv_test_2.gds --stack stacks/<process>.toml
 """
 
