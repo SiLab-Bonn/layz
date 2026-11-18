@@ -24,11 +24,11 @@ layz doctor    which external tools this machine has
 
 ```mermaid
 flowchart LR
-    gds[/"GDS layout"/]
-    sch[/"KiCad schematic"/]
-    stack[/"stack .toml"/]
-    board[/"KiCad .kicad_pcb"/]
-    exthyp[/"exported .hyp"/]
+    gds@{ shape: doc, label: "GDS layout" }
+    sch@{ shape: doc, label: "KiCad schematic" }
+    stack@{ shape: doc, label: "stack .toml" }
+    board@{ shape: doc, label: "KiCad .kicad_pcb" }
+    exthyp@{ shape: doc, label: "exported .hyp" }
 
     drc(["layz drc"])
     lvs(["layz lvs"])
@@ -40,16 +40,25 @@ flowchart LR
     svg(["layz svg"])
     view(["layz view"])
 
-    gds --> drc --> drcdb["DRC markers"]
-    gds & sch --> lvs --> lvsdb["LVS report, markers"]
-    gds --> pcb --> kpcb["KiCad board"]
-    kpcb --> nets --> kpcb2["KiCad board with nets"]
-    kpcb2 & board & exthyp --> hyp --> hypf["HyperLynx .hyp, signal routes as traces"]
+    drcdb@{ shape: doc, label: "DRC markers .lyrdb" }
+    lvsdb@{ shape: doc, label: "LVS report, .lyrdb" }
+    kpcb@{ shape: doc, label: "KiCad board" }
+    kpcb2@{ shape: doc, label: "KiCad board with nets" }
+    hypf@{ shape: doc, label: "HyperLynx .hyp, signal routes as traces" }
+    caps@{ shape: doc, label: "capacitance matrix .csv" }
+    fld@{ shape: doc, label: "E-field, potential .vtk .png" }
+    svgf@{ shape: doc, label: "SVG preview" }
+
+    gds --> drc --> drcdb
+    gds & sch --> lvs --> lvsdb
+    gds --> pcb --> kpcb
+    kpcb --> nets --> kpcb2
+    kpcb2 & board & exthyp --> hyp --> hypf
     hypf --> hl[["HyperLynx: SI, eye, crosstalk, DC drop"]]
-    gds & board --> pex --> caps["capacitance matrix"]
-    caps --> field --> fld["E-field, potential"]
+    gds & board --> pex --> caps
+    caps --> field --> fld
     drcdb & lvsdb & fld --> view --> tools[["KLayout, ParaView"]]
-    gds --> svg --> svgf["SVG preview"]
+    gds --> svg --> svgf
     stack -.-> lvs & pcb & pex
 
     classDef cmd fill:#5E81AC,stroke:#4C566A,color:#fff
