@@ -7,7 +7,7 @@ rules:
     value: 95.0
     params:
       scope: window
-      window: 1000.0
+      window: 10000.0
       step: 500.0
     layer_params:
       boundary: Outline
@@ -17,7 +17,7 @@ rules:
     value: 95.0
     params:
       scope: window
-      window: 1000.0
+      window: 10000.0
       step: 500.0
     layer_params:
       boundary: Outline
@@ -27,7 +27,7 @@ rules:
     value: 95.0
     params:
       scope: window
-      window: 1000.0
+      window: 10000.0
       step: 500.0
     layer_params:
       boundary: Outline

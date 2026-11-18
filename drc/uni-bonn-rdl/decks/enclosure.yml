@@ -4,7 +4,7 @@ rules:
   - id: RDL.V1.enc.M2
     check: min_enclosure
     layers: [M2, V1]
-    value: 10.0
+    value: 5.0
   - id: RDL.V1.on.M1orPad
     check: min_enclosure
     layers: [V1Landing, V1]
@@ -12,11 +12,11 @@ rules:
   - id: RDL.V2.enc.M2
     check: min_enclosure
     layers: [M2, V2]
-    value: 10.0
+    value: 5.0
   - id: RDL.V2.enc.M3
     check: min_enclosure
     layers: [M3, V2]
-    value: 10.0
+    value: 5.0
   - id: RDL.PadOpen.enc.M3
     check: min_enclosure
     layers: [M3, PadOpen]

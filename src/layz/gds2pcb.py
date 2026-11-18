@@ -639,7 +639,7 @@ def main(argv: list[str] | None = None) -> None:
         "--via-map", action="append", default=[],
         help="Map a GDS via layer/datatype to a KiCad via layer pair, e.g. --via-map 7/0=F.Cu,In1.Cu",
     )
-    parser.add_argument("--scale-mm-per-um", type=float, default=0.001)
+    parser.add_argument("--scale-mm-per-um", type=float, default=1)
     parser.add_argument("--drill-shrink-um", type=float, default=10.0)
     parser.add_argument(
         "--net-name", default="",
@@ -647,7 +647,7 @@ def main(argv: list[str] | None = None) -> None:
     )
     parser.add_argument(
         "--no-flip-y", action="store_true",
-        help="Do not flip Y (raw GDS->KiCad coordinate mapping; v1 behavior)",
+        help="Do not flip Y (raw GDS->KiCad coordinate mapping)",
     )
     args = parser.parse_args(argv)
     args.gds = args.lay
