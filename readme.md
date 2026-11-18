@@ -24,11 +24,11 @@ layz doctor    which external tools this machine has
 
 ```mermaid
 flowchart LR
-    gds@{ shape: doc, label: "GDS layout" }
-    sch@{ shape: doc, label: "KiCad schematic" }
-    stack@{ shape: doc, label: "stack .toml" }
-    board@{ shape: doc, label: "KiCad .kicad_pcb" }
-    exthyp@{ shape: doc, label: "exported .hyp" }
+    gds@{ shape: card, label: "GDS layout" }
+    sch@{ shape: card, label: "KiCad schematic" }
+    stack@{ shape: card, label: "stack .toml" }
+    board@{ shape: card, label: "KiCad .kicad_pcb" }
+    exthyp@{ shape: card, label: "exported .hyp" }
 
     drc(["layz drc"])
     lvs(["layz lvs"])
@@ -40,14 +40,14 @@ flowchart LR
     svg(["layz svg"])
     view(["layz view"])
 
-    drcdb@{ shape: doc, label: "DRC markers .lyrdb" }
-    lvsdb@{ shape: doc, label: "LVS report, .lyrdb" }
-    kpcb@{ shape: doc, label: "KiCad board" }
-    kpcb2@{ shape: doc, label: "KiCad board with nets" }
-    hypf@{ shape: doc, label: "HyperLynx .hyp, signal routes as traces" }
-    caps@{ shape: doc, label: "capacitance matrix .csv" }
-    fld@{ shape: doc, label: "E-field, potential .vtk .png" }
-    svgf@{ shape: doc, label: "SVG preview" }
+    drcdb@{ shape: card, label: "DRC markers .lyrdb" }
+    lvsdb@{ shape: card, label: "LVS report, .lyrdb" }
+    kpcb@{ shape: card, label: "KiCad board" }
+    kpcb2@{ shape: card, label: "KiCad board with nets" }
+    hypf@{ shape: card, label: "HyperLynx .hyp, signal routes as traces" }
+    caps@{ shape: card, label: "capacitance matrix .csv" }
+    fld@{ shape: card, label: "E-field, potential .vtk .png" }
+    svgf@{ shape: card, label: "SVG preview" }
 
     gds --> drc --> drcdb
     gds & sch --> lvs --> lvsdb
