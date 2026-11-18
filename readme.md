@@ -1,7 +1,5 @@
 <p align="center"><img src="docs/logo.svg" alt="layz" width="360"></p>
 
-<p align="center"><i>y and z swap places between English and German keyboards</i></p>
-
 # layz
 
 Layout tools for SiLab's FR4 PCBs, in-house RDL chips (maskless lithography) and the flex PCBs
