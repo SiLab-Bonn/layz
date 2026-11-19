@@ -427,6 +427,8 @@ def write_hyp(pcb_path: Path, hyp_path: Path, refill: bool = False) -> None:
 
 def traces_pass(hyp_path: Path, select: str, max_width_mm: float) -> None:
     """Rewrite ``hyp_path`` in place with its strip-shaped pours as traces, and say what changed."""
+    if select == "none":  # nothing to do (and no shapely needed: layz's KiCad environment has none)
+        return
     text, report = add_traces(hyp_path.read_text(encoding="utf-8"), select, max_width_mm, warn=lambda m: print(f"warning: {m}", file=sys.stderr))
     hyp_path.write_text(text, encoding="utf-8")
     if report:
