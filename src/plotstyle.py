@@ -60,7 +60,7 @@ DECADE_RMS_LIMITS_UV = (0.1, 1.0e4)
 
 CURVE_COLORS = (NORD_BLUE, NORD_ORANGE, NORD_GREEN, NORD_PURPLE, NORD_YELLOW, NORD_RED, NORD_CYAN, NORD_TEAL, NORD_LIGHT_BLUE, NORD_DARK)
 SPECTRUM_COLOR_MAP = LinearSegmentedColormap.from_list("nord_blue_orange_yellow", (NORD_BLUE, NORD_ORANGE, NORD_YELLOW))
-DENSITY_COLOR_MAP = LinearSegmentedColormap.from_list("nord_purple_orange_yellow", SPECTRUM_COLOR_MAP(np.linspace(0.2, 1.0, 256)))
+DENSITY_COLOR_MAP = LinearSegmentedColormap.from_list("nord_blue_red", (NORD_BLUE, NORD_RED))  # every gradient: low blue, high red
 PLOT_STYLE = mpl.RcParams(
     {
         "text.usetex": False,
