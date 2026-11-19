@@ -1,5 +1,12 @@
-# Sourced by layz's installers (install.sh, install/build_solvers.sh, install/install_gdscheck.sh):
-# put a command where the running shell finds it, so it works without opening a new terminal.
+# Sourced by layz's installers (install.sh and install/*.sh):
+#
+#   os_family                 debian, ubuntu, rhel (AlmaLinux, Rocky, RHEL, CentOS), fedora, arch,
+#                             macos, or unknown
+#   pkg_install PKG...        install packages with the system's package manager (as root)
+#   as_root CMD...            run a command as root (sudo unless we are root)
+#   die MESSAGE               print it and exit 1
+#
+# and put a command where the running shell finds it, so it works without opening a new terminal:
 #
 #   onpath_link TARGET NAME   link TARGET as NAME into onpath_dir
 #   onpath_done               after the links: "ready", or the one line to run if none could be
@@ -11,6 +18,43 @@
 # run a command as root: directly when we are root, else through sudo (which asks for a password)
 as_root() {
     if [ "$(id -u)" = 0 ]; then "$@"; else sudo "$@"; fi
+}
+
+die() {
+    echo "$(basename "$0"): $*" >&2
+    exit 1
+}
+
+os_family() {
+    if [ "$(uname)" = Darwin ]; then echo macos; return; fi
+    local id="" like=""
+    if [ -r /etc/os-release ]; then
+        id="$(. /etc/os-release && echo "${ID:-}")"
+        like="$(. /etc/os-release && echo "${ID_LIKE:-}")"
+    fi
+    case " $id $like " in
+        *" ubuntu "*) echo ubuntu ;;
+        *" debian "*) echo debian ;;
+        *" fedora "*) if [ "$id" = fedora ]; then echo fedora; else echo rhel; fi ;;
+        *" rhel "* | *" centos "*) echo rhel ;;
+        *" arch "*) echo arch ;;
+        *) echo unknown ;;
+    esac
+}
+
+PKG_UPDATED=
+pkg_install() {
+    case "$(os_family)" in
+        ubuntu | debian)
+            [ -n "$PKG_UPDATED" ] || { as_root apt-get update -q && PKG_UPDATED=1; }
+            as_root env DEBIAN_FRONTEND=noninteractive apt-get install -y "$@" ;;
+        rhel | fedora) as_root dnf install -y "$@" ;;
+        arch) as_root pacman -S --needed --noconfirm "$@" ;;
+        macos)
+            command -v brew >/dev/null || die "install Homebrew first (https://brew.sh), then run this again"
+            brew install "$@" ;;
+        *) die "no known package manager here; install $* yourself" ;;
+    esac
 }
 
 onpath_dir() {

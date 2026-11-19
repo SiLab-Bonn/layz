@@ -10,11 +10,11 @@
 # newest python3.15..3.12 installed, or else installs the newest the package manager offers (dnf,
 # apt; asks for sudo). LAYZ_PYTHON=/path/to/python3 picks one yourself. It installs layz into the
 # venv editable (changes in this repo apply directly) and links .venv/bin/layz where this terminal
-# finds it (install/onpath.sh).
+# finds it (install/lib.sh).
 set -eu
 
 here="$(cd "$(dirname "$0")" && pwd)"
-. "$here/install/onpath.sh"
+. "$here/install/lib.sh"
 
 if [ "${1:-}" = "--uninstall" ]; then
     for link in "$(onpath_dir)/layz" "$HOME/.local/bin/layz"; do
@@ -92,7 +92,7 @@ fi
 echo "layz: pip install --editable $here"
 "$here/.venv/bin/python" -m pip install --quiet --editable "$here"
 
-# --- on PATH: where this terminal finds it already (install/onpath.sh)
+# --- on PATH: where this terminal finds it already (install/lib.sh)
 onpath_link "$here/.venv/bin/layz" layz
 onpath_done
 [ -z "$ONPATH_MISSING" ] && echo "layz: ready, try: layz doctor"

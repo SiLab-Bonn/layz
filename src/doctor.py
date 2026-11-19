@@ -19,16 +19,16 @@ import sys
 # (what, (kind, name), required, needed for, how to get it)
 CHECKS = [
     ("klayout", ("program", "klayout"), True, "DRC/LVS, viewing GDS and DRC results", "https://www.klayout.de/build.html"),
-    ("kicad-cli", ("program", "kicad-cli"), True, "schematic netlists, KiCad boards", "https://www.kicad.org/download/"),
-    ("FasterCap", ("solver", "fastercap"), True, "layz field / pex (3-D capacitance)", "install/build_solvers.sh (links it into ~/.local/bin)"),
-    ("gdscheck", ("solver", "gdscheck"), True, "layz drc", "install/install_gdscheck.sh"),
-    ("klayout (Python)", ("module", "klayout.db"), True, "everything", "./install.sh (install.md)"),
-    ("klayout-pex", ("module", "klayout_pex"), True, "layz pex / field", "./install.sh (install.md)"),
-    ("shapely", ("module", "shapely"), True, "layz nets", "./install.sh (install.md)"),
-    ("pcbnew (KiCad)", ("module", "pcbnew"), True, "layz gds2pcb, gds2hyp, KiCad boards", "install KiCad; layz must run on the Python KiCad was built for (install.md); or set LAYZ_KICAD_PYTHONPATH to the folder with pcbnew.py"),
+    ("kicad-cli", ("program", "kicad-cli"), True, "schematic netlists, KiCad boards", "install/kicad.sh"),
+    ("FasterCap", ("solver", "fastercap"), True, "layz field / pex (3-D capacitance)", "install/fastercap.sh"),
+    ("gdscheck", ("solver", "gdscheck"), True, "layz drc", "install/gdscheck.sh"),
+    ("klayout (Python)", ("module", "klayout.db"), True, "everything", "./install.sh"),
+    ("klayout-pex", ("module", "klayout_pex"), True, "layz pex / field", "./install.sh"),
+    ("shapely", ("module", "shapely"), True, "layz nets", "./install.sh"),
+    ("pcbnew (KiCad)", ("module", "pcbnew"), True, "layz gds2pcb, gds2hyp, KiCad boards", "install/kicad.sh; layz must run on the Python KiCad was built for (./install.sh again after installing KiCad); or set LAYZ_KICAD_PYTHONPATH to the folder with pcbnew.py"),
     ("HyperLynx", ("hyperlynx", ""), False, "layz hyp (SI/PI runs)", "Siemens HyperLynx (licensed); set LAYZ_HYPERLYNX_HOME to its SDD_HOME folder"),
-    ("FastCap2", ("solver", "fastcap2"), False, "--solver fastcap2", "install/build_solvers.sh"),
-    ("pvpython (ParaView)", ("program", "pvpython"), False, "layz view of field results", "https://www.paraview.org/download/"),
+    ("FastCap2", ("solver", "fastcap2"), False, "--solver fastcap2", "install/fastercap.sh"),
+    ("pvpython (ParaView)", ("program", "pvpython"), False, "layz view of field results", "install/paraview.sh"),
 ]
 
 
