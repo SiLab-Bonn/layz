@@ -3,10 +3,9 @@
     layz doctor            the tools, then the test suite (about 40 s)
     layz doctor --quick    the tools only
 
-Required: klayout, kicad-cli, FasterCap, gdscheck and the Python modules layz imports (klayout,
-klayout-pex, shapely, KiCad's pcbnew). Optional tools are reported but don't fail the check; the
-tests that need them are skipped. Exit status: 0 when everything required is there and the tests
-pass, 1 otherwise.
+One line per tool: ok, !! (required and missing, with how to get it), -- (optional, or not
+available on this system: KiCad 10 on AlmaLinux). The tests that need a missing tool are skipped.
+Exit status: 0 when everything required is there and the tests pass, 1 otherwise.
 """
 
 from __future__ import annotations
@@ -16,20 +15,13 @@ import os
 import shutil
 import sys
 
-# (what, (kind, name), required, needed for, how to get it)
-CHECKS = [
-    ("klayout", ("program", "klayout"), True, "DRC/LVS, viewing GDS and DRC results", "https://www.klayout.de/build.html"),
-    ("kicad-cli", ("program", "kicad-cli"), True, "schematic netlists, KiCad boards", "install/kicad.sh"),
-    ("FasterCap", ("solver", "fastercap"), True, "layz field / pex (3-D capacitance)", "install/fastercap.sh"),
-    ("gdscheck", ("solver", "gdscheck"), True, "layz drc", "install/gdscheck.sh"),
-    ("klayout (Python)", ("module", "klayout.db"), True, "everything", "./install.sh"),
-    ("klayout-pex", ("module", "klayout_pex"), True, "layz pex / field", "./install.sh"),
-    ("shapely", ("module", "shapely"), True, "layz nets", "./install.sh"),
-    ("pcbnew (KiCad)", ("module", "pcbnew"), True, "layz gds2pcb, gds2hyp, KiCad boards", "install/kicad.sh; layz must run on the Python KiCad was built for (./install.sh again after installing KiCad); or set LAYZ_KICAD_PYTHONPATH to the folder with pcbnew.py"),
-    ("HyperLynx", ("hyperlynx", ""), False, "layz hyp (SI/PI runs)", "Siemens HyperLynx (licensed); set LAYZ_HYPERLYNX_HOME to its SDD_HOME folder"),
-    ("FastCap2", ("solver", "fastcap2"), False, "--solver fastcap2", "install/fastercap.sh"),
-    ("pvpython (ParaView)", ("program", "pvpython"), False, "layz view of field results", "install/paraview.sh"),
-]
+# (what, checks, required, needed for, how to get it); a check is (kind, name)
+CHECKS = [("KLayout", [("program", "klayout")], True, "DRC/LVS, viewing GDS", "sudo install/system.sh"), ("KiCad 10", [("program", "kicad-cli"), ("module", "pcbnew")], True, "gds2pcb, gds2hyp from a GDS, pex on boards, lvs", "sudo install/system.sh, then ./install.sh"), ("FasterCap", [("solver", "fastercap")], True, "pex, field", "./install.sh"), ("gdscheck", [("solver", "gdscheck")], True, "drc", "./install.sh"), ("Python modules", [("module", "klayout.db"), ("module", "klayout_pex"), ("module", "shapely")], True, "everything", "./install.sh"), ("HyperLynx", [("hyperlynx", "")], False, "hyp", "licensed; set LAYZ_HYPERLYNX_HOME to its SDD_HOME"), ("FastCap2", [("solver", "fastcap2")], False, "pex --solver fastcap2", "sudo install/system.sh, then ./install.sh"), ("ParaView", [("program", "pvpython")], False, "view", "./install.sh")]
+
+
+def _short(path: str) -> str:
+    home = os.path.expanduser("~")
+    return "~" + path[len(home) :] if path.startswith(home + os.sep) else path
 
 
 def _check(kind: str, name: str) -> tuple[bool, str]:
@@ -39,41 +31,56 @@ def _check(kind: str, name: str) -> tuple[bool, str]:
         except Exception as e:  # noqa: BLE001 - report any import failure
             return False, f"{type(e).__name__}: {e}"
         v = m.Version() if name == "pcbnew" else getattr(m, "__version__", "")
-        return True, f"{v} ({os.path.dirname(getattr(m, '__file__', '') or '')})".strip()
+        return True, f"{name.split('.')[0].replace('_', '-')} {v}".strip()
     if kind == "solver":
         from layz import solvers
 
         try:
-            return True, solvers.find(name)
-        except SystemExit as e:
-            return False, str(e)
+            return True, _short(solvers.find(name))
+        except SystemExit:
+            return False, "not found"
     if kind == "hyperlynx":
-        return _find_hyperlynx()
+        from layz.hyperlynx import setup
+
+        try:
+            return True, str(setup.find_install())
+        except SystemExit:
+            return False, "not found"
     path = shutil.which(name)
-    return (path is not None), (path or "not on PATH")
+    return (path is not None), (_short(path) if path else "not on PATH")
 
 
-def _find_hyperlynx() -> tuple[bool, str]:
-    """HyperLynx as `layz hyp` finds it: $LAYZ_HYPERLYNX_HOME, or an SDD_HOME under /eda/Siemens."""
-    from layz.hyperlynx import setup
+def _kicad_packaged() -> bool:
+    """Whether this system has a KiCad 10 package (install/lib.sh's kicad_packaged)."""
+    import subprocess
+    from pathlib import Path
 
+    lib = Path(__file__).resolve().parents[1] / "install" / "lib.sh"
+    if not lib.exists():
+        return True
+    return subprocess.run(["bash", "-c", f". '{lib}'; kicad_packaged"], capture_output=True).returncode == 0
+
+
+def _os_name() -> str:
     try:
-        return True, str(setup.find_install())
-    except SystemExit as e:
-        return False, str(e)
+        return next(line.split("=", 1)[1].strip().strip('"') for line in open("/etc/os-release") if line.startswith("PRETTY_NAME="))
+    except (OSError, StopIteration):
+        return sys.platform
 
 
-def run_tests() -> int:
-    """The repo's test suite (test/ in the clone layz runs from), in this Python."""
+def run_tests() -> tuple[int, str]:
+    """The repo's test suite (test/ in the clone layz runs from), in this Python: (status, summary)."""
     import subprocess
     from pathlib import Path
 
     tests = Path(__file__).resolve().parents[1] / "test"
     if not tests.is_dir():
-        print(f"tests: no {tests} (layz isn't running from its clone); skipped")
-        return 0
-    print(f"tests ({tests}):", flush=True)
-    return subprocess.run([sys.executable, "-m", "pytest", "-q", "--no-header", "-p", "no:cacheprovider", "-W", "ignore::DeprecationWarning", str(tests)], cwd=tests.parent, env={**os.environ, "MPLBACKEND": "Agg"}).returncode  # plots to files only
+        return 0, "no test/ (layz isn't running from its clone)"
+    r = subprocess.run([sys.executable, "-m", "pytest", "-q", "--no-header", "-p", "no:cacheprovider", "-W", "ignore::DeprecationWarning", "-rf", str(tests)], cwd=tests.parent, env={**os.environ, "MPLBACKEND": "Agg"}, capture_output=True, text=True)  # plots to files only
+    lines = [line for line in r.stdout.splitlines() if line.strip()]
+    summary = lines[-1].strip("= ") if lines else "no output"
+    failed = [line for line in lines if line.startswith("FAILED")]
+    return r.returncode, summary + ("".join(f"\n    {f}" for f in failed) if failed else "")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -82,23 +89,28 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="layz doctor", description=__doc__.split("\n\n")[0], formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--quick", action="store_true", help="check the tools only, without the tests")
     a = ap.parse_args(argv or [])
-    print(f"python {sys.version.split()[0]} ({sys.executable})")
-    missing_required = 0
-    for section, req in (("required", True), ("optional", False)):
-        print(f"{section}:")
-        for what, (kind, name), required, needed, get in CHECKS:
-            if required != req:
-                continue
-            ok, info = _check(kind, name)
-            print(f"  {'ok' if ok else ('MISSING' if required else '--'):<7} {what:<20} {info}")
-            if not ok:
-                print(f"          {'needed' if required else 'warning: optional, used'} for: {needed}; get it: {get}")
-                missing_required += required
-    if os.environ.get("HWLOC_COMPONENTS") is None and shutil.which("pvpython"):
-        print("note: on Ubuntu, ParaView hangs at start-up unless HWLOC_COMPONENTS=-gl is set (layz view sets it for you)")
-    if missing_required:
-        print(f"{missing_required} required missing")
-    else:
-        print("all required tools found")
-    failed = 0 if a.quick else run_tests()
-    return 1 if missing_required or failed else 0
+    width = max(60, shutil.get_terminal_size((100, 20)).columns)
+
+    def say(line: str) -> None:
+        print(line if len(line) <= width else line[: width - 1] + "…")
+
+    say(f"layz doctor: {_os_name()}, Python {sys.version.split()[0]} in {_short(os.path.dirname(os.path.dirname(sys.executable)))}")
+    missing = 0
+    for what, checks, required, needed, get in CHECKS:
+        results = [_check(kind, name) for kind, name in checks]
+        ok = all(r[0] for r in results)
+        if ok:
+            say(f"  ok  {what:<15} {', '.join(r[1] for r in results)}")
+        elif what == "KiCad 10" and not _kicad_packaged():
+            say(f"  --  {what:<15} no KiCad 10 package for this system; needed for {needed}")
+        elif required:
+            missing += 1
+            say(f"  !!  {what:<15} missing ({needed}): {get}")
+        else:
+            say(f"  --  {what:<15} optional ({needed}): {get}")
+    status = 0
+    if not a.quick:
+        status, summary = run_tests()
+        say(f"tests: {summary}")
+    say(f"{missing} required missing" if missing else "ready")
+    return 1 if missing or status else 0
