@@ -11,7 +11,7 @@ cargo="$(command -v cargo || true)"
 [ -n "$cargo" ] || need_system "Rust's cargo"
 command -v git >/dev/null || need_system git
 
-"$cargo" install --git https://github.com/aesc-silicon/gdscheck gdscheck
+PATH="$bin:$PATH" "$cargo" install --git https://github.com/aesc-silicon/gdscheck gdscheck   # with its bin on PATH: no warning about it
 onpath_link "$bin/gdscheck" gdscheck
 onpath_done
 echo "check with: layz doctor"

@@ -14,14 +14,11 @@ ROOT = Path(__file__).resolve().parents[1]
 TESTS = ROOT / "test"
 RDL = "uni-bonn-rdl"  # a process by name: tech/uni-bonn-rdl/stack.toml
 
-try:
-    import pcbnew  # noqa: F401
+from layz import kicad as _kicad
 
-    HAVE_PCBNEW = True
-except ImportError:
-    HAVE_PCBNEW = False
+HAVE_PCBNEW = _kicad.python() is not None or _kicad.pcbnew_here()  # layz's own KiCad, or pcbnew here
 HAVE_FASTERCAP = shutil.which("FasterCap") is not None
-needs_kicad = pytest.mark.skipif(not HAVE_PCBNEW, reason="KiCad's pcbnew module not found")
+needs_kicad = pytest.mark.skipif(not HAVE_PCBNEW, reason="no KiCad: install/kicad.sh")
 needs_fastercap = pytest.mark.skipif(not HAVE_FASTERCAP, reason="FasterCap not on PATH")
 
 

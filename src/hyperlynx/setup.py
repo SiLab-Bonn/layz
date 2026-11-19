@@ -8,7 +8,8 @@ entry of SDD_HOME is a symlink to the install, except hyperlynx/, a real folder 
 with writable copies of the files HyperLynx writes (Bsw.pak, ...). HyperLynx's Python finds
 its program folder from where it is started, so it runs as <overlay>/Scripting/bin/pythonHL.
 
-License: $MGLS_LICENSE_FILE (port@server), or $LAYZ_HYPERLYNX_LICENSE for the same value.
+License: $MGLS_LICENSE_FILE (port@server), or $LAYZ_HYPERLYNX_LICENSE for the same value, else
+SiLab's server (DEFAULT_LICENSE): nothing needs setting in the shell on SiLab's machines.
 """
 
 from __future__ import annotations
@@ -87,15 +88,16 @@ def ensure_overlay(install: Path, overlay: Path, quiet: bool = False) -> Path:
     return overlay
 
 
-def license_value() -> str | None:
-    return os.environ.get("MGLS_LICENSE_FILE") or os.environ.get("LAYZ_HYPERLYNX_LICENSE")
+DEFAULT_LICENSE = "27504@nexus.physik.uni-bonn.de"  # SiLab's Siemens license server
+
+
+def license_value() -> str:
+    return os.environ.get("MGLS_LICENSE_FILE") or os.environ.get("LAYZ_HYPERLYNX_LICENSE") or DEFAULT_LICENSE
 
 
 def environment(install: Path, overlay: Path) -> dict[str, str]:
     """The environment HyperLynx's setup script makes, pointed at the overlay."""
     lic = license_value()
-    if not lic:
-        raise SystemExit("no HyperLynx license server: set MGLS_LICENSE_FILE (or LAYZ_HYPERLYNX_LICENSE) to port@server, e.g. 27504@nexus.physik.uni-bonn.de")
     env = dict(os.environ)
     common = install / "common" / ARCH
     hl = overlay / "hyperlynx"

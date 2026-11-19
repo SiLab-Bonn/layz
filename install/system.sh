@@ -11,8 +11,8 @@
 #   cmake, a C++ compiler, make, git, curl, bzip2, BLAS headers   to build FasterCap
 #   GoogleTest, Python headers   to build FastCap2 too (optional; where GoogleTest is packaged)
 #   cargo (Rust)              to build gdscheck
-#   KiCad 10                  where the system has it: KiCad's PPA on Ubuntu, Debian testing, Fedora,
-#                             Arch, Homebrew; not on AlmaLinux/RHEL or Debian 13
+#   KiCad 10                  macOS only (Homebrew's cask); on Linux each user's install/kicad.sh
+#                             unpacks KiCad's AppImage, apart from any system KiCad
 #   KLayout                   klayout.org's build (Ubuntu, RHEL, macOS), else the distribution's
 #   ParaView                  where the system packages it
 #
@@ -87,18 +87,6 @@ case "$family" in
         group "build tools" cmake g++ make git curl ca-certificates bzip2 libopenblas-dev
         group "FastCap2's build: GoogleTest, Python headers" libgtest-dev python3-dev
         group "Rust (gdscheck)" cargo
-        if [ "$family" = ubuntu ]; then
-            command -v add-apt-repository >/dev/null || group "add-apt-repository" software-properties-common
-            if as_root add-apt-repository -y ppa:kicad/kicad-10.0-releases; then
-                PKG_UPDATED=
-                group "KiCad 10" kicad
-            else
-                skip "KiCad 10: could not add ppa:kicad/kicad-10.0-releases"
-            fi
-        else
-            k="$(apt-cache policy kicad | sed -n 's/^ *Candidate: \([0-9]*\)\..*/\1/p')"
-            if [ "${k:-0}" -ge 10 ]; then group "KiCad 10" kicad; else skip "KiCad 10: Debian's kicad here is ${k:-missing} (10 is in Debian testing)"; fi
-        fi
         group "ParaView" paraview
         if [ "$family" = ubuntu ]; then
             u="$(. /etc/os-release && echo "${VERSION_ID%%.*}")"
@@ -124,7 +112,6 @@ case "$family" in
         group "build tools" "${tools[@]}"
         if dnf list -q gtest-devel >/dev/null 2>&1; then group "FastCap2's build: GoogleTest, Python headers" gtest-devel python3-devel; else skip "FastCap2's GoogleTest: only in EPEL; FasterCap builds without it"; fi
         group "Rust (gdscheck)" cargo
-        skip "KiCad 10: no package for AlmaLinux/RHEL (KiCad offers only an AppImage and a Flatpak)"
         # each user's install/paraview.sh unpacks ParaView's own build (EPEL has only 5.11): its libraries
         libs=()
         for l in $PARAVIEW_LIBS; do libs+=("$l()(64bit)"); done
@@ -141,8 +128,6 @@ case "$family" in
         group "build tools" cmake gcc-c++ make git bzip2 openblas-devel
         group "FastCap2's build: GoogleTest, Python headers" gtest-devel python3-devel
         group "Rust (gdscheck)" cargo
-        k="$(dnf info -q kicad 2>/dev/null | sed -n 's/^Version *: \([0-9]*\)\..*/\1/p' | sort -n | tail -1)"
-        if [ "${k:-0}" -ge 10 ]; then group "KiCad 10" kicad; else skip "KiCad 10: Fedora's kicad here is ${k:-missing}"; fi
         group "ParaView" paraview
         group "KLayout" klayout
         ;;
@@ -151,7 +136,6 @@ case "$family" in
         group "build tools" cmake gcc make git curl bzip2 openblas
         group "FastCap2's build: GoogleTest" gtest
         group "Rust (gdscheck)" rust
-        group "KiCad" kicad
         group "ParaView" paraview
         group "KLayout" klayout
         ;;

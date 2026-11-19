@@ -26,11 +26,24 @@ import re
 import sys
 from pathlib import Path
 
-import pcbnew
 from klayout import db
 
+from layz import kicad
 from layz import stack as stackfile
-from layz.pex.solve import MODEL_DBU_UM, Stack, add_flow_args, run_flow, setup_logging, stack_from_process
+from layz.pex.solve import MODEL_DBU_UM, Conductor, Dielectric, Stack, Via, add_flow_args, run_flow, setup_logging, stack_from_process
+
+pcbnew = None  # KiCad's module, imported where a board is read (layz's KiCad environment, see layz.kicad)
+
+
+def _pcbnew():
+    global pcbnew
+    if pcbnew is None:
+        kicad.require_pcbnew()
+        import pcbnew as _p
+
+        pcbnew = _p
+    return pcbnew
+
 
 MAX_ERROR_NM = 1000  # arc/circle polygonization error
 BARREL_SIDES = 16  # via barrels as 16-gons
@@ -64,6 +77,7 @@ def insert_polyset(shapes: db.Shapes, ps) -> db.Point | None:
 
 
 def load_board(pcb_path: Path, refill: bool) -> tuple[db.Layout, db.Cell, Stack, list[str]]:
+    _pcbnew()
     board = pcbnew.LoadBoard(str(pcb_path))
     warnings: list[str] = []
 
@@ -156,15 +170,59 @@ def print_stack(stack: Stack) -> None:
         print(line)
 
 
+def export_board(pcb_path: Path, refill: bool, folder: Path) -> None:
+    """The board read into KLayout regions and its stack, written for the main environment:
+    board.oas (layers by name), stack.json, warnings.json (runs where pcbnew imports)."""
+    import dataclasses
+    import json
+
+    layout, top, stack, warnings = load_board(pcb_path, refill)
+    folder.mkdir(parents=True, exist_ok=True)
+    layout.write(str(folder / "board.oas"))
+    (folder / "stack.json").write_text(json.dumps(dataclasses.asdict(stack)))
+    (folder / "warnings.json").write_text(json.dumps(warnings))
+
+
+def import_board(folder: Path) -> tuple[db.Layout, db.Cell, Stack, list[str]]:
+    """export_board's files, back as load_board's result (layers by name only, as it made them)."""
+    import json
+
+    read = db.Layout()
+    read.read(str(folder / "board.oas"))
+    layout = db.Layout()
+    layout.dbu = read.dbu
+    src = read.top_cell()
+    top = layout.create_cell(src.name)
+    for i in read.layer_indexes():
+        info = read.get_info(i)
+        top.shapes(layout.layer(db.LayerInfo(info.name))).insert(src.shapes(i))
+    d = json.loads((folder / "stack.json").read_text())
+    stack = Stack(k_void=d["k_void"], halo_um=d["halo_um"], conductors=[Conductor(**c) for c in d["conductors"]], vias=[Via(**v) for v in d["vias"]], dielectrics=[Dielectric(**x) for x in d["dielectrics"]])
+    return layout, top, stack, json.loads((folder / "warnings.json").read_text())
+
+
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("pcb", type=Path, help=".kicad_pcb board")
     ap.add_argument("--no-fill", action="store_true", help="don't fill unfilled zones (keeps cached fills, e.g. from layz gds2pcb)")
+    ap.add_argument("--export-to", type=Path, help=argparse.SUPPRESS)  # internal: the KiCad environment's half
     add_flow_args(ap)
     args = ap.parse_args(argv)
+    if args.export_to:
+        export_board(args.pcb, not args.no_fill, args.export_to)
+        return
     setup_logging(args.verbose)
 
-    layout, top, stack, warnings = load_board(args.pcb, refill=not args.no_fill)
+    if kicad.use_env() or not kicad.pcbnew_here():
+        # read the board in layz's KiCad environment (pcbnew), solve here (klayout-pex)
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            if kicad.run(["pex", str(args.pcb), "--export-to", tmp] + (["--no-fill"] if args.no_fill else [])):
+                raise SystemExit("reading the board in layz's KiCad environment failed")
+            layout, top, stack, warnings = import_board(Path(tmp))
+    else:
+        layout, top, stack, warnings = load_board(args.pcb, refill=not args.no_fill)
     for w in warnings:
         print(f"warning: {w}", file=sys.stderr)
     print_stack(stack)

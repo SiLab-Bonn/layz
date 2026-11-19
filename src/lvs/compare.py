@@ -30,7 +30,6 @@ from __future__ import annotations
 
 import argparse
 import re
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -74,9 +73,11 @@ def read_netlist(text: str) -> Schematic:
 
 def schematic_netlist(path: Path) -> Schematic:
     if path.suffix == ".kicad_sch":
-        cli = shutil.which("kicad-cli")
+        from layz import kicad
+
+        cli = kicad.cli()
         if not cli:
-            raise SystemExit("kicad-cli not found: export the netlist in KiCad and pass the .net file")
+            raise SystemExit("kicad-cli not found: run install/kicad.sh, or export the netlist in KiCad and pass the .net file")
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "netlist.net"
             subprocess.run([cli, "sch", "export", "netlist", "--format", "kicadsexpr", "-o", str(out), str(path)], check=True, capture_output=True)

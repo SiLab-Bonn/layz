@@ -7,9 +7,9 @@
 # First it checks every system package any part needs, and if some are missing it lists them all
 # and stops before installing anything: an admin installs them once for every user with
 #     sudo install/system.sh
-# Then, into your home and this repo: layz itself (install/layz.sh), FasterCap
-# (install/fastercap.sh), gdscheck (install/gdscheck.sh), ParaView (install/paraview.sh), a check of
-# KiCad 10 (install/kicad.sh), and `layz doctor` with layz's tests. Each step also runs on its own.
+# Then, into your home and this repo: layz itself (install/layz.sh), layz's own KiCad 10
+# (install/kicad.sh), FasterCap (install/fastercap.sh), gdscheck (install/gdscheck.sh), ParaView
+# (install/paraview.sh), and `layz doctor` with layz's tests. Each step also runs on its own.
 set -eu
 here="$(cd "$(dirname "$0")" && pwd)"
 . "$here/install/lib.sh"
@@ -29,11 +29,6 @@ if [ -n "$missing" ]; then
     need_system "the system packages above"
 fi
 echo "all there"
-kicad=1
-if ! kicad_packaged; then
-    kicad=
-    echo "note: this system has no KiCad 10 package ($(os_family)); layz's KiCad steps (gds2pcb, gds2hyp from a GDS, pex on boards, lvs) need a machine with KiCad 10, the rest works here"
-fi
 
 step() {
     echo
@@ -41,10 +36,10 @@ step() {
     "$here/install/$1"
 }
 step layz.sh
+step kicad.sh
 step fastercap.sh
 step gdscheck.sh
 step paraview.sh
-[ -n "$kicad" ] && step kicad.sh
 
 echo
 echo "=== layz doctor"

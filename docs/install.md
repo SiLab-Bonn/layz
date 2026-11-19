@@ -5,7 +5,7 @@ Python's own `venv` and `pip`. It also uses tools that are not on PyPI:
 
 | Tool | Needed for | Install |
 | --- | --- | --- |
-| KiCad 10 (`kicad-cli`, its `pcbnew` Python module) | `gds2pcb`, `gds2hyp` from a GDS, `pex` on boards, `lvs` | `install/kicad.sh` |
+| KiCad 10 (`kicad-cli`, its `pcbnew` Python module) | `gds2hyp` from a board or GDS, `pex` on boards, `lvs` | `install/kicad.sh` |
 | FasterCap (default) / FastCap2 | `pex`, `field` | `install/fastercap.sh` |
 | gdscheck | `drc` | `install/gdscheck.sh` |
 | ParaView (optional) | `view` of field results | `install/paraview.sh` |
@@ -41,14 +41,16 @@ What comes from where (Debian, Ubuntu, AlmaLinux, macOS):
 
 - Python 3.12 to 3.15: where `python3` is older (3.9 on AlmaLinux 9), the newest one the system
   has; `LAYZ_PYTHON=/path/to/python3 ./install.sh` picks one yourself.
-- KiCad 10: KiCad's PPA on Ubuntu, the distribution's where it ships 10 (Debian testing, Fedora),
-  Homebrew on macOS (layz then runs on KiCad's Python). AlmaLinux and Debian 13 have no KiCad 10
-  package: `install.sh` says so, and layz's KiCad steps need another machine.
+- KiCad 10: layz's own, apart from any KiCad you have: KiCad's AppImage unpacked into
+  `~/.local/share/layz` on Linux (KiCad.app on macOS), with a small environment on KiCad's own
+  Python where layz runs the steps that need `pcbnew`. Nothing of it goes on your PATH.
 - KLayout 0.30.13 from klayout.org (Ubuntu `.deb`, RHEL/AlmaLinux `.rpm`, macOS `.dmg`); the
   distribution's on Debian, Fedora and Arch, for which klayout.org builds none.
 - ParaView: the distribution's on Debian and Ubuntu, Homebrew on macOS; on AlmaLinux, ParaView's
   own Linux build in `~/.local/share/layz` (EPEL has only 5.11).
 - FastCap2 needs GoogleTest; on AlmaLinux that is only in EPEL, so there only FasterCap (layz's
   default solver) is built.
-- KiCad's `pcbnew` elsewhere: set `LAYZ_KICAD_PYTHONPATH` to the folder holding `pcbnew.py`.
-- HyperLynx: found under `/eda/Siemens`, or set `LAYZ_HYPERLYNX_HOME` to its `SDD_HOME` folder.
+- HyperLynx: found under `/eda/Siemens`, or set `LAYZ_HYPERLYNX_HOME` to its `SDD_HOME` folder; its
+  license server is SiLab's unless `MGLS_LICENSE_FILE` says otherwise.
+- Your shell's startup file (`~/.bashrc`, `~/.zshrc`) gets one marked `layz` block at its end, putting
+  `~/.local/bin` on PATH; `install.sh` rewrites it on every run.

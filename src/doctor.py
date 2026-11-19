@@ -4,7 +4,7 @@
     layz doctor --quick    the tools only
 
 One line per tool: ok, !! (required and missing, with how to get it), -- (optional, or not
-available on this system: KiCad 10 on AlmaLinux). The tests that need a missing tool are skipped.
+available). The tests that need a missing tool are skipped.
 Exit status: 0 when everything required is there and the tests pass, 1 otherwise.
 """
 
@@ -16,7 +16,7 @@ import shutil
 import sys
 
 # (what, checks, required, needed for, how to get it); a check is (kind, name)
-CHECKS = [("KLayout", [("program", "klayout")], True, "DRC/LVS, viewing GDS", "sudo install/system.sh"), ("KiCad 10", [("program", "kicad-cli"), ("module", "pcbnew")], True, "gds2pcb, gds2hyp from a GDS, pex on boards, lvs", "sudo install/system.sh, then ./install.sh"), ("FasterCap", [("solver", "fastercap")], True, "pex, field", "./install.sh"), ("gdscheck", [("solver", "gdscheck")], True, "drc", "./install.sh"), ("Python modules", [("module", "klayout.db"), ("module", "klayout_pex"), ("module", "shapely")], True, "everything", "./install.sh"), ("HyperLynx", [("hyperlynx", "")], False, "hyp", "licensed; set LAYZ_HYPERLYNX_HOME to its SDD_HOME"), ("FastCap2", [("solver", "fastcap2")], False, "pex --solver fastcap2", "sudo install/system.sh, then ./install.sh"), ("ParaView", [("program", "pvpython")], False, "view", "./install.sh")]
+CHECKS = [("KLayout", [("program", "klayout")], True, "DRC/LVS, viewing GDS", "sudo install/system.sh"), ("KiCad 10", [("kicad", "")], True, "gds2hyp from a board or GDS, pex on boards, lvs", "./install.sh (layz's own KiCad: install/kicad.sh)"), ("FasterCap", [("solver", "fastercap")], True, "pex, field", "./install.sh"), ("gdscheck", [("solver", "gdscheck")], True, "drc", "./install.sh"), ("Python modules", [("module", "klayout.db"), ("module", "klayout_pex"), ("module", "shapely")], True, "everything", "./install.sh"), ("HyperLynx", [("hyperlynx", "")], False, "hyp", "licensed; set LAYZ_HYPERLYNX_HOME to its SDD_HOME"), ("FastCap2", [("solver", "fastcap2")], False, "pex --solver fastcap2", "sudo install/system.sh, then ./install.sh"), ("ParaView", [("program", "pvpython")], False, "view", "./install.sh")]
 
 
 def _short(path: str) -> str:
@@ -39,6 +39,18 @@ def _check(kind: str, name: str) -> tuple[bool, str]:
             return True, _short(solvers.find(name))
         except SystemExit:
             return False, "not found"
+    if kind == "kicad":  # layz's own KiCad: kicad-cli and pcbnew in its environment
+        import subprocess
+
+        from layz import kicad
+
+        cli, py = kicad.cli(), kicad.python()
+        if not cli:
+            return False, "no kicad-cli"
+        if py is None:
+            return (True, f"{_short(cli)}, pcbnew here (not layz's own KiCad)") if kicad.pcbnew_here() else (False, "no KiCad environment")
+        r = subprocess.run([str(py), "-c", "import pcbnew; print(pcbnew.Version())"], capture_output=True, text=True)
+        return (r.returncode == 0), (f"{_short(cli)}, pcbnew {r.stdout.strip()} in {_short(str(py.parent.parent))}" if r.returncode == 0 else "pcbnew doesn't import in its environment")
     if kind == "hyperlynx":
         from layz.hyperlynx import setup
 
@@ -48,17 +60,6 @@ def _check(kind: str, name: str) -> tuple[bool, str]:
             return False, "not found"
     path = shutil.which(name)
     return (path is not None), (_short(path) if path else "not on PATH")
-
-
-def _kicad_packaged() -> bool:
-    """Whether this system has a KiCad 10 package (install/lib.sh's kicad_packaged)."""
-    import subprocess
-    from pathlib import Path
-
-    lib = Path(__file__).resolve().parents[1] / "install" / "lib.sh"
-    if not lib.exists():
-        return True
-    return subprocess.run(["bash", "-c", f". '{lib}'; kicad_packaged"], capture_output=True).returncode == 0
 
 
 def _os_name() -> str:
@@ -101,8 +102,6 @@ def main(argv: list[str] | None = None) -> int:
         ok = all(r[0] for r in results)
         if ok:
             say(f"  ok  {what:<15} {', '.join(r[1] for r in results)}")
-        elif what == "KiCad 10" and not _kicad_packaged():
-            say(f"  --  {what:<15} no KiCad 10 package for this system; needed for {needed}")
         elif required:
             missing += 1
             say(f"  !!  {what:<15} missing ({needed}): {get}")

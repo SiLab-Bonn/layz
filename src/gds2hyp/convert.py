@@ -42,6 +42,9 @@ pcbnew = None  # KiCad's module, imported when a board is written (a .hyp rewrit
 def _kicad():
     global pcbnew
     if pcbnew is None:
+        from layz import kicad
+
+        kicad.require_pcbnew()
         import pcbnew as _pcbnew
 
         pcbnew = _pcbnew

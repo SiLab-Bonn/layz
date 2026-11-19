@@ -5,7 +5,7 @@
 #   need_system WHAT...       stop: these system packages are missing, install/system.sh adds them
 #   system_missing            every system package layz's install needs that is missing, one per
 #                             line (./install.sh checks them all before installing anything)
-#   find_python, pyversion, has_venv, find_cblas, kicad_packaged   the checks it uses
+#   find_python, pyversion, has_venv, find_cblas   the checks it uses
 #   pkg_install PKG...        install packages with the system's package manager (install/system.sh)
 #   as_root CMD...            run a command as root (sudo unless we are root)
 #   die MESSAGE               print it and exit 1
@@ -16,8 +16,8 @@
 #   onpath_done               after the links: "ready", or the one line to run if none could be
 #
 # onpath_dir is a folder of your own that is already on PATH: ~/.local/bin or ~/bin, else the
-# first writable one under $HOME. Only if there is none, ~/.local/bin is used and added to PATH
-# in ~/.bashrc / ~/.zshrc for new terminals.
+# first writable one under $HOME. Only if there is none, ~/.local/bin is used and put on PATH in
+# the layz block of ~/.bashrc / ~/.zshrc (rc_block).
 
 # run a command as root: directly when we are root, else through sudo (which asks for a password)
 as_root() {
@@ -35,18 +35,16 @@ PY_VERSIONS="3.15 3.14 3.13 3.12"   # layz's, newest first
 # layz's own Python environment, in the repo; nobody activates it (the `layz` command runs from it).
 # Not .venv: that is the name a user's own `python -m venv` would take, and overwrite.
 LAYZ_ENV="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/.layz-env"
-MAC_KICAD_PYTHON=/Applications/KiCad/KiCad.app/Contents/Frameworks/Python.framework/Versions/Current/bin/python3
 
 pyversion() { "$1" -c 'import sys; print("%d.%d" % sys.version_info[:2])' 2>/dev/null; }
 py_supported() { case " $PY_VERSIONS " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
 has_venv() { "$1" -c 'import ensurepip, venv' 2>/dev/null; }
 
-# the Python for layz: $LAYZ_PYTHON; on macOS KiCad's; python3 if it is 3.12+; else the newest
+# the Python for layz: $LAYZ_PYTHON; python3 if it is 3.12+; else the newest
 # python3.15..3.12 there is
 find_python() {
     local p v
     if [ -n "${LAYZ_PYTHON:-}" ]; then echo "$LAYZ_PYTHON"; return; fi
-    if [ "$(uname)" = Darwin ] && [ -x "$MAC_KICAD_PYTHON" ]; then echo "$MAC_KICAD_PYTHON"; return; fi
     p="$(command -v python3 || true)"
     if [ -n "$p" ] && py_supported "$(pyversion "$p")"; then echo "$p"; return; fi
     for v in $PY_VERSIONS; do
@@ -78,17 +76,6 @@ paraview_libs_missing() {
     done
 }
 
-# whether this system has a KiCad 10 package (AlmaLinux/RHEL and Debian 13 don't)
-kicad_packaged() {
-    local k
-    case "$(os_family)" in
-        ubuntu | arch | macos) return 0 ;;
-        debian) k="$(apt-cache policy kicad 2>/dev/null | sed -n 's/^ *Candidate: \([0-9]*\)\..*/\1/p')"; [ "${k:-0}" -ge 10 ] ;;
-        fedora) k="$(dnf info -q kicad 2>/dev/null | sed -n 's/^Version *: \([0-9]*\)\..*/\1/p' | sort -n | tail -1)"; [ "${k:-0}" -ge 10 ] ;;
-        *) return 1 ;;
-    esac
-}
-
 system_missing() {
     local fam p t
     fam="$(os_family)"
@@ -106,9 +93,7 @@ system_missing() {
         find_cblas >/dev/null || echo "BLAS headers (cblas.h)"
     fi
     command -v cargo >/dev/null || [ -x "${CARGO_HOME:-$HOME/.cargo}/bin/cargo" ] || echo "Rust's cargo"
-    if kicad_packaged; then
-        if [ "$fam" = macos ]; then [ -d /Applications/KiCad/KiCad.app ] || echo "KiCad 10"; else command -v kicad-cli >/dev/null || echo "KiCad 10"; fi
-    fi
+    [ "$fam" = macos ] && { [ -d /Applications/KiCad/KiCad.app ] || echo "KiCad 10 (Homebrew's cask)"; }   # Linux: kicad.sh, per user
     case "$fam" in
         rhel) [ -z "$(paraview_libs_missing)" ] || echo "the libraries of ParaView's own build ($(paraview_libs_missing | tr '\n' ' '))" ;;
         macos) ls -d /Applications/ParaView*.app >/dev/null 2>&1 || echo "ParaView" ;;
@@ -174,7 +159,6 @@ onpath_dir() {
     echo "$HOME/.local/bin"
 }
 
-ONPATH_MISSING=
 onpath_link() {
     local dir
     dir="$(onpath_dir)"
@@ -185,25 +169,41 @@ onpath_link() {
         ln -sf "$1" "$dir/$2"
         echo "linked $dir/$2 -> $1"
     fi
-    case ":$PATH:" in
-        *":$dir:"*) ;;
-        *)
-            ONPATH_MISSING="$dir"
-            local rc line="export PATH=\"$dir:\$PATH\""
-            case "${SHELL:-}" in */zsh) rc="$HOME/.zshrc" ;; *) rc="$HOME/.bashrc" ;; esac
-            if ! grep -qsF "$line" "$rc"; then
-                printf '\n# added by layz\n%s\n' "$line" >> "$rc"
-                echo "added $dir to PATH in $rc (for new terminals)"
-            fi
-            ;;
-    esac
+    case ":$PATH:" in *":$dir:"*) ;; *) rc_block ;; esac
 }
 
-onpath_done() {   # the one line to run in this terminal, if the folder of the links isn't on PATH
-    local dir
+# layz's settings in the shell's startup files (~/.bashrc, ~/.zshrc), as one marked block at the
+# end, written again (not added to) on every install
+RC_BEGIN="# >>> layz >>> (written by layz's install.sh; it replaces this block when run again)"
+RC_END="# <<< layz <<<"
+rc_block() {
+    local rc dir tmp
     dir="$(onpath_dir)"
+    case "$dir" in "$HOME"/*) dir="\$HOME${dir#"$HOME"}" ;; esac   # as $HOME/... in the file
+    for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
+        case "$rc" in *zshrc) [ -e "$rc" ] || [ "${SHELL##*/}" = zsh ] || continue ;; esac
+        touch "$rc"
+        tmp="$(mktemp)"
+        # the old block, and the single lines earlier layz versions added, out
+        awk -v b="$RC_BEGIN" -v e="$RC_END" '$0 == b {skip = 1} old {old = 0; if ($0 ~ /^export PATH=/) next} $0 == "# added by layz" {old = 1; next} !skip {print} $0 == e {skip = 0}' "$rc" | sed -e :a -e '/^\n*$/{$d;N;ba' -e '}' > "$tmp"
+        {
+            cat "$tmp"
+            echo
+            echo "$RC_BEGIN"
+            echo "# the layz command and the tools layz links (FasterCap, gdscheck, ...)"
+            echo "case \":\$PATH:\" in *\":$dir:\"*) ;; *) export PATH=\"$dir:\$PATH\" ;; esac"
+            echo "$RC_END"
+        } > "$rc"
+        rm -f "$tmp"
+    done
+}
+
+onpath_done() {   # this terminal can't take the PATH from a script: the one line that gives it
+    local dir rc
+    dir="$(onpath_dir)"
+    case "${SHELL##*/}" in zsh) rc="~/.zshrc" ;; *) rc="~/.bashrc" ;; esac
     case ":$PATH:" in
         *":$dir:"*) ;;
-        *) echo "in this terminal, run once: export PATH=\"$dir:\$PATH\"" ;;
+        *) echo "new terminals have layz on their PATH ($rc); in this one, run once: source $rc" ;;
     esac
 }
