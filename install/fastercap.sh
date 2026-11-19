@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Build the field solvers used by `layz pex` into $TOOLS (default: ~/.local/share/layz) and link
-# them where this terminal finds them (install/onpath.sh).
+# them where this terminal finds them (install/lib.sh).
 #
 #   tools/src/FastFieldSolvers/build/FasterCap   iic-jku/FasterCap, headless   (LGPL-2.1)
 #   tools/src/FastCap2/build/fastcap       martinjankoehler/FastCap2           (MIT license)
@@ -11,7 +11,7 @@
 # GTK dev stack). macOS also needs: export OpenMP_ROOT=$(brew --prefix)/opt/libomp
 set -euo pipefail
 REPO=$(cd "$(dirname "$0")/.." && pwd)
-. "$REPO/install/onpath.sh"   # as_root, onpath_link
+. "$REPO/install/lib.sh"   # as_root, onpath_link
 
 # --- prerequisites: installed if missing (otherwise they surface as CMake errors deep in the build);
 # only what is missing, so e.g. AlmaLinux's curl-minimal stays
@@ -23,13 +23,16 @@ check() {
   command -v c++ >/dev/null || command -v g++ >/dev/null || command -v clang++ >/dev/null || missing+=("c++")
   if [[ "$(uname)" == Linux ]]; then
     command -v bzip2 >/dev/null || missing+=("bzip2")   # the wxWidgets source is a .tar.bz2
-    # BLAS with its C header (cblas.h), which FasterCap's LinAlgebra needs
-    local h found=
-    for h in /usr/include/cblas.h /usr/include/*/cblas.h /usr/include/*/*/cblas.h \
-             /usr/local/include/cblas.h /usr/local/include/*/cblas.h; do
-      [[ -e "$h" ]] && { found=1; break; }
+    # BLAS with its C header (cblas.h), which FasterCap's LinAlgebra needs; its folder goes to
+    # LinAlgebra's build as CBLAS_INCLUDE_DIR (it looks in the standard path and openblas/ only,
+    # so e.g. FlexiBLAS's /usr/include/flexiblas, the BLAS of AlmaLinux 9, needs naming)
+    local d
+    CBLAS_DIR=
+    for d in /usr/include /usr/include/openblas /usr/include/flexiblas /usr/include/x86_64-linux-gnu \
+             /usr/include/aarch64-linux-gnu /usr/include/blis /usr/local/include /usr/local/include/openblas; do
+      [[ -e "$d/cblas.h" ]] && { CBLAS_DIR="$d"; break; }
     done
-    [[ -n "$found" ]] || missing+=("cblas")
+    [[ -n "$CBLAS_DIR" ]] || missing+=("cblas")
   fi
 }
 # the package of each missing piece: package(manager, piece)
@@ -43,13 +46,13 @@ package() {
 }
 check
 if (( ${#missing[@]} )); then
-  echo "build_solvers.sh: missing ${missing[*]}; installing" >&2
+  echo "fastercap.sh: missing ${missing[*]}; installing" >&2
   if command -v apt-get >/dev/null; then pm=apt
   elif command -v dnf >/dev/null; then pm=dnf
   elif command -v pacman >/dev/null; then pm=pacman
   elif [[ "$(uname)" == Darwin ]] && command -v brew >/dev/null; then pm=brew
   else
-    echo "build_solvers.sh: no known package manager; install ${missing[*]} yourself" >&2
+    echo "fastercap.sh: no known package manager; install ${missing[*]} yourself" >&2
     exit 1
   fi
   pkgs=()
@@ -69,9 +72,9 @@ if (( ${#missing[@]} )); then
       cmd=(brew install cmake libomp wxwidgets) ;;
   esac
   echo "+ ${cmd[*]}" >&2
-  "${cmd[@]}" || { echo "build_solvers.sh: that failed; run it yourself (or ask an admin), then again" >&2; exit 1; }
+  "${cmd[@]}" || { echo "fastercap.sh: that failed; run it yourself (or ask an admin), then again" >&2; exit 1; }
   check
-  (( ${#missing[@]} == 0 )) || { echo "build_solvers.sh: still missing ${missing[*]}" >&2; exit 1; }
+  (( ${#missing[@]} == 0 )) || { echo "fastercap.sh: still missing ${missing[*]}" >&2; exit 1; }
 fi
 
 TOOLS=${TOOLS:-${XDG_DATA_HOME:-$HOME/.local/share}/layz}
@@ -100,7 +103,7 @@ for r in FasterCap LinAlgebra Geometry; do
   [[ -d $r ]] || git clone -q "https://github.com/iic-jku/$r.git"
 done
 cmake -S FasterCap -B build -DCMAKE_BUILD_TYPE=Release -DFASTFIELDSOLVERS_HEADLESS=ON \
-  ${WX_CONFIG:+-DwxWidgets_CONFIG_EXECUTABLE=$WX_CONFIG}
+  ${WX_CONFIG:+-DwxWidgets_CONFIG_EXECUTABLE=$WX_CONFIG} ${CBLAS_DIR:+-DCBLAS_INCLUDE_DIR=$CBLAS_DIR}
 cmake --build build -j"$JOBS"
 popd
 
@@ -125,7 +128,7 @@ if have_gtest; then
   cmake --build FastCap2/build -j"$JOBS"
   fastcap2=1
 else
-  echo "build_solvers.sh: FastCap2 left out: it needs GoogleTest (gtest-devel), which this system's repositories don't have (on RHEL/AlmaLinux it is in EPEL); FasterCap, layz's default solver, is built" >&2
+  echo "fastercap.sh: FastCap2 left out: it needs GoogleTest (gtest-devel), which this system's repositories don't have (on RHEL/AlmaLinux it is in EPEL); FasterCap, layz's default solver, is built" >&2
 fi
 
 onpath_link "$TOOLS/src/FastFieldSolvers/build/FasterCap" FasterCap
