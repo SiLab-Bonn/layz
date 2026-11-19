@@ -1,0 +1,51 @@
+# test/route.gds (test/make_route.py): four copper layers, the via and plane on In1.Cu.
+name = "route test, 4 copper"
+outline = "70/0"
+
+[[layer]]
+name = "F.Cu"
+type = "copper"
+thickness_um = 35
+gds = "1/0"
+pads = true
+
+[[layer]]
+name = "prepreg1"
+type = "dielectric"
+thickness_um = 100
+er = 4.2
+
+[[layer]]
+name = "In1.Cu"
+type = "copper"
+thickness_um = 18
+gds = "2/0"
+
+[[layer]]
+name = "core"
+type = "dielectric"
+thickness_um = 200
+er = 4.5
+
+[[layer]]
+name = "In2.Cu"
+type = "copper"
+thickness_um = 18
+gds = "4/0"
+
+[[layer]]
+name = "prepreg2"
+type = "dielectric"
+thickness_um = 100
+er = 4.2
+
+[[layer]]
+name = "B.Cu"
+type = "copper"
+thickness_um = 35
+gds = "5/0"
+
+[[via]]
+gds = "3/0"
+top = "F.Cu"
+bottom = "In1.Cu"

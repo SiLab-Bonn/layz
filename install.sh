@@ -8,11 +8,11 @@
 # It makes .venv/ with the Python that KiCad's pcbnew module is built for (Linux: python3;
 # macOS: KiCad's own Python); where python3 is older than 3.12 (e.g. 3.9 on AlmaLinux 9) it takes
 # the newest of python3.14, python3.13, python3.12 on PATH or in ~/.local/bin instead. It installs layz into it editable (changes in this repo apply
-# directly), and links .venv/bin/layz where this terminal finds it (scripts/onpath.sh). Override the Python with LAYZ_PYTHON=/path/to/python3.
+# directly), and links .venv/bin/layz where this terminal finds it (install/onpath.sh). Override the Python with LAYZ_PYTHON=/path/to/python3.
 set -eu
 
 here="$(cd "$(dirname "$0")" && pwd)"
-. "$here/scripts/onpath.sh"
+. "$here/install/onpath.sh"
 
 if [ "${1:-}" = "--uninstall" ]; then
     for link in "$(onpath_dir)/layz" "$HOME/.local/bin/layz"; do
@@ -65,7 +65,7 @@ fi
 echo "layz: pip install --editable $here"
 "$here/.venv/bin/python" -m pip install --quiet --editable "$here"
 
-# --- on PATH: where this terminal finds it already (scripts/onpath.sh)
+# --- on PATH: where this terminal finds it already (install/onpath.sh)
 onpath_link "$here/.venv/bin/layz" layz
 onpath_done
 [ -z "$ONPATH_MISSING" ] && echo "layz: ready, try: layz doctor"

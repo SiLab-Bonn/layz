@@ -32,9 +32,9 @@ dependencies = [
 [project.scripts]
 layz = "layz.cli:main"
 
-[tool.setuptools.packages.find]
-where = ["src"]
+# src/ is the layz package itself (imported as `layz`)
+[tool.setuptools]
+package-dir = {"layz" = "src"}
+packages = ["layz", "layz.drc", "layz.lvs", "layz.gds2pcb", "layz.gds2hyp", "layz.hyperlynx",
+            "layz.hyperlynx.runner", "layz.pex", "layz.field", "layz.field.paraview", "layz.svg"]
 
-[tool.setuptools.package-data]
-# scripts run by other interpreters: ParaView's pvpython, HyperLynx's own Python
-"layz" = ["field/paraview/*.py", "hyperlynx/runner/*.py"]

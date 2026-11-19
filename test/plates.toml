@@ -1,0 +1,22 @@
+# test/plates.gds: two 1000 x 1000 µm plates, 1 µm thick, 10 µm vacuum gap.
+# Ideal eps0*A/d = 885 fF plus fringe (FasterCap: 918.8 fF, FastCap2: 906.5 fF).
+name = "parallel plates, vacuum"
+halo_um = 100
+
+[[layer]]
+name = "TOP"
+type = "copper"
+thickness_um = 1
+gds = "2/0"
+
+[[layer]]
+name = "gap"
+type = "dielectric"
+thickness_um = 10
+er = 1.0
+
+[[layer]]
+name = "BOT"
+type = "copper"
+thickness_um = 1
+gds = "1/0"
