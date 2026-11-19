@@ -183,15 +183,28 @@ def unit_interval(t, v) -> tuple[float, float]:
     return float(np.median(gaps[gaps < 1.25 * np.percentile(gaps, 5)])), float(zc[0])
 
 
-def eye_metrics(t, v, ui, tc) -> tuple[float, float]:
-    """Eye height at the centre (±5 % UI) and eye width at the mid level, skipping 4 UI."""
-    keep = t > tc + 4 * ui
-    ph, vv = ((t[keep] - tc) % ui) / ui, v[keep]
+def eye_metrics(t, v, ui, skip: int = 4) -> tuple[float, float]:
+    """(height, width) of an eye, skipping ``skip`` UI: the width is the widest gap between the
+    mid-level crossings folded into one UI, the height the opening at that gap's centre (±5 % UI).
+    Independent of where the waveform starts, so jittered and ideal runs are measured alike."""
+    keep = t > t[0] + skip * ui
+    ph, vv = ((t[keep] - t[0]) % ui) / ui, v[keep]
     mid = 0.5 * (vv.max() + vv.min())
-    c = np.abs(ph - 0.5) < 0.05
+    zc = np.sort(ph[1:][np.diff(np.sign(vv - mid)) != 0])
+    if not len(zc):
+        return np.nan, np.nan
+    gaps = np.diff(np.append(zc, zc[0] + 1))
+    k = int(np.argmax(gaps))
+    centre = (zc[k] + 0.5 * gaps[k]) % 1
+    c = np.abs((ph - centre + 0.5) % 1 - 0.5) < 0.05
     hi, lo = vv[c & (vv > mid)], vv[c & (vv < mid)]
-    zc = (ph[1:][np.diff(np.sign(vv - mid)) != 0] + 0.5) % 1.0
-    return (hi.min() - lo.max() if len(hi) and len(lo) else np.nan), ((1 - np.ptp(zc)) * ui if len(zc) else np.nan)
+    return (hi.min() - lo.max() if len(hi) and len(lo) else np.nan), float(gaps[k] * ui)
+
+
+def run_ui(run: Path, t, v) -> float:
+    """The unit interval of an eye run: from its bit rate, else from its waveform."""
+    bitrate = json.loads((run / "si.json").read_text()).get("bitrate")
+    return 1 / bitrate if bitrate else unit_interval(t, v)[0]
 
 
 def _label(run: Path) -> str:
@@ -236,7 +249,7 @@ def plot_si(runs: list[Path], out: Path) -> list[Path]:
         fig, axes = plt.subplots(len(eyes), len(names), figsize=(4.8 * len(names), 3.2 * len(eyes) + 0.6),
                                  squeeze=False, sharex=True)
         t0, v0 = wave(first / waves[first][0]["file"])
-        ui, tc = unit_interval(t0, v0)
+        ui, tc = run_ui(first, t0, v0), unit_interval(t0, v0)[1]
         for i, r in enumerate(eyes):
             for j, name in enumerate(names):
                 w = next((w for w in waves[r] if w["name"] == name), None)
@@ -251,7 +264,7 @@ def plot_si(runs: list[Path], out: Path) -> list[Path]:
                                               bins=(400, 240), range=((0, 2), (-span, span)))
                 mesh = ax.pcolormesh(xe, ye, np.ma.masked_less_equal(hist.T, 0), cmap=DENSITY_COLOR_MAP,
                                      norm=LogNorm(), shading="flat", rasterized=True)
-                hgt, wid = eye_metrics(t, v, ui, tc)
+                hgt, wid = eye_metrics(t, v, ui)
                 ax.set_title(f"{name}\n{_label(r)}", fontsize=8)
                 style_info_box(ax, [f"height {hgt * 1e3:.0f} mV", f"width {wid * 1e9:.2f} ns"],
                                location="center")  # the eye's opening is empty

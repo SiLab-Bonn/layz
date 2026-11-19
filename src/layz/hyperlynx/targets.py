@@ -47,11 +47,14 @@ def load(flow: Path) -> dict[str, Callable[[], None]]:
 
 
 def describe(targets: dict[str, Callable[[], None]]) -> str:
+    import textwrap
     width = max(len(n) for n in targets)
     lines = []
     for name, fn in targets.items():
-        doc = (fn.__doc__ or "").strip().splitlines()
-        lines.append(f"  {name:<{width}}  {doc[0] if doc else ''}")
+        first = " ".join((fn.__doc__ or "").strip().split("\n\n")[0].split())  # its first paragraph
+        text = textwrap.wrap(first, 96 - width) or [""]
+        lines.append(f"  {name:<{width}}  {text[0]}")
+        lines += [f"  {'':<{width}}  {t}" for t in text[1:]]
     return "\n".join(lines)
 
 

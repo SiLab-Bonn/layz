@@ -31,6 +31,7 @@ BOARD = RESULTS / "setup" / EXPORT.name
 SUPPLIES = ["/3V_1", "/3V_2", "/3V_3", "/3V_4"]  # PSUB and PWell have VRMs without reference pins
 BITRATE = 160e6                                  # the data links (D1..D4)
 D4_PORTS = ["V4.101", "V4.102", "VTX2.107", "VTX2.108"]  # P, N at the driver, P, N at the receiver
+RECEIVER = "VTX2"                                # the checks look at the receiver's waveforms
 AGGRESSORS = [{"driver": "V4.114", "receivers": ["VTX2.114"]},                          # ADC_4: 95 um, 25 mm
               {"driver": "VTX2.100", "receivers": ["V1.100", "V2.100", "V3.100", "V4.100"]}]  # rst: 100 um, 26 mm
 
@@ -106,8 +107,8 @@ def si():
     # the aggressors get HyperLynx's stock IBIS CMOS driver and receivers, a clock at BITRATE / 2
     xt = run.si(BOARD, out / "crosstalk", net="/D4_N", mode="osc", bitrate=BITRATE, stop_s=200e-9,
                 crosstalk=True, victim_quiet=True, aggressors=AGGRESSORS)
-    analysis.eyes([ideal, real], MIN_EYE_HEIGHT, MIN_EYE_WIDTH, out / "eyes.csv")
-    analysis.crosstalk(xt, MAX_CROSSTALK, out / "crosstalk.csv")
+    analysis.eyes([ideal, real], MIN_EYE_HEIGHT, MIN_EYE_WIDTH, out / "eyes.csv", at=RECEIVER)
+    analysis.crosstalk(xt, MAX_CROSSTALK, out / "crosstalk.csv", at=RECEIVER)
     plots.plot_si([ideal, real, xt], out)
 
 

@@ -53,26 +53,34 @@ def dc_drop(run: Path, max_drop: float, out: Path | None = None) -> list[dict]:
     return _table(f"DC drop ({run.name})", rows, out)
 
 
-def eyes(runs: list[Path], min_height: float, min_width_ui: float, out: Path | None = None) -> list[dict]:
-    """Eye height and width of each eye run's waveforms, against the limits (V, share of a UI)."""
+def _at(run: Path, at: str | None) -> list[dict]:
+    """The run's (differential) waveforms, only those whose name contains ``at`` if given."""
+    return [w for w in plots._diff_waves(run) if at is None or at in w["name"]]
+
+
+def eyes(runs: list[Path], min_height: float, min_width_ui: float, out: Path | None = None,
+         at: str | None = None) -> list[dict]:
+    """Eye height and width of each eye run's waveforms (those naming ``at``, e.g. the receiver),
+    against the limits (V, share of a UI)."""
     rows = []
     for run in runs:
         si = json.loads((run / "si.json").read_text())
         if si.get("mode") != "eye":
             continue
-        for w in plots._diff_waves(run):
+        for w in _at(run, at):
             t, v = plots.wave(run / w["file"])
-            ui, tc = plots.unit_interval(t, v)
-            hgt, wid = plots.eye_metrics(t, v, ui, tc)
+            ui = plots.run_ui(run, t, v)
+            hgt, wid = plots.eye_metrics(t, v, ui)
             rows.append({"run": run.name, "wave": w["name"], "height_mV": hgt * 1e3, "width_ns": wid * 1e9,
                          "width_ui": wid / ui, "pass": bool(hgt >= min_height and wid / ui >= min_width_ui)})
     return _table(f"Eyes (limits: height >= {min_height * 1e3:.0f} mV, width >= {min_width_ui:.2f} UI)", rows, out)
 
 
-def crosstalk(run: Path, max_noise: float, out: Path | None = None) -> list[dict]:
-    """Peak-to-peak and rms noise at each differential pair of a crosstalk run, against the limit (V p-p)."""
+def crosstalk(run: Path, max_noise: float, out: Path | None = None, at: str | None = None) -> list[dict]:
+    """Peak-to-peak and rms noise at each differential pair (those naming ``at``) of a crosstalk
+    run, against the limit (V p-p)."""
     rows = []
-    for w in plots._diff_waves(run):
+    for w in _at(run, at):
         t, v = plots.wave(run / w["file"])
         k = t > t[0] + 0.1 * (t[-1] - t[0])  # after the start-up
         rows.append({"wave": w["name"], "noise_pp_mV": float(np.ptp(v[k])) * 1e3,
