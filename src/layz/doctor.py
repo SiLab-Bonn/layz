@@ -28,7 +28,7 @@ CHECKS = [
     ("pcbnew (KiCad)", ("module", "pcbnew"), True, "layz gds2pcb, gds2hyp, KiCad boards",
      "install KiCad; layz must run on the Python KiCad was built for (install.md); or set "
      "LAYZ_KICAD_PYTHONPATH to the folder with pcbnew.py"),
-    ("HyperLynx", ("hyperlynx", ""), False, "layz hyp info|dc|si|sparam (SI/PI runs)",
+    ("HyperLynx", ("hyperlynx", ""), False, "layz hyp (SI/PI runs)",
      "Siemens HyperLynx (licensed); set LAYZ_HYPERLYNX_HOME to its SDD_HOME folder"),
     ("FastCap2", ("solver", "fastcap2"), False, "--solver fastcap2", "scripts/build_solvers.sh"),
     ("pvpython (ParaView)", ("program", "pvpython"), False, "layz view of field results",
@@ -57,27 +57,12 @@ def _check(kind: str, name: str) -> tuple[bool, str]:
 
 
 def _find_hyperlynx() -> tuple[bool, str]:
-    """HyperLynx: $LAYZ_HYPERLYNX, a launcher on PATH, or a usual install folder."""
-    try:  # the install `layz hyp` runs (its SDD_HOME), as layz.hyperlynx.setup finds it
-        from layz.hyperlynx import setup
-        return True, f"{setup.find_install()} (layz hyp dc|si|...)"
-    except SystemExit:
-        pass
-    env = os.environ.get("LAYZ_HYPERLYNX")
-    if env:
-        return os.path.exists(env), env if os.path.exists(env) else f"LAYZ_HYPERLYNX={env} doesn't exist"
-    for prog in ("hyperlynx", "HyperLynx", "hl", "bsw", "boardsim"):
-        if shutil.which(prog):
-            return True, shutil.which(prog)
-    import glob
-    for pattern in ("/opt/*/[Hh]yper[Ll]ynx*", "/opt/[Hh]yper[Ll]ynx*", "/eda/*/[Hh]yper[Ll]ynx*",
-                    os.path.expanduser("~/[Hh]yper[Ll]ynx*"),
-                    "/mnt/c/MentorGraphics/*/SDD_HOME/hyperlynx*", "C:/MentorGraphics/*/SDD_HOME/hyperlynx*",
-                    "C:/Siemens/*/SDD_HOME/hyperlynx*"):
-        hits = glob.glob(pattern)
-        if hits:
-            return True, hits[0]
-    return False, "not found"
+    """HyperLynx as `layz hyp` finds it: $LAYZ_HYPERLYNX_HOME, or an SDD_HOME under /eda/Siemens."""
+    from layz.hyperlynx import setup
+    try:
+        return True, str(setup.find_install())
+    except SystemExit as e:
+        return False, str(e)
 
 
 def main(argv: list[str] | None = None) -> int:

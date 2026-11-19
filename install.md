@@ -21,27 +21,31 @@ KLayout's Python module, KLayout-PEX, Shapely and the rest come from PyPI. From 
 layz doctor                 # checks klayout, kicad-cli, FasterCap, gdscheck and more
 ```
 
-`install.sh` (bash; works from zsh too, on Linux and macOS) makes `.venv/` with the Python that
-KiCad's `pcbnew` module is built for (Linux: `python3`, 3.14 on Ubuntu 26.04; macOS: KiCad's
-own), checks it's Python 3.12 to 3.15 (where `python3` is older, as 3.9 on AlmaLinux 9, it
-takes the newest `python3.14`, `python3.13` or `python3.12` on `PATH` or in `~/.local/bin`), installs layz into it with `pip install --editable .`
-(changes in this repo take effect directly), links `layz` into `~/.local/bin`, and adds that
-folder to `PATH` in `~/.bashrc` or `~/.zshrc` if it isn't there yet. `./install.sh --test` also
-installs pytest, `./install.sh --uninstall` removes the link. Keep the clone: the DRC decks
-(`drc/`) and stacks (`stacks/`) are read from it.
+`install.sh` (bash or zsh, Linux or macOS):
 
-By hand, the same is:
+- makes `.venv/` with `python3`, or on macOS KiCad's own Python, since KiCad's `pcbnew` module
+  only loads in the Python it was built for. layz needs Python 3.12 to 3.15; where `python3` is
+  older (3.9 on AlmaLinux 9), it takes the first of `python3.14`, `python3.13`, `python3.12` on
+  `PATH` or in `~/.local/bin`. `LAYZ_PYTHON=/path/to/python3` picks one yourself.
+- installs layz into it editable, so changes in this clone apply directly. Keep the clone: the
+  DRC decks (`drc/`) and stacks (`stacks/`) are read from it.
+- links `layz` into `~/.local/bin` and, if that folder isn't on `PATH`, adds it in `~/.bashrc`
+  or `~/.zshrc`.
+
+`./install.sh --test` adds pytest; `./install.sh --uninstall` removes the link. By hand:
 
 ```sh
-python3 -m venv --system-site-packages .venv      # system packages: pcbnew comes with KiCad
-.venv/bin/pip install --editable .
+python3.14 -m venv --system-site-packages .venv   # system packages: pcbnew comes with KiCad
+.venv/bin/python -m pip install --editable .
 ln -sf "$PWD/.venv/bin/layz" ~/.local/bin/layz
 ```
 
-layz finds KiCad's `pcbnew` by itself, also from a venv without the system's packages; set
-`LAYZ_KICAD_PYTHONPATH` to the folder holding `pcbnew.py` if it's somewhere unusual.
-`layz doctor` exits with an error when a required tool is missing, and warns about optional
-ones (HyperLynx via `LAYZ_HYPERLYNX`, FastCap2, ParaView).
+If `pcbnew` isn't importable in the venv, layz looks for it in KiCad's usual places; set
+`LAYZ_KICAD_PYTHONPATH` to the folder holding `pcbnew.py` otherwise. HyperLynx, for `layz hyp`,
+is found under `/eda/Siemens`, or set `LAYZ_HYPERLYNX_HOME` to its `SDD_HOME` folder.
+
+`layz doctor` lists what it found. It exits with an error when a required tool is missing and
+only warns about the optional ones (HyperLynx, FastCap2, ParaView).
 
 ## Field solvers
 
