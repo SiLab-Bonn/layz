@@ -31,8 +31,11 @@ case "$(os_family)" in
             mkdir -p "$TOOLS"
             app="$TOOLS/kicad-$VERSION-x86_64-lite.AppImage"   # kept: a re-run doesn't download again
             if [ ! -s "$app" ]; then
-                echo "downloading KiCad $VERSION's AppImage (about 300 MB) from KiCad's mirror"
-                curl -fsSL "https://mirrors.mit.edu/kicad/appimage/stable/kicad-$VERSION-x86_64-lite.AppImage.tar" | tar x -O > "$app.part"
+                # KiCad's mirrors: CERN's (Geneva; fast from Germany), else MIT's
+                for m in https://kicad-downloads.s3.cern.ch https://mirrors.mit.edu/kicad; do
+                    echo "downloading KiCad $VERSION's AppImage (about 300 MB) from ${m#https://}"
+                    curl -fsSL "$m/appimage/stable/kicad-$VERSION-x86_64-lite.AppImage.tar" | tar x -O > "$app.part" && [ -s "$app.part" ] && break
+                done
                 mv "$app.part" "$app"
                 chmod +x "$app"
             fi
