@@ -183,22 +183,144 @@ def unit_interval(t, v) -> tuple[float, float]:
     return float(np.median(gaps[gaps < 1.25 * np.percentile(gaps, 5)])), float(zc[0])
 
 
-def eye_metrics(t, v, ui, skip: int = 4) -> tuple[float, float]:
-    """(height, width) of an eye, skipping ``skip`` UI: the width is the widest gap between the
-    mid-level crossings folded into one UI, the height the opening at that gap's centre (±5 % UI).
+def _edge_times(t, v, lo: float, hi: float, rising: bool, max_s: float) -> np.ndarray:
+    """Times from ``lo`` to ``hi`` (rising) or ``hi`` to ``lo`` (falling) of each edge, by linear
+    interpolation; edges that don't make it within ``max_s`` are left out."""
+    a, b = (lo, hi) if rising else (hi, lo)
+    sgn = 1 if rising else -1
+    def cross(level):  # times v passes ``level`` in the edge's direction
+        i = np.nonzero((sgn * (v[:-1] - level) < 0) & (sgn * (v[1:] - level) >= 0))[0]
+        return t[i] + (level - v[i]) / (v[i + 1] - v[i]) * (t[i + 1] - t[i])
+    ta, tb = cross(a), cross(b)
+    if not len(ta) or not len(tb):
+        return np.array([])
+    # each edge: the first end-level crossing after a start-level crossing, from the last start
+    # before it (a reflection that dips and comes back is no new edge)
+    k = np.searchsorted(tb, ta)
+    ok = k < len(tb)
+    nxt = np.append(ta[1:], np.inf)
+    ok &= nxt > np.where(ok, tb[np.minimum(k, len(tb) - 1)], np.inf)
+    d = tb[k[ok]] - ta[ok]
+    return d[(d > 0) & (d < max_s)]
+
+
+def _hexagon(x, up, lo, mid, gap, top, bot) -> list[tuple[float, float]]:
+    """The eye opening as the largest hexagon no trace enters. ``up``/``lo`` are the lowest high
+    and highest low sample per phase ``x`` (UI from the centre). For a top level T, the flat top
+    edge spans the phases around the centre whose traces stay above T (the bottom likewise); the
+    corners at the mid level start at the crossings (-gap/2, +gap/2) and move in until the sides
+    clear the traces. Of a few top and bottom levels, the largest hexagon wins."""
+    h = gap / 2
+    c = int(np.argmin(np.abs(x)))
+
+    def flat(env, level, sign):  # phases around the centre whose traces stay beyond ``level``
+        ok = sign * (env - level) >= 0
+        if not ok[c]:
+            return None
+        l = r = c
+        while l > 0 and ok[l - 1] and x[l - 1] > -h:
+            l -= 1
+        while r < len(x) - 1 and ok[r + 1] and x[r + 1] < h:
+            r += 1
+        return x[l], x[r]
+
+    def corner(xe, need, room, side):
+        """The mid-level corner of the side from the flat edge's end ``xe``: the side passes x at
+        need (x - xv) / (xe - xv) from mid, which must stay within ``room``."""
+        sel = (x < xe) & (x > -h) if side < 0 else (x > xe) & (x < h)
+        q = np.clip(room[sel] / need, 0, None)
+        xs = x[sel]
+        bad = q < 1
+        if side < 0:
+            lim = (xs[bad] - q[bad] * xe) / (1 - q[bad])
+            return max([-h, *lim])
+        lim = (xs[bad] - q[bad] * xe) / (1 - q[bad])
+        return min([h, *lim])
+
+    best, area = [], 0.0
+    for f in (1.0, 0.95, 0.9, 0.8, 0.7, 0.6, 0.5):
+        T = mid + f * (top - mid)
+        ft = flat(up, T, 1)
+        if ft is None:
+            continue
+        for g in (1.0, 0.95, 0.9, 0.8, 0.7, 0.6, 0.5):
+            B = mid + g * (bot - mid)
+            fb = flat(lo, B, -1)
+            if fb is None:
+                continue
+            ru, rl = up - mid, mid - lo
+            xl = max(corner(ft[0], T - mid, ru, -1), corner(fb[0], mid - B, rl, -1))
+            xr = min(corner(ft[1], T - mid, ru, 1), corner(fb[1], mid - B, rl, 1))
+            pts = [(xl, mid), (ft[0], T), (ft[1], T), (xr, mid), (fb[1], B), (fb[0], B)]
+            px, py = np.array(pts).T
+            a = 0.5 * abs(np.dot(px, np.roll(py, 1)) - np.dot(py, np.roll(px, 1)))
+            if a > area:
+                best, area = [tuple(map(float, p)) for p in pts], a
+    return best
+
+
+def eye(t, v, ui, skip: int = 4, bins: int = 200) -> dict:
+    """The eye of a waveform, skipping ``skip`` UI, measured on its joined-up trace:
+    width   the widest gap between the mid-level crossings folded into one UI;
+    centre  that gap's middle, as a phase (0..1 UI from the first sample);
+    height  the opening within ±5 % UI of the centre;
+    hexagon the opening as (phase from the centre in UI, V) points, clear of every trace;
+    rise, fall  median 20-80 % edge times, between the levels at the centre.
     Independent of where the waveform starts, so jittered and ideal runs are measured alike."""
-    keep = t > t[0] + skip * ui
-    ph, vv = ((t[keep] - t[0]) % ui) / ui, v[keep]
-    mid = 0.5 * (vv.max() + vv.min())
-    zc = np.sort(ph[1:][np.diff(np.sign(vv - mid)) != 0])
+    t, v = np.asarray(t, float), np.asarray(v, float)
+    t0 = t[0]
+    keep = t > t0 + skip * ui
+    t, v = t[keep], v[keep]
+    nan = {"height": np.nan, "width": np.nan, "centre": np.nan, "hexagon": [], "rise": np.nan, "fall": np.nan}
+    if len(t) < 4:
+        return nan
+    mid = 0.5 * (v.max() + v.min())
+    ph = ((t - t0) % ui) / ui
+    zc = np.sort(ph[1:][np.diff(np.sign(v - mid)) != 0])
     if not len(zc):
-        return np.nan, np.nan
+        return nan
     gaps = np.diff(np.append(zc, zc[0] + 1))
     k = int(np.argmax(gaps))
-    centre = (zc[k] + 0.5 * gaps[k]) % 1
-    c = np.abs((ph - centre + 0.5) % 1 - 0.5) < 0.05
-    hi, lo = vv[c & (vv > mid)], vv[c & (vv < mid)]
-    return (hi.min() - lo.max() if len(hi) and len(lo) else np.nan), float(gaps[k] * ui)
+    centre, gap = (zc[k] + 0.5 * gaps[k]) % 1, gaps[k]
+
+    td, vd = densify(t, v, dv=np.ptp(v) / 400, dt=ui / bins)
+    x = ((td - t0) / ui - centre + 0.5) % 1 - 0.5            # phase from the centre, -0.5..0.5
+    idx = np.clip(((x + 0.5) * bins).astype(int), 0, bins - 1)
+    up, lo = np.full(bins, np.inf), np.full(bins, -np.inf)
+    hi_m, lo_m = vd > mid, vd < mid
+    np.minimum.at(up, idx[hi_m], vd[hi_m])
+    np.maximum.at(lo, idx[lo_m], vd[lo_m])
+    up, lo = np.where(np.isinf(up), mid, up), np.where(np.isinf(lo), mid, lo)
+    c = bins // 2
+    w = max(1, int(0.05 * bins))
+    top, bot = up[c - w:c + w + 1].min(), lo[c - w:c + w + 1].max()
+    hexagon = _hexagon((np.arange(bins) + 0.5) / bins - 0.5, up, lo, mid, gap, top, bot)
+
+    cw = np.abs(((t - t0) / ui - centre + 0.5) % 1 - 0.5) < 0.05
+    one, zero = np.median(v[cw & (v > mid)]), np.median(v[cw & (v < mid)])
+    l20, l80 = zero + 0.2 * (one - zero), zero + 0.8 * (one - zero)
+    rise, fall = (_edge_times(t, v, l20, l80, s, ui) for s in (True, False))
+    return {"height": float(top - bot), "width": float(gap * ui), "centre": float(centre), "hexagon": hexagon,
+            "rise": float(np.median(rise)) if len(rise) else np.nan,
+            "fall": float(np.median(fall)) if len(fall) else np.nan}
+
+
+def densify(t, v, dv: float, dt: float | None = None) -> tuple[np.ndarray, np.ndarray]:
+    """The waveform with linear steps of at most ``dv`` (V) and ``dt`` (s) between samples.
+
+    HyperLynx samples on a fixed step (10 ps) and moves jittered edges by whole steps, so a fast
+    edge is a few samples at the same voltages every time: histogrammed raw, an eye shows dashes
+    at discrete levels. Joined up, as a scope draws them, each edge is a line."""
+    t, v = np.asarray(t, float), np.asarray(v, float)
+    steps = np.abs(np.diff(v)) / dv
+    if dt:
+        steps = np.maximum(steps, np.diff(t) / dt)
+    n = np.maximum(1, np.ceil(steps).astype(int))
+    seg = np.repeat(np.arange(len(n)), n)
+    frac = (np.arange(n.sum()) - np.repeat(np.cumsum(n) - n, n)) / np.repeat(n, n)
+    tt = np.append(t[seg] + frac * np.diff(t)[seg], t[-1])
+    vv = np.append(v[seg] + frac * np.diff(v)[seg], v[-1])
+    return tt, vv
 
 
 def run_ui(run: Path, t, v) -> float:
@@ -249,7 +371,7 @@ def plot_si(runs: list[Path], out: Path) -> list[Path]:
         fig, axes = plt.subplots(len(eyes), len(names), figsize=(4.8 * len(names), 3.2 * len(eyes) + 0.6),
                                  squeeze=False, sharex=True)
         t0, v0 = wave(first / waves[first][0]["file"])
-        ui, tc = run_ui(first, t0, v0), unit_interval(t0, v0)[1]
+        ui = run_ui(first, t0, v0)
         for i, r in enumerate(eyes):
             for j, name in enumerate(names):
                 w = next((w for w in waves[r] if w["name"] == name), None)
@@ -258,16 +380,30 @@ def plot_si(runs: list[Path], out: Path) -> list[Path]:
                     ax.set_visible(False)
                     continue
                 t, v = wave(r / w["file"])
-                keep = t > tc + 4 * ui
+                e = eye(t, v, ui)
                 span = max(abs(v).max(), 1e-3) * 1.1
-                hist, xe, ye = np.histogram2d(((t[keep] - tc + 0.5 * ui) % (2 * ui)) / ui, v[keep],
-                                              bins=(400, 240), range=((0, 2), (-span, span)))
+                nx, ny = 400, 240
+                td, vd = densify(t, v, dv=span / ny, dt=ui / (nx / 2))  # a point in every bin it crosses
+                keep = td > td[0] + 4 * ui
+                # each eye centred at 1 UI, its crossings near 0.5 and 1.5
+                x = ((td[keep] - t[0]) / ui - e["centre"] + 1) % 2
+                hist, xe, ye = np.histogram2d(x, vd[keep], bins=(nx, ny), range=((0, 2), (-span, span)))
                 mesh = ax.pcolormesh(xe, ye, np.ma.masked_less_equal(hist.T, 0), cmap=DENSITY_COLOR_MAP,
                                      norm=LogNorm(), shading="flat", rasterized=True)
-                hgt, wid = eye_metrics(t, v, ui)
+                if e["hexagon"]:
+                    hx = [1 + p[0] for p in e["hexagon"]] + [1 + e["hexagon"][0][0]]
+                    hy = [p[1] for p in e["hexagon"]] + [e["hexagon"][0][1]]
+                    ax.fill(hx, hy, color=GRID_MAJOR_COLOR, alpha=0.6, lw=0)
+                    ax.plot(hx, hy, color=SPINE_COLOR, lw=1.0)
+                    # the values inside the opening, at its middle
+                    cx = 0.5 * (min(hx) + max(hx))
+                    cy = 0.5 * (max(hy) + min(hy))
+                    ax.text(cx, cy, f"height {e['height'] * 1e3:.0f} mV\nwidth {e['width'] * 1e9:.2f} ns "
+                            f"({e['width'] / ui:.2f} UI)\nrise {e['rise'] * 1e12:.0f} ps\n"
+                            f"fall {e['fall'] * 1e12:.0f} ps", ha="center", va="center",
+                            fontsize=7, color=SPINE_COLOR, linespacing=1.4)
+                ax.set_xlim(0, 2)
                 ax.set_title(f"{name}\n{_label(r)}", fontsize=8)
-                style_info_box(ax, [f"height {hgt * 1e3:.0f} mV", f"width {wid * 1e9:.2f} ns"],
-                               location="center")  # the eye's opening is empty
                 if i == len(eyes) - 1:
                     ax.set_xlabel(f"Time (UI, {ui * 1e9:.3g} ns, {1 / ui / 1e6:.0f} Mb/s)")
                 if j == 0:

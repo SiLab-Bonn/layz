@@ -60,7 +60,7 @@ def _at(run: Path, at: str | None) -> list[dict]:
 
 def eyes(runs: list[Path], min_height: float, min_width_ui: float, out: Path | None = None,
          at: str | None = None) -> list[dict]:
-    """Eye height and width of each eye run's waveforms (those naming ``at``, e.g. the receiver),
+    """Eye height, width and 20-80 % rise and fall times of each eye run's waveforms (those naming ``at``, e.g. the receiver),
     against the limits (V, share of a UI)."""
     rows = []
     for run in runs:
@@ -70,9 +70,11 @@ def eyes(runs: list[Path], min_height: float, min_width_ui: float, out: Path | N
         for w in _at(run, at):
             t, v = plots.wave(run / w["file"])
             ui = plots.run_ui(run, t, v)
-            hgt, wid = plots.eye_metrics(t, v, ui)
+            e = plots.eye(t, v, ui)
+            hgt, wid = e["height"], e["width"]
             rows.append({"run": run.name, "wave": w["name"], "height_mV": hgt * 1e3, "width_ns": wid * 1e9,
-                         "width_ui": wid / ui, "pass": bool(hgt >= min_height and wid / ui >= min_width_ui)})
+                         "width_ui": wid / ui, "rise_ps": e["rise"] * 1e12, "fall_ps": e["fall"] * 1e12,
+                         "pass": bool(hgt >= min_height and wid / ui >= min_width_ui)})
     return _table(f"Eyes (limits: height >= {min_height * 1e3:.0f} mV, width >= {min_width_ui:.2f} UI)", rows, out)
 
 

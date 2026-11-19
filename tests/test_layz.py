@@ -308,8 +308,28 @@ def test_hyperlynx_analysis(tmp_path):
     assert analysis.dc_drop(dc, 0.06)[0]["pass"] is True
     (eye,) = analysis.eyes([si], 0.2, 0.7, tmp_path / "eyes.csv")
     assert eye["height_mV"] > 700 and eye["width_ui"] > 0.9 and eye["pass"]
+    assert 0 < eye["rise_ps"] <= 50 and 0 < eye["fall_ps"] <= 50       # one 50 ps sample per edge
     assert analysis.crosstalk(si, 0.1)[0]["pass"] is False           # an eye is no quiet line
     assert analysis.sparams(sp, 1e9, -3, -10) == []                  # a 2-port: no mixed mode
+
+
+def test_eye_densify_and_hexagon():
+    import numpy as np
+    from layz.hyperlynx import plots
+    t, v = plots.densify([0, 1, 2], [0, 1, 1], 0.25)
+    assert t.tolist() == [0, 0.25, 0.5, 0.75, 1, 2] and v.tolist() == [0, 0.25, 0.5, 0.75, 1, 1]
+    ui, rng = 1e-9, np.random.default_rng(2)
+    bits = rng.integers(0, 2, 200)
+    t = np.arange(0, 200 * ui, 10e-12)
+    k = np.minimum((t // ui).astype(int), 199)
+    edge = np.clip((t % ui) / 100e-12, 0, 1)                            # 100 ps linear edges
+    prev = np.roll(bits, 1)[k]
+    v = (prev + (bits[k] - prev) * edge) - 0.5
+    e = plots.eye(t, v, ui)
+    assert abs(e["height"] - 1) < 0.02 and e["width"] > 0.85 * ui
+    assert 50e-12 < e["rise"] < 70e-12 and 50e-12 < e["fall"] < 70e-12  # 20-80 % of 100 ps
+    hx = np.array(e["hexagon"])
+    assert len(hx) == 6 and hx[:, 1].max() <= 0.5 + 1e-9 and hx[:, 1].min() >= -0.5 - 1e-9
 
 
 def test_hyperlynx_targets(tmp_path, capsys):
