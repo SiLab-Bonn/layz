@@ -31,8 +31,12 @@ fi
 mac_install_dmg() {   # copy the .app of a .dmg into /Applications
     local mnt
     mnt="$(mktemp -d)"
-    hdiutil attach -nobrowse -quiet -mountpoint "$mnt" "$1" || return 1
-    cp -R "$mnt"/*.app /Applications/ && hdiutil detach -quiet "$mnt"
+    hdiutil attach -nobrowse -quiet -mountpoint "$mnt" "$1" 2>/dev/null || return 1   # (its deprecation notice)
+    for app in "$mnt"/*.app; do
+        rm -rf "/Applications/$(basename "$app")"   # replaced, not merged into an older version
+        cp -R "$app" /Applications/ || { hdiutil detach -quiet "$mnt"; return 1; }
+    done
+    hdiutil detach -quiet "$mnt"
 }
 
 done_list=()
@@ -141,10 +145,11 @@ case "$family" in
         ;;
     macos)
         command -v brew >/dev/null || die "install Homebrew first: https://brew.sh"
+        # Homebrew without its auto-update (pages of new packages), hints and progress bars
+        export HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1
         xcode-select -p >/dev/null 2>&1 || xcode-select --install
         group "build tools" cmake libomp wxwidgets googletest
         group "Rust (gdscheck)" rust
-        echo "=== KiCad 10, ParaView, KLayout (casks)"
         # KLayout: klayout.org's build for this macOS (the ST builds, on the system's Ruby and Python)
         mac="$(sw_vers -productVersion | cut -d. -f1)"
         case "$mac" in
@@ -159,8 +164,16 @@ case "$family" in
         else
             skip "KLayout: klayout.org has no build for macOS $mac; https://www.klayout.de/build.html"
         fi
-        for c in kicad paraview; do
-            if brew install --cask "$c"; then done_list+=("$c"); else skipped+=("$c (brew install --cask $c failed)"); fi
+        # an app already in /Applications (installed by hand, say) counts: Homebrew won't install over it
+        for c in "kicad:/Applications/KiCad/KiCad.app" "paraview:/Applications/ParaView*.app"; do
+            name="${c%%:*}"
+            if ls -d ${c#*:} >/dev/null 2>&1; then
+                done_list+=("$name (in /Applications already)")
+            elif brew install --quiet --cask "$name"; then
+                done_list+=("$name")
+            else
+                skipped+=("$name (brew install --cask $name failed)")
+            fi
         done
         ;;
     *)

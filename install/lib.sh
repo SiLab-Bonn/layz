@@ -142,7 +142,7 @@ pkg_install() {
         arch) as_root pacman -S --needed --noconfirm "$@" ;;
         macos)
             command -v brew >/dev/null || die "install Homebrew first (https://brew.sh), then run this again"
-            brew install "$@" ;;
+            brew install --quiet "$@" ;;
         *) die "no known package manager here; install $* yourself" ;;
     esac
 }
