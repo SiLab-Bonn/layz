@@ -25,8 +25,9 @@ Keep the clone: layz runs from it. `./install.sh --uninstall` removes the `layz`
 
 If something isn't found:
 
-- no suitable Python (layz needs 3.12 to 3.15): install one, or
-  `LAYZ_PYTHON=/path/to/python3 ./install.sh`
+- Python: layz needs 3.12 to 3.15; where `python3` is older (3.9 on AlmaLinux 9), `install.sh`
+  uses the newest one installed, or installs the newest the package manager has (asking for sudo).
+  `LAYZ_PYTHON=/path/to/python3 ./install.sh` picks one yourself
 - KiCad's `pcbnew`: set `LAYZ_KICAD_PYTHONPATH` to the folder holding `pcbnew.py`
 - HyperLynx: set `LAYZ_HYPERLYNX_HOME` to its `SDD_HOME` folder
 
@@ -39,3 +40,5 @@ install/install_gdscheck.sh  # gdscheck, for layz drc
 
 Both install what they need first with the system's package manager (apt, dnf or pacman, asking
 for sudo; Homebrew on macOS), and the commands work in the same terminal afterwards.
+FastCap2 needs GoogleTest to build; on RHEL and AlmaLinux that is only in EPEL, so there the
+script builds FasterCap alone (layz's default solver).
