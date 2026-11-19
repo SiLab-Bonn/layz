@@ -32,12 +32,13 @@ dependencies = [
 [project.scripts]
 layz = "layz.cli:main"
 
-# src/ is the layz package itself (imported as `layz`); the link layz -> src at the repo root lets
-# editors' checkers (ty, pyright), which don't follow the editable install's import hook, find it
-[tool.setuptools]
-package-dir = {"layz" = "src"}
-packages = ["layz", "layz.drc", "layz.lvs", "layz.gds2pcb", "layz.gds2hyp", "layz.hyperlynx",
-            "layz.hyperlynx.runner", "layz.pex", "layz.field", "layz.field.paraview", "layz.svg"]
+# the layz/ folder is the package
+[tool.setuptools.packages.find]
+include = ["layz*"]
+
+[tool.setuptools.package-data]
+# scripts run by other interpreters: HyperLynx's own Python, ParaView's pvpython
+layz = ["hyperlynx/runner/*.py", "field/paraview/*.py"]
 
 
 [tool.ty.environment]

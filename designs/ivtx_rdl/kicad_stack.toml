@@ -2,7 +2,7 @@
 # (FR4 and copper placeholders, not the real RDL: see tech/uni-bonn-rdl/stack.toml). Kept as a
 # test fixture: layz gds2hyp must write exactly the STACKUP that KiCad's GUI wrote from it.
 #
-# Layers top to bottom, thicknesses in µm; z is derived from the order (src/stack.py).
+# Layers top to bottom, thicknesses in µm; z is derived from the order (layz/stack.py).
 
 name = "SiLab RDL, 4 copper"
 outline = "70/0"

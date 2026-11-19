@@ -69,7 +69,7 @@ flowchart LR
 
 ```text
 layz/
-├── src/                  the layz package, one folder per command:
+├── layz/                 the layz package, one folder per command:
 │   ├── drc/  lvs/        layz drc, layz lvs
 │   ├── gds2pcb/          layz gds2pcb, layz nets
 │   ├── gds2hyp/          layz gds2hyp (traces.py: pours -> traces)
@@ -232,7 +232,7 @@ project: VRMs, DC sinks, pin models made in the GUI) and run there:
 
 Install, overlay and license come from `LAYZ_HYPERLYNX_HOME` (the `SDD_HOME` folder; found under
 `/eda/Siemens` otherwise), `LAYZ_HYPERLYNX_OVERLAY` and `MGLS_LICENSE_FILE`. How the API is
-driven is in [src/hyperlynx](src/hyperlynx/__init__.py).
+driven is in [layz/hyperlynx](layz/hyperlynx/__init__.py).
 
 ## layz pex, layz field
 

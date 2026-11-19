@@ -40,7 +40,7 @@ bottom = "In1.Cu"
 Units are µm. `layz gds2pcb --stack` writes the stack into the board as its KiCad physical stackup,
 so the `.kicad_pcb`, the `.hyp` and the FasterCap model all carry it; a board made in KiCad uses
 its own stackup (Board Setup > Physical Stackup). The full format is documented in
-[src/stack.py](../src/stack.py).
+[layz/stack.py](../layz/stack.py).
 
 The processes in this repo are in [tech/](../tech): `uni-bonn-rdl` and the Multi-CB buildups in
 `multicb/`, each with a readme on its source.
