@@ -11,3 +11,4 @@ run_*/
 .DS_Store
 *.lyrdb
 uv.lock
+results/

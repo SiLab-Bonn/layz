@@ -6,9 +6,10 @@ that connect them, as one command line tool. Install: [install.md](install.md).
 ```
 layz drc       design rule check of a GDS (gdscheck, with the kit's deck)
 layz lvs       GDS connectivity vs a KiCad schematic (net and pin labels)
-layz pcb       GDS -> KiCad .kicad_pcb (copper zones, footprints, vias, outline, stackup)
+layz gds2pcb   GDS -> KiCad .kicad_pcb (copper zones, footprints, vias, outline, stackup)
 layz nets      assign zone/via nets from a seed footprint's pad nets
-layz hyp       .kicad_pcb, GDS or .hyp -> HyperLynx .hyp (signal pours as traces)
+layz gds2hyp   GDS, .kicad_pcb or .hyp -> HyperLynx .hyp (signal pours as traces)
+layz hyp       HyperLynx headless on a .hyp: DC drop, SI, eye, crosstalk, S-parameters
 layz svg       GDS -> SVG preview
 layz pex       3-D capacitance matrix with FasterCap/FastCap2 (.kicad_pcb, or GDS + stack)
 layz field     electric field and potential from a `layz pex --charges` run
@@ -30,9 +31,10 @@ flowchart LR
 
     drc(["layz drc"])
     lvs(["layz lvs"])
-    pcb(["layz pcb"])
+    pcb(["layz gds2pcb"])
     nets(["layz nets"])
-    hyp(["layz hyp"])
+    hyp(["layz gds2hyp"])
+    hl(["layz hyp"])
     pex(["layz pex"])
     field(["layz field"])
     svg(["layz svg"])
@@ -52,7 +54,7 @@ flowchart LR
     gds --> pcb --> kpcb
     kpcb --> nets --> kpcb2
     kpcb2 & board & exthyp --> hyp --> hypf
-    hypf --> hl[["HyperLynx: SI, eye, crosstalk, DC drop"]]
+    hypf --> hl --> hlres@{ shape: card, label: "DC drop, eye, crosstalk, S-parameters" }
     gds & board --> pex --> caps
     caps --> field --> fld
     drcdb & lvsdb & fld --> view --> tools[["KLayout, ParaView"]]
@@ -60,7 +62,7 @@ flowchart LR
     stack -.-> lvs & pcb & pex
 
     classDef cmd fill:#5E81AC,stroke:#4C566A,color:#fff
-    class drc,lvs,pcb,nets,hyp,pex,field,svg,view cmd
+    class drc,lvs,pcb,nets,hyp,hl,pex,field,svg,view cmd
 ```
 
 Process data lives in the repo: [stacks/](stacks/readme.md) (layer heights, εr, GDS mapping per
@@ -110,12 +112,12 @@ no copper), and the schematic nets no label covers. Exit status 1 on opens, shor
 labels. A chip's own pad names (VINA, VDDA, …) are not board nets: label the board on the pin
 layers.
 
-## layz pcb, layz nets
+## layz gds2pcb, layz nets
 
 GDS -> KiCad board, then nets from a seed footprint.
 
 ```sh
-layz pcb --lay design.gds --stack stacks/uni_bonn_rdl.toml          # -> design.kicad_pcb
+layz gds2pcb --lay design.gds --stack stacks/uni_bonn_rdl.toml          # -> design.kicad_pcb
 # KiCad: Update PCB from Schematic (references and the seed footprint's pad nets)
 layz nets design.kicad_pcb --seed-footprint VTX2       # -> design_nets_assigned.kicad_pcb
 layz nets design.kicad_pcb --dry-run                   # report only
@@ -128,16 +130,16 @@ shows the GDS top view (`--no-flip-y` keeps it raw). `--layer-map 3/0=In2.Cu` an
 `--via-map 7/0=F.Cu,In1.Cu` override single entries of the stack's mapping.
 `nets`: nets propagate from the seed footprint's pads through touching copper and vias.
 
-## layz hyp
+## layz gds2hyp
 
-HyperLynx `.hyp` from a KiCad board, a GDS (through `layz pcb`), or an existing `.hyp`.
+HyperLynx `.hyp` from a GDS (through `layz gds2pcb`), a KiCad board, or an existing `.hyp`.
 
 ```sh
-layz hyp board.kicad_pcb                                  # -> board.hyp
-layz hyp design.gds --stack stacks/uni_bonn_rdl.toml      # GDS -> board -> .hyp in one step
-layz hyp exported.hyp -o with_traces.hyp                  # rewrite a .hyp exported elsewhere
-layz hyp board.kicad_pcb --traces none                    # KiCad's own output
-layz hyp board.kicad_pcb --traces /CLK_P,/CLK_N           # traces for just these nets
+layz gds2hyp board.kicad_pcb                              # -> board.hyp
+layz gds2hyp design.gds --stack stacks/uni_bonn_rdl.toml  # GDS -> board -> .hyp in one step
+layz gds2hyp exported.hyp -o with_traces.hyp              # rewrite a .hyp exported elsewhere
+layz gds2hyp board.kicad_pcb --traces none                # KiCad's own output
+layz gds2hyp board.kicad_pcb --traces /CLK_P,/CLK_N       # traces for just these nets
 ```
 
 The writer reproduces KiCad's GUI exporter (records and number format). **Signal routes as
@@ -148,6 +150,63 @@ wide as the strip and run into the pads, vias and pins at their ends; supplies a
 pours (right for DC drop). `auto` takes nets with ≥ 2 pins that are ≥ 95 % strips no wider than
 `--trace-max-width` (0.08 mm). On the obelix1 export that is the 17 signal nets (CLK, CMD, rst,
 D1–D4, ADC_1–4: 40 µm, 9 to 131 mm), which HyperLynx then sees with their lengths and coupling.
+
+## layz hyp
+
+Runs HyperLynx's BoardSim (VX.2.14 / 2409; licensed) headless through HyperLynx's own Python,
+as the **targets** of a design's flow: `designs/<design>/flow.py` defines each step as a
+function decorated `@target`, without arguments or return value. A target takes the inputs it
+needs, runs the simulation, checks the results against the design's limits and plots them into
+its own output folder. `layz hyp` runs them by name:
+
+```sh
+export MGLS_LICENSE_FILE=27504@nexus.physik.uni-bonn.de   # the license server
+layz hyp -d ivtx_rdl                                      # list the design's targets
+layz hyp -d ivtx_rdl setup                                # HyperLynx overlay + the board
+layz hyp -d ivtx_rdl dc si                                # run some, in this order
+layz hyp -d ivtx_rdl all                                  # all, in the file's order
+layz hyp -f path/to/flow.py TARGET                        # a flow file elsewhere (default ./flow.py)
+```
+
+The usual targets are `setup`, `info`, `dc`, `si` and `sparams`. One of them (the whole of
+[designs/ivtx_rdl/flow.py](designs/ivtx_rdl/flow.py) reads top to bottom like an OpenROAD flow
+script):
+
+```python
+from layz.hyperlynx import analysis, plots, run, target
+
+@target
+def dc():
+    """DC drop of the 3 V rails and their returns, against MAX_DC_DROP."""
+    if not BOARD.exists():
+        setup()
+    out = RESULTS / "dc"
+    supply = run.dc(BOARD, out / "supply", nets=SUPPLIES)
+    ret = run.dc(BOARD, out / "return", nets=SUPPLIES, return_from=supply / "ports.csv")
+    analysis.dc_drop(supply, MAX_DC_DROP, out / "dc_drop.csv")
+    plots.plot_dc(supply, out, ret)
+```
+
+The analyses (`layz.hyperlynx.run`) each copy the board into a run folder (with its `.bud`/`.pjh`
+project: VRMs, DC sinks, pin models made in the GUI) and run there:
+
+* `run.info`: stackup, nets with their lengths, VRMs, modelled pins.
+* `run.dc`: DC drop: pin voltages and currents, every via's current, HyperLynx's CSV report,
+  its PowerScope file and loss map; `return_from=` re-solves the return nets as the supply
+  (HyperLynx maps supply nets only).
+* `run.si`: waveforms (`std`, `osc`) or an eye (`eye`, PRBS) of a net, with real line models
+  (or `lossy=False`, ...), `crosstalk=True`, `aggressors=` switched with HyperLynx's stock IBIS
+  driver, `jitter=` in seconds. Needs `xvfb-run` (BoardSim reports to EZwave).
+* `run.sparam`: S-parameters between pins, as Touchstone.
+* `analysis.dc_drop`, `analysis.eyes`, `analysis.crosstalk`, `analysis.sparams`: checks of run
+  folders against limits (drop per rail, eye height and width, crosstalk p-p, insertion and
+  return loss), printed as a table and written as CSV.
+* `plots.plot_dc`, `plots.plot_si`, `plots.plot_sparam`: plots of run folders in the plot style
+  of `layz.plotstyle`. `setup.prepare()` finds HyperLynx and builds its writable overlay.
+
+Install, overlay and license come from `LAYZ_HYPERLYNX_HOME` (the `SDD_HOME` folder; found under
+`/eda/Siemens` otherwise), `LAYZ_HYPERLYNX_OVERLAY` and `MGLS_LICENSE_FILE`. How the API is
+driven is in [src/layz/hyperlynx](src/layz/hyperlynx/__init__.py).
 
 ## layz pex, layz field
 

@@ -5,7 +5,7 @@ Python's own `venv` and `pip`. It also uses tools that are not on PyPI:
 
 | Tool | Needed for | Linux | macOS |
 | --- | --- | --- | --- |
-| KiCad (its `pcbnew` Python module, `kicad-cli`) | `pcb`, `hyp`, `pex` on boards, `lvs` (schematic netlists) | [kicad.org/download/linux](https://www.kicad.org/download/linux/) | [kicad.org/download/macos](https://www.kicad.org/download/macos/) |
+| KiCad (its `pcbnew` Python module, `kicad-cli`) | `gds2pcb`, `gds2hyp`, `pex` on boards, `lvs` (schematic netlists) | [kicad.org/download/linux](https://www.kicad.org/download/linux/) | [kicad.org/download/macos](https://www.kicad.org/download/macos/) |
 | KLayout | viewing GDS, DRC and LVS results | [klayout.de/build.html](https://www.klayout.de/build.html) | [klayout.de/build.html](https://www.klayout.de/build.html) |
 | FasterCap (default) / FastCap2 | `pex`, `field` | `scripts/build_solvers.sh` (sources: [FasterCap](https://github.com/iic-jku/FasterCap), [FastCap2](https://github.com/martinjankoehler/FastCap2)) | [FasterCap releases](https://github.com/iic-jku/FasterCap/releases) (or `scripts/build_solvers.sh`) |
 | gdscheck | `drc` | [github.com/aesc-silicon/gdscheck](https://github.com/aesc-silicon/gdscheck), with Rust's `cargo` ([rust-lang.org/tools/install](https://www.rust-lang.org/tools/install)) | same |

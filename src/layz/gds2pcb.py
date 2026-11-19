@@ -586,7 +586,7 @@ def convert_gds_to_kicad(
 
 def write_stackup(pcb_path: Path, process) -> None:
     """Put the process's stackup into the board's (setup ...) and set the board thickness, so
-    KiCad, `layz hyp` and `layz pex` all read the same stack from the .kicad_pcb."""
+    KiCad, `layz gds2hyp` and `layz pex` all read the same stack from the .kicad_pcb."""
     text = pcb_path.read_text()
     # board thickness first, in (general ...), before the stackup adds its own (thickness ...)
     mm = f"{process.thickness_um / 1000:.6g}"

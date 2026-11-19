@@ -30,7 +30,7 @@ needs_fastercap = pytest.mark.skipif(not HAVE_FASTERCAP, reason="FasterCap not o
 def test_cli_lists_commands(capsys):
     assert cli.main(["--help"]) == 0
     out = capsys.readouterr().out
-    for cmd in ("pcb", "nets", "hyp", "pex", "field", "view", "doctor"):
+    for cmd in ("gds2pcb", "gds2hyp", "hyp", "nets", "lvs", "pex", "field", "view", "doctor"):
         assert f"layz {cmd}" in out
 
 
@@ -83,10 +83,10 @@ def test_multicb_totals(name, total_um):
 
 @needs_kicad
 def test_gds_to_hyp_stackup_matches_kicad_gui(tmp_path):
-    """The obelix1 RDL GDS through layz pcb --stack and layz hyp, with the stackup that was typed
+    """The obelix1 RDL GDS through layz gds2pcb --stack and layz gds2hyp, with the stackup that was typed
     into KiCad, gives the same STACKUP section that KiCad's GUI exporter wrote."""
     hyp = tmp_path / "ob.hyp"
-    assert cli.main(["hyp", str(EXAMPLES / "obelix1_ivtx_ladder_v2.gds"), "--stack", str(OBELIX_KICAD),
+    assert cli.main(["gds2hyp", str(EXAMPLES / "obelix1_ivtx_ladder_v2.gds"), "--stack", str(OBELIX_KICAD),
                      "-o", str(hyp)]) == 0
     section = lambda f: re.search(r"\{STACKUP\n.*?\n\}", Path(f).read_text(), re.S).group(0)
     assert section(hyp) == section(REF_HYP)
@@ -147,7 +147,7 @@ def test_traces_leave_planes_alone():
 
 
 def test_hyp_traces_pass_converts_signal_keeps_supply():
-    from layz.hyp import add_traces
+    from layz.gds2hyp import add_traces
 
     def poly(pid, pts):
         lines = [f'  {{POLYGON T=POUR L="In1.Cu" ID={pid} X={pts[0][0]:.6f} Y={pts[0][1]:.6f}\n']
@@ -175,7 +175,7 @@ def test_hyp_traces_pass_converts_signal_keeps_supply():
 @needs_kicad
 def test_hyp_traces_obelix_signal_nets(tmp_path):
     """Andreas' KiCad export: every signal route converts, supplies stay pours."""
-    from layz.hyp import add_traces
+    from layz.gds2hyp import add_traces
     out, report = add_traces(REF_HYP.read_text(encoding="utf-8"))
     names = {r[0] for r in report}
     assert {"/CLK_P", "/CMD_N", "/D4_N", "/ADC_1", "/rst"} <= names
@@ -225,3 +225,106 @@ def test_lvs_finds_open_short_unknown(tmp_path):
     assert "/B" in next(f.what for f in findings if f.kind == "open")
     assert stats["checked nets"] == 4
     assert (tmp_path / "r.lyrdb").read_text().count("<item>") == 5
+
+
+# ------------------------------------------------------------------ HyperLynx (no HyperLynx needed)
+
+def test_hyperlynx_overlay(tmp_path, monkeypatch):
+    from layz.hyperlynx import setup
+    sdd = tmp_path / "install" / "SDD_HOME"
+    (sdd / "Scripting" / "bin").mkdir(parents=True)
+    (sdd / "Scripting" / "bin" / "pythonHL").write_text("#!/bin/sh\n")
+    (sdd / "hyperlynx").mkdir()
+    for f in ("Bsw.pak", "Bsw.alg", "bswConsole", "hyperlynx.so"):
+        (sdd / "hyperlynx" / f).write_text(f)
+    (sdd / "hyperlynx" / "Bsw.pak").chmod(0o444)
+    monkeypatch.setenv("LAYZ_HYPERLYNX_HOME", str(sdd))
+    monkeypatch.setenv("LAYZ_HYPERLYNX_OVERLAY", str(tmp_path / "ov"))
+    monkeypatch.setenv("MGLS_LICENSE_FILE", "1@server")
+    install, overlay, env = setup.prepare(quiet=True)
+    assert (overlay / "Scripting").is_symlink()
+    hl = overlay / "hyperlynx"
+    assert hl.is_dir() and not hl.is_symlink()
+    assert (hl / "bswConsole").is_symlink() and not (hl / "Bsw.pak").is_symlink()
+    (hl / "Bsw.pak").write_text("written by BoardSim")          # writable copy, install untouched
+    assert (sdd / "hyperlynx" / "Bsw.pak").read_text() == "Bsw.pak"
+    assert env["HYP_HOME"].startswith(str(hl)) and env["MGLS_LICENSE_FILE"] == "1@server"
+    assert setup.prepare(quiet=True)[1] == overlay                  # second call reuses it
+
+
+def _hyperlynx_runs(tmp_path):
+    """Small synthetic run folders of each kind, as the runners write them."""
+    import json
+    import numpy as np
+    dc = tmp_path / "dc"
+    dc.mkdir()
+    (dc / "job.json").write_text(json.dumps({"kind": "dc"}))
+    (dc / "vrms.json").write_text(json.dumps([{"voltage": 3.0, "power_net": "/V", "power_pins": ["U1.1"],
+                                               "ref_net": "/G", "ref_pins": ["U1.2"]}]))
+    (dc / "summary.json").write_text(json.dumps({"nets": ["/V"]}))
+    (dc / "ports.csv").write_text("pin,net,x,y,type,current_A,voltage_V\nU1.1,/V,0,0,0,-1.0,3.0\n"
+                                  "U2.1,/V,0.01,0,1,1.0,2.9\nU1.2,/G,0,0.001,0,1.0,0.0\nU2.2,/G,0.01,0.001,1,-1.0,0.05\n")
+    (dc / "vias.csv").write_text("net,type,layer1,layer2,x1,y1,x2,y2,current_A,drop_V\n"
+                                 "/V,0,A,B,0.005,0,0.005,0,1.0,1e-6\n/G,0,A,B,0.005,0.001,0.005,0.001,1.0,1e-6\n")
+    grid = "\n".join(f"Row {r}:," + ",".join("1e-4" if 1 <= r <= 2 else "" for _ in range(10)) for r in range(4))
+    (dc / "Thermal__V.txt").write_text(
+        'Net = "/V", 3\nLayerCount = 1\nLayer: 0, "F.Cu", 0, 0.001\nX_offset = 0\nY_offset = 0\n'
+        "Dx = 0.04\nDy = 0.01\nN_x = 10\nN_y = 4\nLayer = 0\n" + grid + "\n")
+    si = tmp_path / "eye"
+    si.mkdir()
+    t = np.arange(0, 400e-9, 50e-12)
+    bits = np.random.default_rng(1).integers(0, 2, 64)
+    v = np.where(bits[(t // 6.25e-9).astype(int) % 64], 0.4, -0.4)
+    (si / "rx.csv").write_text("Time,V\n" + "\n".join(f"{a:.6e},{b:.4f}" for a, b in zip(t, v)))
+    (si / "job.json").write_text(json.dumps({"kind": "si"}))
+    (si / "si.json").write_text(json.dumps({"mode": "eye", "lossy": True, "jitter": {},
+                                            "waves": [{"name": "V(U2-1,U2-2)", "file": "rx.csv"}]}))
+    sp = tmp_path / "sp"
+    sp.mkdir()
+    (sp / "job.json").write_text(json.dumps({"kind": "sparam"}))
+    (sp / "sparam.json").write_text(json.dumps({"pins": ["A", "B"], "lossy": True, "file": "sparams.s2p"}))
+    (sp / "sparams.s2p").write_text("# HZ S RI R 50\n1e6 0.1 0 0.9 0 0.9 0 0.1 0\n1e9 0.3 0 0.7 0 0.7 0 0.3 0\n")
+    return dc, si, sp
+
+
+def test_hyperlynx_touchstone_and_plots(tmp_path):
+    import numpy as np
+    from layz.hyperlynx import plots
+    dc, si, sp = _hyperlynx_runs(tmp_path)
+    f, S = plots.read_touchstone(sp / "sparams.s2p")
+    assert f.tolist() == [1e6, 1e9] and np.isclose(S[0, 1, 0], 0.9) and np.isclose(S[1, 0, 0], 0.3)
+    paths = plots.plot_runs([dc, si, sp], tmp_path / "plots")
+    names = {p.stem for p in paths}
+    assert {"dc_pin_voltage", "dc_via_current", "dc_loss_map", "si_waveforms", "si_eye", "sparams_sp"} <= names
+    assert all(p.exists() for p in paths)
+
+
+def test_hyperlynx_analysis(tmp_path):
+    from layz.hyperlynx import analysis
+    dc, si, sp = _hyperlynx_runs(tmp_path)
+    (row,) = analysis.dc_drop(dc, 0.04, tmp_path / "dc.csv")
+    assert abs(row["drop_mV"] - 100) < 1e-6 and abs(row["return_rise_mV"] - 50) < 1e-6
+    assert row["pass"] is False and (tmp_path / "dc.csv").exists()   # 150 mV of 3 V: 5 %
+    assert analysis.dc_drop(dc, 0.06)[0]["pass"] is True
+    (eye,) = analysis.eyes([si], 0.2, 0.7, tmp_path / "eyes.csv")
+    assert eye["height_mV"] > 700 and eye["width_ui"] > 0.9 and eye["pass"]
+    assert analysis.crosstalk(si, 0.1)[0]["pass"] is False           # an eye is no quiet line
+    assert analysis.sparams(sp, 1e9, -3, -10) == []                  # a 2-port: no mixed mode
+
+
+def test_hyperlynx_targets(tmp_path, capsys):
+    from layz.hyperlynx import cli, targets
+    flow = tmp_path / "flow.py"
+    flow.write_text('from layz.hyperlynx import target\nDONE = []\n\n'
+                    '@target\ndef first():\n    """One."""\n    DONE.append("first")\n\n'
+                    '@target\ndef second():\n    """Two, after first."""\n    if "first" not in DONE:\n        first()\n'
+                    '    (DONE.append("second"), open(__file__ + ".out", "w").write(" ".join(DONE)))\n')
+    assert cli.main(["-f", str(flow)]) == 0
+    listing = capsys.readouterr().out
+    assert "first" in listing and "Two, after first." in listing
+    assert cli.main(["-f", str(flow), "second"]) == 0
+    assert (tmp_path / "flow.py.out").read_text() == "first second"
+    with pytest.raises(SystemExit):
+        cli.main(["-f", str(flow), "nope"])
+    with pytest.raises(TypeError):
+        targets.target(lambda x: None)

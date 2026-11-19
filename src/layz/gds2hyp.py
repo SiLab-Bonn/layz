@@ -8,15 +8,17 @@ the same records, in the same order and number format.
     {VERSION=2.14} / {UNITS=ENGLISH LENGTH}    lengths in inches, Y negated
     {BOARD ...}       PERIMETER_SEGMENT per board-outline segment
     {STACKUP ...}     SIGNAL per copper layer, DIELECTRIC per dielectric/mask (from the
-                      board's stackup: `layz pcb --stack` writes it)
+                      board's stackup: `layz gds2pcb --stack` writes it)
     {DEVICES ...}     one per footprint
     {PADSTACK=n ...}  pad and via padstacks, deduplicated, numbered in order of first use
     {NET="..." ...}   per net: PIN, VIA, SEG, ARC, and zone fills as POLYGON / POLYVOID;
                       every copper object without a net gets its own EmptyNet<n>
 
-    layz hyp board.kicad_pcb [-o board.hyp]
-    layz hyp design.gds --stack stacks/uni_bonn_rdl.toml [-o design.hyp]   (via layz pcb)
-    layz hyp exported.hyp -o with_traces.hyp                             (pours -> traces only)
+    layz gds2hyp design.gds --stack stacks/uni_bonn_rdl.toml [-o design.hyp]   (via layz gds2pcb)
+    layz gds2hyp board.kicad_pcb [-o board.hyp]
+    layz gds2hyp exported.hyp -o with_traces.hyp                             (pours -> traces only)
+
+Running HyperLynx on the result: `layz hyp` (layz.hyperlynx).
 
 Signal routes drawn as polygons (every GDS route, and KiCad zones made from them) become pours,
 which HyperLynx BoardSim cannot model as transmission lines (no length, loss or crosstalk). By
@@ -32,9 +34,17 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
-import pcbnew
-
 from layz import stack as stackfile
+
+pcbnew = None  # KiCad's module, imported when a board is written (a .hyp rewrite needs no KiCad)
+
+
+def _kicad():
+    global pcbnew
+    if pcbnew is None:
+        import pcbnew as _pcbnew
+        pcbnew = _pcbnew
+    return pcbnew
 
 RESISTIVITY = 1.724e-8  # copper bulk resistivity, Ω·m (KiCad's constant)
 
@@ -396,13 +406,14 @@ def board_process(pcb_path: Path, board):
         cu = [board.GetLayerName(l) for l in board.GetEnabledLayers().CuStack()]
         board_mm = board.GetDesignSettings().GetBoardThickness() / 1e6
         print(f"warning: {pcb_path.name} has no stackup: writing KiCad's default {board_mm:g} mm FR4 "
-              "stack; use `layz pcb --stack` or set it in Board Setup > Physical Stackup",
+              "stack; use `layz gds2pcb --stack` or set it in Board Setup > Physical Stackup",
               file=sys.stderr)
         process = stackfile.kicad_default(cu, board_mm)
     return process
 
 
 def write_hyp(pcb_path: Path, hyp_path: Path, refill: bool = False) -> None:
+    _kicad()
     board = pcbnew.LoadBoard(str(pcb_path))
     if refill:
         pcbnew.ZONE_FILLER(board).Fill(board.Zones())
@@ -425,9 +436,10 @@ def traces_pass(hyp_path: Path, select: str, max_width_mm: float) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0],
+                                 epilog="Running HyperLynx on the .hyp: layz hyp {setup,info,dc,si,sparam,plot,run} -h")
     ap.add_argument("input", type=Path,
-                    help=".kicad_pcb board, a GDS (converted with layz pcb), or a .hyp to rewrite")
+                    help=".kicad_pcb board, a GDS (converted with layz gds2pcb), or a .hyp to rewrite")
     ap.add_argument("-o", "--out", type=Path, help="output .hyp (default: next to the input)")
     ap.add_argument("--stack", type=Path, help="GDS input: layz process stack (.toml)")
     ap.add_argument("--keep-pcb", action="store_true",

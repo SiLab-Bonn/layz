@@ -3,7 +3,7 @@
 A stack lists the physical layers top to bottom, each with its thickness; heights (z) are
 derived from the order, never typed. Copper layers name the GDS layer they're drawn on, via
 layers the two copper layers they join. From this one description layz writes the KiCad board
-stackup (`layz pcb --stack`), so the .kicad_pcb, the HyperLynx .hyp (`layz hyp`) and the
+stackup (`layz gds2pcb --stack`), so the .kicad_pcb, the HyperLynx .hyp (`layz gds2hyp`) and the
 FasterCap model (`layz pex`) all carry the same stack; a GDS can also go to `layz pex --stack`
 directly.
 
@@ -24,8 +24,8 @@ directly.
     type = "copper"
     thickness_um = 0.5
     gds = "8/0"                      # GDS layer/datatype drawn on this copper layer
-    pads = true                      # layz pcb: shapes in sub-cells become footprint pads
-    zones = false                    # layz pcb: top-level shapes become copper zones (default true)
+    pads = true                      # layz gds2pcb: shapes in sub-cells become footprint pads
+    zones = false                    # layz gds2pcb: top-level shapes become copper zones (default true)
     labels = ["8/1"]                 # layz lvs: text layers naming this copper's nets; default:
                                      # the drawing layer's datatype 1 (8/0 -> 8/1), [] for none;
                                      # texts on the drawing layer itself always count
@@ -40,7 +40,7 @@ be KiCad's names, in order (F.Cu, In1.Cu, ..., B.Cu), wherever the stack goes to
 HyperLynx; a stack used only by `layz pex` on a GDS may name them freely.
 
 This module also reads the stackup out of a .kicad_pcb (the reverse direction), which is how
-`layz pex` and `layz hyp` get the stack of a KiCad board.
+`layz pex` and `layz gds2hyp` get the stack of a KiCad board.
 """
 
 from __future__ import annotations
@@ -140,7 +140,7 @@ class Process:
         return "\n".join(out) + "\n"
 
     def gds_layer_maps(self):
-        """layz pcb's maps: zones {gds: copper}, vias {gds: (a, b)}, pads {gds: copper}."""
+        """layz gds2pcb's maps: zones {gds: copper}, vias {gds: (a, b)}, pads {gds: copper}."""
         key = lambda s: tuple(int(x) for x in s.split("/"))
         zones = {key(l.gds): l.name for l in self.copper if l.gds and l.zones}
         pads = {key(l.gds): l.name for l in self.copper if l.gds and l.pads}

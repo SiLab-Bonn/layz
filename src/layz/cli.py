@@ -2,9 +2,10 @@
 
     layz drc       design rule check of a GDS (gdscheck, the kit's deck)
     layz lvs       GDS connectivity vs a KiCad schematic (net and pin labels)
-    layz pcb       GDS -> KiCad .kicad_pcb (copper zones, footprints, vias, outline)
+    layz gds2pcb   GDS -> KiCad .kicad_pcb (copper zones, footprints, vias, outline)
     layz nets      assign zone/via nets from a seed footprint's pad nets
-    layz hyp       KiCad .kicad_pcb / GDS / .hyp -> HyperLynx .hyp (signal pours as traces)
+    layz gds2hyp   GDS / KiCad .kicad_pcb / .hyp -> HyperLynx .hyp (signal pours as traces)
+    layz hyp       HyperLynx headless on a .hyp: setup, info, dc, si, sparam, plot, run
     layz svg       GDS -> SVG preview
     layz pex       capacitance matrix with FasterCap/FastCap2 (.kicad_pcb, or GDS + stack)
     layz field     electric field and potential from a `layz pex --charges` run
@@ -27,9 +28,10 @@ from pathlib import Path
 COMMANDS = {
     "drc": ("layz.drc", "design rule check of a GDS"),
     "lvs": ("layz.lvs", "GDS connectivity vs a KiCad schematic"),
-    "pcb": ("layz.gds2pcb", "GDS -> KiCad .kicad_pcb"),
+    "gds2pcb": ("layz.gds2pcb", "GDS -> KiCad .kicad_pcb"),
     "nets": ("layz.nets", "assign zone/via nets from a seed footprint's pad nets"),
-    "hyp": ("layz.hyp", "KiCad .kicad_pcb / GDS / .hyp -> HyperLynx .hyp"),
+    "gds2hyp": ("layz.gds2hyp", "GDS / KiCad .kicad_pcb / .hyp -> HyperLynx .hyp"),
+    "hyp": ("layz.hyperlynx.cli", "HyperLynx headless on a .hyp: setup, info, dc, si, sparam, plot, run"),
     "svg": ("layz.svg", "GDS -> SVG preview"),
     "pex": ("layz.pex.cli", "capacitance matrix with FasterCap/FastCap2"),
     "field": ("layz.field", "electric field and potential from a `layz pex --charges` run"),

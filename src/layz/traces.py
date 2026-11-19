@@ -1,6 +1,6 @@
 """Turn strip-shaped copper (signal routes drawn as polygons) into traces: centreline + width.
 
-GDS layouts, and KiCad boards made from them (`layz pcb`), carry every route as a filled polygon.
+GDS layouts, and KiCad boards made from them (`layz gds2pcb`), carry every route as a filled polygon.
 HyperLynx BoardSim only builds transmission lines, coupling and loss from traces (SEG/ARC), so a
 net drawn as pours has no length for it: no delay, no loss, no crosstalk. This module recovers the
 traces of strip-shaped copper:

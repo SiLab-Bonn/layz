@@ -37,3 +37,7 @@ layz = "layz.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+# scripts run by other interpreters: ParaView's pvpython, HyperLynx's own Python
+"layz" = ["paraview/*.py", "hyperlynx/runner/*.py"]
