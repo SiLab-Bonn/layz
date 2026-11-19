@@ -1,8 +1,12 @@
-"""`layz doctor`: check that this machine has what layz needs.
+"""`layz doctor`: check that this machine has what layz needs, then run layz's tests.
 
-Required: the three tools on PATH (klayout, kicad-cli, FasterCap) and the Python modules layz
-imports (klayout, klayout-pex, shapely, KiCad's pcbnew). Optional tools are reported but don't
-fail the check. Exit status: 0 when everything required is there, 1 otherwise.
+    layz doctor            the tools, then the test suite (about 40 s)
+    layz doctor --quick    the tools only
+
+Required: klayout, kicad-cli, FasterCap, gdscheck and the Python modules layz imports (klayout,
+klayout-pex, shapely, KiCad's pcbnew). Optional tools are reported but don't fail the check; the
+tests that need them are skipped. Exit status: 0 when everything required is there and the tests
+pass, 1 otherwise.
 """
 
 from __future__ import annotations
@@ -21,7 +25,7 @@ CHECKS = [
     ("FasterCap", ("solver", "fastercap"), True, "layz field / pex (3-D capacitance)",
      "scripts/build_solvers.sh (links it into ~/.local/bin)"),
     ("gdscheck", ("solver", "gdscheck"), True, "layz drc",
-     "cargo install --git https://github.com/aesc-silicon/gdscheck gdscheck"),
+     "scripts/install_gdscheck.sh"),
     ("klayout (Python)", ("module", "klayout.db"), True, "everything", "./install.sh (install.md)"),
     ("klayout-pex", ("module", "klayout_pex"), True, "layz pex / field", "./install.sh (install.md)"),
     ("shapely", ("module", "shapely"), True, "layz nets", "./install.sh (install.md)"),
@@ -65,7 +69,26 @@ def _find_hyperlynx() -> tuple[bool, str]:
         return False, str(e)
 
 
+def run_tests() -> int:
+    """The repo's test suite (tests/ in the clone layz runs from), in this Python."""
+    import subprocess
+    from pathlib import Path
+    tests = Path(__file__).resolve().parents[2] / "tests"
+    if not tests.is_dir():
+        print(f"tests: no {tests} (layz isn't running from its clone); skipped")
+        return 0
+    print(f"tests ({tests}):", flush=True)
+    return subprocess.run([sys.executable, "-m", "pytest", "-q", "--no-header", "-p", "no:cacheprovider", "-W", "ignore::DeprecationWarning",
+                           str(tests)], cwd=tests.parent,
+                          env={**os.environ, "MPLBACKEND": "Agg"}).returncode  # plots to files only
+
+
 def main(argv: list[str] | None = None) -> int:
+    import argparse
+    ap = argparse.ArgumentParser(prog="layz doctor", description=__doc__.split("\n\n")[0],
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--quick", action="store_true", help="check the tools only, without the tests")
+    a = ap.parse_args(argv or [])
     print(f"python {sys.version.split()[0]} ({sys.executable})")
     missing_required = 0
     for section, req in (("required", True), ("optional", False)):
@@ -84,6 +107,7 @@ def main(argv: list[str] | None = None) -> int:
               "(layz view sets it for you)")
     if missing_required:
         print(f"{missing_required} required missing")
-        return 1
-    print("all required tools found")
-    return 0
+    else:
+        print("all required tools found")
+    failed = 0 if a.quick else run_tests()
+    return 1 if missing_required or failed else 0

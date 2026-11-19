@@ -1,48 +1,53 @@
 #!/usr/bin/env bash
 # Build the field solvers used by `layz pex` into $TOOLS (default: ~/.local/share/layz) and link
-# them into ~/.local/bin, where layz finds them on PATH (or set LAYZ_FASTERCAP / LAYZ_FASTCAP2).
-# The Python side is the repo's own venv (install.md: ./install.sh).
+# them where this terminal finds them (scripts/onpath.sh).
 #
 #   tools/src/FastFieldSolvers/build/FasterCap   iic-jku/FasterCap, headless   (LGPL-2.1)
 #   tools/src/FastCap2/build/fastcap       martinjankoehler/FastCap2           (MIT license)
 #   tools/wx                               wxWidgets 3.2.6 "base" (non-GUI) library, for FasterCap
 #
-# Debian/Ubuntu/Kali prerequisites: sudo apt install cmake g++ make git curl libopenblas-dev
-#   (checked below, with the matching command for Fedora, Arch and macOS)
-#   (wxWidgets is built here because Ubuntu 26.04 ships no wx headers without the GTK dev stack;
-#    `sudo apt install wx3.2-headers libwxgtk3.2-dev` and dropping the wx step works as well)
-# macOS: brew install cmake libomp wxwidgets; export OpenMP_ROOT=$(brew --prefix)/opt/libomp
-#   then skip the wx step (Homebrew's wx-config is found), or use the arm64 release tarball from
-#   https://github.com/iic-jku/FasterCap/releases and set FASTERCAP to its executable.
+# Installs its build tools first with the system's package manager (apt, dnf, pacman; asks for
+# sudo), or with Homebrew on macOS. wxWidgets is built here (Ubuntu ships no wx headers without the
+# GTK dev stack). macOS also needs: export OpenMP_ROOT=$(brew --prefix)/opt/libomp
 set -euo pipefail
 
-# --- prerequisites, checked up front (otherwise they surface as CMake errors deep in the build)
-missing=()
-for tool in cmake git curl make; do
-  command -v "$tool" >/dev/null || missing+=("$tool")
-done
-command -v c++ >/dev/null || command -v g++ >/dev/null || command -v clang++ >/dev/null || missing+=("a C++ compiler")
-if [[ "$(uname)" == Linux ]]; then
-  # BLAS with its C header (cblas.h), which FasterCap's LinAlgebra needs: libopenblas-dev
-  found_cblas=
-  for h in /usr/include/cblas.h /usr/include/*/cblas.h /usr/include/*/*/cblas.h \
-           /usr/local/include/cblas.h /usr/local/include/*/cblas.h; do
-    [[ -e "$h" ]] && { found_cblas=1; break; }
+# --- prerequisites: installed if missing (otherwise they surface as CMake errors deep in the build)
+check() {
+  missing=()
+  for tool in cmake git curl make; do
+    command -v "$tool" >/dev/null || missing+=("$tool")
   done
-  [[ -n "$found_cblas" ]] || missing+=("BLAS headers (cblas.h)")
-fi
-if (( ${#missing[@]} )); then
-  echo "build_solvers.sh: missing: ${missing[*]}" >&2
-  if command -v apt-get >/dev/null; then
-    echo "  Debian, Ubuntu, Kali: sudo apt install cmake g++ make git curl libopenblas-dev" >&2
-  elif command -v dnf >/dev/null; then
-    echo "  Fedora: sudo dnf install cmake gcc-c++ make git curl openblas-devel" >&2
-  elif command -v pacman >/dev/null; then
-    echo "  Arch: sudo pacman -S cmake gcc make git curl openblas" >&2
-  elif [[ "$(uname)" == Darwin ]]; then
-    echo "  macOS: xcode-select --install; brew install cmake libomp wxwidgets" >&2
+  command -v c++ >/dev/null || command -v g++ >/dev/null || command -v clang++ >/dev/null || missing+=("a C++ compiler")
+  if [[ "$(uname)" == Linux ]]; then
+    # BLAS with its C header (cblas.h), which FasterCap's LinAlgebra needs
+    local h found=
+    for h in /usr/include/cblas.h /usr/include/*/cblas.h /usr/include/*/*/cblas.h \
+             /usr/local/include/cblas.h /usr/local/include/*/cblas.h; do
+      [[ -e "$h" ]] && { found=1; break; }
+    done
+    [[ -n "$found" ]] || missing+=("BLAS headers (cblas.h)")
   fi
-  exit 1
+}
+check
+if (( ${#missing[@]} )); then
+  echo "build_solvers.sh: missing ${missing[*]}; installing" >&2
+  if command -v apt-get >/dev/null; then
+    cmd=(sudo apt-get install -y cmake g++ make git curl libopenblas-dev)
+  elif command -v dnf >/dev/null; then
+    cmd=(sudo dnf install -y cmake gcc-c++ make git curl openblas-devel)
+  elif command -v pacman >/dev/null; then
+    cmd=(sudo pacman -S --needed --noconfirm cmake gcc make git curl openblas)
+  elif [[ "$(uname)" == Darwin ]] && command -v brew >/dev/null; then
+    xcode-select -p >/dev/null 2>&1 || xcode-select --install
+    cmd=(brew install cmake libomp wxwidgets)
+  else
+    echo "build_solvers.sh: no known package manager; install ${missing[*]} yourself" >&2
+    exit 1
+  fi
+  echo "+ ${cmd[*]}" >&2
+  "${cmd[@]}" || { echo "build_solvers.sh: that failed; run it yourself (or ask an admin), then again" >&2; exit 1; }
+  check
+  (( ${#missing[@]} == 0 )) || { echo "build_solvers.sh: still missing ${missing[*]}" >&2; exit 1; }
 fi
 
 REPO=$(cd "$(dirname "$0")/.." && pwd)
@@ -77,10 +82,8 @@ popd
 cmake -S FastCap2 -B FastCap2/build -DCMAKE_BUILD_TYPE=Release
 cmake --build FastCap2/build -j"$JOBS"
 
-mkdir -p "$HOME/.local/bin"
-ln -sf "$TOOLS/src/FastFieldSolvers/build/FasterCap" "$HOME/.local/bin/FasterCap"
-ln -sf "$TOOLS/src/FastCap2/build/fastcap" "$HOME/.local/bin/fastcap"
-echo
-echo "FasterCap: $TOOLS/src/FastFieldSolvers/build/FasterCap -> ~/.local/bin/FasterCap"
-echo "FastCap2:  $TOOLS/src/FastCap2/build/fastcap -> ~/.local/bin/fastcap"
+. "$REPO/scripts/onpath.sh"
+onpath_link "$TOOLS/src/FastFieldSolvers/build/FasterCap" FasterCap
+onpath_link "$TOOLS/src/FastCap2/build/fastcap" fastcap
+onpath_done
 echo "check with: layz doctor"

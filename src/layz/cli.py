@@ -10,7 +10,7 @@
     layz pex       capacitance matrix with FasterCap/FastCap2 (.kicad_pcb, or GDS + stack)
     layz field     electric field and potential from a `layz pex --charges` run
     layz view      open a result: a .lyrdb in KLayout, or ParaView renders of a field run
-    layz doctor    which external tools (KiCad, FasterCap, ParaView, ...) this machine has
+    layz doctor    which external tools (KiCad, FasterCap, ParaView, ...) this machine has, then the tests
 
 `layz <command> -h` shows each command's options.
 """
@@ -36,7 +36,7 @@ COMMANDS = {
     "pex": ("layz.pex.cli", "capacitance matrix with FasterCap/FastCap2"),
     "field": ("layz.field.compute", "electric field and potential from a `layz pex --charges` run"),
     "view": (None, "ParaView renders of a run: section | geometry | field"),
-    "doctor": ("layz.doctor", "which external tools this machine has"),
+    "doctor": ("layz.doctor", "which external tools this machine has, then the tests"),
 }
 
 VIEWS = {"section": "section.py", "geometry": "geometry.py", "field": "view.py"}

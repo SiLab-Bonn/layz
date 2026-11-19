@@ -3,22 +3,21 @@
 # Run from the repo root (bash or zsh, Linux or macOS):
 #
 #     ./install.sh               install, or update after a pull (safe to re-run)
-#     ./install.sh --test        also install pytest, for `.venv/bin/python -m pytest`
 #     ./install.sh --uninstall   remove the `layz` link (keeps .venv/)
 #
 # It makes .venv/ with the Python that KiCad's pcbnew module is built for (Linux: python3;
 # macOS: KiCad's own Python); where python3 is older than 3.12 (e.g. 3.9 on AlmaLinux 9) it takes
 # the newest of python3.14, python3.13, python3.12 on PATH or in ~/.local/bin instead. It installs layz into it editable (changes in this repo apply
-# directly), links .venv/bin/layz into ~/.local/bin and, if that folder isn't on PATH yet, adds
-# it in ~/.bashrc or ~/.zshrc. Override the Python with LAYZ_PYTHON=/path/to/python3.
+# directly), and links .venv/bin/layz where this terminal finds it (scripts/onpath.sh). Override the Python with LAYZ_PYTHON=/path/to/python3.
 set -eu
 
 here="$(cd "$(dirname "$0")" && pwd)"
-bin="$HOME/.local/bin"
-link="$bin/layz"
+. "$here/scripts/onpath.sh"
 
 if [ "${1:-}" = "--uninstall" ]; then
-    if [ -L "$link" ]; then rm "$link"; echo "removed $link"; else echo "no layz link in $bin"; fi
+    for link in "$(onpath_dir)/layz" "$HOME/.local/bin/layz"; do
+        [ -L "$link" ] && rm "$link" && echo "removed $link"
+    done
     exit 0
 fi
 
@@ -63,28 +62,11 @@ if [ ! -x "$here/.venv/bin/python" ]; then
     "$python" -m venv --system-site-packages "$here/.venv"
 fi
 "$here/.venv/bin/python" -m pip install --quiet --upgrade pip
-target="$here"
-[ "${1:-}" = "--test" ] && target="$here[test]"
-echo "layz: pip install --editable $target"
-"$here/.venv/bin/python" -m pip install --quiet --editable "$target"
+echo "layz: pip install --editable $here"
+"$here/.venv/bin/python" -m pip install --quiet --editable "$here"
 
-# --- on PATH
-mkdir -p "$bin"
-ln -sf "$here/.venv/bin/layz" "$link"
-echo "layz: linked $link -> $here/.venv/bin/layz"
-
-case ":$PATH:" in
-    *":$bin:"*) echo "layz: ready, try: layz doctor" ;;
-    *)
-        case "${SHELL:-}" in
-            */zsh) rc="$HOME/.zshrc" ;;
-            *) rc="$HOME/.bashrc" ;;
-        esac
-        line='export PATH="$HOME/.local/bin:$PATH"'
-        if ! grep -qsF "$line" "$rc"; then
-            printf '\n# added by layz install.sh\n%s\n' "$line" >> "$rc"
-            echo "layz: added ~/.local/bin to PATH in $rc"
-        fi
-        echo "layz: open a new terminal (or: source $rc), then: layz doctor"
-        ;;
-esac
+# --- on PATH: where this terminal finds it already (scripts/onpath.sh)
+onpath_link "$here/.venv/bin/layz" layz
+onpath_done
+[ -z "$ONPATH_MISSING" ] && echo "layz: ready, try: layz doctor"
+exit 0

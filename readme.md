@@ -14,7 +14,7 @@ layz svg       GDS -> SVG preview
 layz pex       3-D capacitance matrix with FasterCap/FastCap2 (.kicad_pcb, or GDS + stack)
 layz field     electric field and potential from a `layz pex --charges` run
 layz view      open a result: DRC/LVS markers in KLayout, ParaView renders of a field run
-layz doctor    which external tools this machine has
+layz doctor    which external tools this machine has, then the tests
 ```
 
 `layz <command> -h` shows each command's options.
@@ -255,5 +255,5 @@ columns, so it needs no new solve.
 layz svg design.gds design.svg --width-px 2000            # quick preview
 layz view design.lyrdb --lay design.gds                   # DRC/LVS markers in KLayout
 layz view {section,geometry,field} ...                    # ParaView renders (each takes -h)
-layz doctor                                               # which tools are installed
+layz doctor                                               # which tools are installed, then the tests
 ```
