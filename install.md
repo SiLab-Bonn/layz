@@ -23,7 +23,8 @@ layz doctor                 # checks klayout, kicad-cli, FasterCap, gdscheck and
 
 `install.sh` (bash; works from zsh too, on Linux and macOS) makes `.venv/` with the Python that
 KiCad's `pcbnew` module is built for (Linux: `python3`, 3.14 on Ubuntu 26.04; macOS: KiCad's
-own), checks it's Python 3.12 to 3.15, installs layz into it with `pip install --editable .`
+own), checks it's Python 3.12 to 3.15 (where `python3` is older, as 3.9 on AlmaLinux 9, it
+takes the newest `python3.14`, `python3.13` or `python3.12` on `PATH` or in `~/.local/bin`), installs layz into it with `pip install --editable .`
 (changes in this repo take effect directly), links `layz` into `~/.local/bin`, and adds that
 folder to `PATH` in `~/.bashrc` or `~/.zshrc` if it isn't there yet. `./install.sh --test` also
 installs pytest, `./install.sh --uninstall` removes the link. Keep the clone: the DRC decks
