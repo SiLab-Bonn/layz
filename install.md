@@ -10,42 +10,25 @@ Python's own `venv` and `pip`. It also uses tools that are not on PyPI:
 | FasterCap (default) / FastCap2 | `pex`, `field` | `scripts/build_solvers.sh` (sources: [FasterCap](https://github.com/iic-jku/FasterCap), [FastCap2](https://github.com/martinjankoehler/FastCap2)) | [FasterCap releases](https://github.com/iic-jku/FasterCap/releases) (or `scripts/build_solvers.sh`) |
 | gdscheck | `drc` | [github.com/aesc-silicon/gdscheck](https://github.com/aesc-silicon/gdscheck), with Rust's `cargo` ([rust-lang.org/tools/install](https://www.rust-lang.org/tools/install)) | same |
 | ParaView (optional) | `view` of field results | [paraview.org/download](https://www.paraview.org/download/) | [paraview.org/download](https://www.paraview.org/download/) |
-| HyperLynx (optional, licensed) | opening the `.hyp` files for SI/PI | Siemens | — |
+| HyperLynx (optional, licensed) | `hyp` (SI/PI runs) | Siemens | — |
 
 ## layz itself
 
-KLayout's Python module, KLayout-PEX, Shapely and the rest come from PyPI. From the repo root:
+From the repo root:
 
 ```sh
 ./install.sh                # once; again after a pull that changes dependencies
-layz doctor                 # checks klayout, kicad-cli, FasterCap, gdscheck and more
+layz doctor                 # what layz found, and what's missing
 ```
 
-`install.sh` (bash or zsh, Linux or macOS):
+Keep the clone: layz runs from it. `./install.sh --uninstall` removes the `layz` command.
 
-- makes `.venv/` with `python3`, or on macOS KiCad's own Python, since KiCad's `pcbnew` module
-  only loads in the Python it was built for. layz needs Python 3.12 to 3.15; where `python3` is
-  older (3.9 on AlmaLinux 9), it takes the first of `python3.14`, `python3.13`, `python3.12` on
-  `PATH` or in `~/.local/bin`. `LAYZ_PYTHON=/path/to/python3` picks one yourself.
-- installs layz into it editable, so changes in this clone apply directly. Keep the clone: the
-  DRC decks (`drc/`) and stacks (`stacks/`) are read from it.
-- links `layz` into `~/.local/bin` and, if that folder isn't on `PATH`, adds it in `~/.bashrc`
-  or `~/.zshrc`.
+If something isn't found:
 
-`./install.sh --test` adds pytest; `./install.sh --uninstall` removes the link. By hand:
-
-```sh
-python3.14 -m venv --system-site-packages .venv   # system packages: pcbnew comes with KiCad
-.venv/bin/python -m pip install --editable .
-ln -sf "$PWD/.venv/bin/layz" ~/.local/bin/layz
-```
-
-If `pcbnew` isn't importable in the venv, layz looks for it in KiCad's usual places; set
-`LAYZ_KICAD_PYTHONPATH` to the folder holding `pcbnew.py` otherwise. HyperLynx, for `layz hyp`,
-is found under `/eda/Siemens`, or set `LAYZ_HYPERLYNX_HOME` to its `SDD_HOME` folder.
-
-`layz doctor` lists what it found. It exits with an error when a required tool is missing and
-only warns about the optional ones (HyperLynx, FastCap2, ParaView).
+- no suitable Python (layz needs 3.12 to 3.15): install one, or
+  `LAYZ_PYTHON=/path/to/python3 ./install.sh`
+- KiCad's `pcbnew`: set `LAYZ_KICAD_PYTHONPATH` to the folder holding `pcbnew.py`
+- HyperLynx: set `LAYZ_HYPERLYNX_HOME` to its `SDD_HOME` folder
 
 ## Field solvers
 
@@ -56,9 +39,7 @@ On Debian, Ubuntu and Kali first `sudo apt install cmake g++ make git curl libop
 scripts/build_solvers.sh
 ```
 
-It builds FasterCap (iic-jku fork, headless), FastCap2 and a wxWidgets base library into
-`~/.local/share/layz` and links the solvers into `~/.local/bin`. layz finds them on `PATH`, or
-through `LAYZ_FASTERCAP` / `LAYZ_FASTCAP2`. On macOS see the notes at the top of the script.
+On macOS see the notes at the top of the script.
 
 ## gdscheck
 
@@ -66,9 +47,7 @@ through `LAYZ_FASTERCAP` / `LAYZ_FASTCAP2`. On macOS see the notes at the top of
 cargo install --git https://github.com/aesc-silicon/gdscheck gdscheck
 ```
 
-It installs into `~/.cargo/bin`. layz finds it there even when that folder isn't on `PATH` (cargo
-warns about it when Rust comes from the distribution's packages rather than rustup); to run
-`gdscheck` yourself, add `export PATH="$HOME/.cargo/bin:$PATH"` to `~/.bashrc` or `~/.zshrc`.
+layz finds it in `~/.cargo/bin`, also when that folder isn't on `PATH`.
 
 ## Tests
 
