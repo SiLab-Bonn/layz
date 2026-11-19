@@ -396,10 +396,10 @@ def plot_si(runs: list[Path], out: Path) -> list[Path]:
                     ax.fill(hx, hy, color=GRID_MAJOR_COLOR, alpha=0.6, lw=0)
                     ax.plot(hx, hy, color=SPINE_COLOR, lw=1.0)
                     # the values inside the opening, at its middle
-                    cx = 0.5 * (min(hx) + max(hx))
+                    cx = float(np.mean(hx[1:3] + hx[4:6]))       # the middle of the flat edges
                     cy = 0.5 * (max(hy) + min(hy))
-                    ax.text(cx, cy, f"height {e['height'] * 1e3:.0f} mV\nwidth {e['width'] * 1e9:.2f} ns "
-                            f"({e['width'] / ui:.2f} UI)\nrise {e['rise'] * 1e12:.0f} ps\n"
+                    ax.text(cx, cy, f"height {e['height'] * 1e3:.0f} mV\nwidth {e['width'] * 1e9:.2f} ns\n"
+                            f"= {e['width'] / ui:.2f} UI\nrise {e['rise'] * 1e12:.0f} ps\n"
                             f"fall {e['fall'] * 1e12:.0f} ps", ha="center", va="center",
                             fontsize=7, color=SPINE_COLOR, linespacing=1.4)
                 ax.set_xlim(0, 2)
