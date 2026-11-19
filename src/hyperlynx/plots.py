@@ -326,10 +326,18 @@ def _label(run: Path) -> str:
     parts = ["real lines" if si.get("lossy") else "ideal lines"]
     if si.get("crosstalk"):
         parts.append("crosstalk")
-    jit = {k: v for k, v in si.get("jitter", {}).items() if v and k != "SineFreq"}
-    if jit:
-        parts.append("jitter " + ", ".join(f"{k} {v * 1e12:.0f} ps" for k, v in jit.items()))
-    return f"{run.name}: " + ", ".join(parts)
+    j = si.get("jitter", {})
+    jit = []  # the jitter amounts (s); their frequencies, phase and mean are no amounts
+    if j.get("Gaussian"):
+        jit.append(f"random {j['Gaussian'] * 1e12:.0f} ps rms")
+    if j.get("Sine"):
+        jit.append(f"sine {j['Sine'] * 1e12:.0f} ps at {j.get('SineFreq', 0) / 1e6:g} MHz")
+    if j.get("Uniform"):
+        jit.append(f"uniform {j['Uniform'] * 1e12:.0f} ps")
+    if j.get("Distortion"):
+        jit.append(f"duty-cycle distortion {j['Distortion'] * 1e12:.0f} ps")
+    label = f"{run.name}: " + ", ".join(parts)
+    return label + ("\njitter " + ", ".join(jit) if jit else "")
 
 
 @mpl.rc_context(PLOT_STYLE)
@@ -391,7 +399,7 @@ def plot_si(runs: list[Path], out: Path, *, skip_ui: float, centre_window: float
                     # the values inside the opening, at its middle
                     cx = float(np.mean(hx[1:3] + hx[4:6]))  # the middle of the flat edges
                     cy = 0.5 * (max(hy) + min(hy))
-                    ax.text(cx, cy, f"height {e['height'] * 1e3:.0f} mV\nwidth {e['width'] * 1e9:.2f} ns\n= {e['width'] / ui:.2f} UI\nrise {e['rise'] * 1e12:.0f} ps\nfall {e['fall'] * 1e12:.0f} ps ({edge_levels[0]:.0%}-{edge_levels[1]:.0%})", ha="center", va="center", fontsize=7, color=SPINE_COLOR, linespacing=1.4)
+                    ax.text(cx, cy, f"height {e['height'] * 1e3:.0f} mV\nwidth {e['width'] * 1e9:.2f} ns\n= {e['width'] / ui:.2f} UI\nrise {e['rise'] * 1e12:.0f} ps\nfall {e['fall'] * 1e12:.0f} ps\n({edge_levels[0]:.0%}-{edge_levels[1]:.0%})", ha="center", va="center", fontsize=7, color=SPINE_COLOR, linespacing=1.4)
                 ax.set_xlim(0, 2)
                 ax.set_title(f"{name}\n{_label(r)}", fontsize=8)
                 if i == len(eyes) - 1:
