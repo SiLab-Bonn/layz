@@ -38,11 +38,25 @@ def view_drc(argv: list[str]) -> int:
     ap.add_argument("report")
     ap.add_argument("--lay", required=True, help="the layout the report is for")
     a = ap.parse_args(argv)
-    klayout = shutil.which("klayout")
+    klayout = find_klayout()
     if not klayout:
-        print("klayout not found on PATH", file=sys.stderr)
+        print("KLayout not found (on PATH, or in /Applications on macOS)", file=sys.stderr)
         return 2
     return subprocess.call([klayout, a.lay, "-m", a.report])
+
+
+def find_klayout() -> str | None:
+    """KLayout's program: on PATH, else inside a macOS app in /Applications (klayout.app,
+    KLayout.app, ...: a .dmg puts no command on PATH)."""
+    exe = shutil.which("klayout")
+    if exe:
+        return exe
+    apps = Path("/Applications")
+    for app in sorted(apps.iterdir()) if apps.is_dir() else []:
+        exe = app / "Contents" / "MacOS" / "klayout"
+        if app.name.lower().startswith("klayout") and app.suffix.lower() == ".app" and exe.exists():
+            return str(exe)
+    return None
 
 
 def view(argv: list[str]) -> int:

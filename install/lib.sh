@@ -100,7 +100,7 @@ system_missing() {
         *) command -v pvpython >/dev/null || echo "ParaView (pvpython)" ;;
     esac
     case "$fam" in
-        macos) ls -d /Applications/klayout*.app /Applications/KLayout/klayout.app >/dev/null 2>&1 || echo "KLayout" ;;
+        macos) ls /Applications | grep -qi '^klayout.*\.app$' || echo "KLayout" ;;   # any case: klayout.app, KLayout.app
         *) command -v klayout >/dev/null || echo "KLayout" ;;
     esac
 }

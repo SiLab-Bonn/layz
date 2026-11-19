@@ -16,7 +16,7 @@ import shutil
 import sys
 
 # (what, checks, required, needed for, how to get it); a check is (kind, name)
-CHECKS = [("KLayout", [("program", "klayout")], True, "DRC/LVS, viewing GDS", "sudo install/system.sh"), ("KiCad 10", [("kicad", "")], True, "gds2hyp from a board or GDS, pex on boards, lvs", "./install.sh (layz's own KiCad: install/kicad.sh)"), ("FasterCap", [("solver", "fastercap")], True, "pex, field", "./install.sh"), ("gdscheck", [("solver", "gdscheck")], True, "drc", "./install.sh"), ("Python modules", [("module", "klayout.db"), ("module", "klayout_pex"), ("module", "shapely")], True, "everything", "./install.sh"), ("HyperLynx", [("hyperlynx", "")], False, "hyp", "licensed; set LAYZ_HYPERLYNX_HOME to its SDD_HOME"), ("FastCap2", [("solver", "fastcap2")], False, "pex --solver fastcap2", "sudo install/system.sh, then ./install.sh"), ("ParaView", [("program", "pvpython")], False, "view", "./install.sh")]
+CHECKS = [("KLayout", [("klayout", "")], True, "DRC/LVS, viewing GDS", "sudo install/system.sh"), ("KiCad 10", [("kicad", "")], True, "gds2hyp from a board or GDS, pex on boards, lvs", "./install.sh (layz's own KiCad: install/kicad.sh)"), ("FasterCap", [("solver", "fastercap")], True, "pex, field", "./install.sh"), ("gdscheck", [("solver", "gdscheck")], True, "drc", "./install.sh"), ("Python modules", [("module", "klayout.db"), ("module", "klayout_pex"), ("module", "shapely")], True, "everything", "./install.sh"), ("HyperLynx", [("hyperlynx", "")], False, "hyp", "licensed; set LAYZ_HYPERLYNX_HOME to its SDD_HOME"), ("FastCap2", [("solver", "fastcap2")], False, "pex --solver fastcap2", "sudo install/system.sh, then ./install.sh"), ("ParaView", [("program", "pvpython")], False, "view", "./install.sh")]
 
 
 def _short(path: str) -> str:
@@ -39,6 +39,11 @@ def _check(kind: str, name: str) -> tuple[bool, str]:
             return True, _short(solvers.find(name))
         except SystemExit:
             return False, "not found"
+    if kind == "klayout":  # on PATH, or a macOS app
+        from layz.cli import find_klayout
+
+        exe = find_klayout()
+        return (exe is not None), (_short(exe) if exe else "not found")
     if kind == "kicad":  # layz's own KiCad: kicad-cli and pcbnew in its environment
         import subprocess
 
