@@ -15,7 +15,7 @@ TOOLS=${TOOLS:-${XDG_DATA_HOME:-$HOME/.local/share}/layz}
 ENV="$TOOLS/kicad-env"
 # what the KiCad steps import (the rest of layz runs in .layz-env): KiCad's Python may be old
 # (3.9 in KiCad.app, 3.11 in the AppImage), so nothing here needs a newer one
-PACKAGES=("klayout>=0.30" numpy "tomli; python_version < '3.11'")
+PACKAGES=("klayout>=0.28" numpy "tomli; python_version < '3.11'")
 
 case "$(os_family)" in
     macos)
@@ -60,7 +60,9 @@ if [ ! -x "$ENV/bin/python" ] || [ "$(cat "$ENV/.kicad-python" 2>/dev/null)" != 
     echo "$py" > "$ENV/.kicad-python"
 fi
 "$ENV/bin/python" -m pip install --quiet --upgrade pip
-"$ENV/bin/python" -m pip install --quiet "${PACKAGES[@]}"
+# ready-made packages only: pip then takes the newest that has one for this Python (klayout
+# 0.30.7 for 3.9) instead of trying to compile a newer one
+"$ENV/bin/python" -m pip install --quiet --only-binary :all: "${PACKAGES[@]}"
 
 v="$("$ENV/bin/python" -c 'import pcbnew; print(pcbnew.Version())')" || die "KiCad's pcbnew doesn't import in $ENV"
 echo "KiCad $("$cli" --version): kicad-cli and pcbnew ($v) in $TOOLS"
