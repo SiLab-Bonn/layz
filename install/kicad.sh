@@ -52,12 +52,15 @@ case "$(os_family)" in
         ;;
 esac
 
-# the KiCad environment, on KiCad's Python; made again when it was made from another one
-if [ ! -x "$ENV/bin/python" ] || [ "$(cat "$ENV/.kicad-python" 2>/dev/null)" != "$py" ]; then
+# the KiCad environment, on KiCad's Python, seeing KiCad's own packages (pcbnew lives in them:
+# KiCad.app's Python keeps them where a plain venv doesn't look); made again when it was made
+# another way
+made="$py --system-site-packages"
+if [ ! -x "$ENV/bin/python" ] || [ "$(cat "$ENV/.kicad-python" 2>/dev/null)" != "$made" ]; then
     rm -rf "$ENV"
     echo "making $ENV on KiCad's Python ($("$py" -c 'import sys; print("%d.%d" % sys.version_info[:2])'))"
-    "$py" -m venv "$ENV"
-    echo "$py" > "$ENV/.kicad-python"
+    "$py" -m venv --system-site-packages "$ENV"
+    echo "$made" > "$ENV/.kicad-python"
 fi
 "$ENV/bin/python" -m pip install --quiet --upgrade pip
 # ready-made packages only: pip then takes the newest that has one for this Python (klayout
