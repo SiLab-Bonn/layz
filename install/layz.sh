@@ -23,9 +23,14 @@ if [ ! -x "$LAYZ_ENV/bin/python" ]; then
     echo "layz: making $LAYZ_ENV with $python (Python $version)"
     "$python" -m venv --system-site-packages "$LAYZ_ENV"
 fi
+# the package was src/ before 7825024: a pull leaves that folder with only Python's caches in it
+if [ -d "$repo/src" ] && [ -z "$(find "$repo/src" -type f ! -path '*/__pycache__/*' -print -quit)" ]; then
+    rm -rf "$repo/src"
+fi
 "$LAYZ_ENV/bin/python" -m pip install --quiet --upgrade pip
 echo "layz: pip install --editable $repo"
-"$LAYZ_ENV/bin/python" -m pip install --quiet --editable "$repo"
+# pip's output (setuptools' notes on editable installs) only if it fails
+out="$("$LAYZ_ENV/bin/python" -m pip install --quiet --editable "$repo" 2>&1)" || { echo "$out" >&2; exit 1; }
 
 onpath_link "$LAYZ_ENV/bin/layz" layz
 onpath_done
