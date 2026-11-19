@@ -24,19 +24,20 @@ def kits() -> list[str]:
 
 
 def top_cell(gds: Path) -> str:
-    import klayout.db as db
+    from klayout import db
+
     layout = db.Layout()
     layout.read(str(gds))
     tops = layout.top_cells()
     if len(tops) != 1:
-        raise SystemExit(f"{gds}: {len(tops)} top cells ({', '.join(c.name for c in tops)}); "
-                         "pick one with --topcell")
+        raise SystemExit(f"{gds}: {len(tops)} top cells ({', '.join(c.name for c in tops)}); pick one with --topcell")
     return tops[0].name
 
 
 def suite_rules(kit: str, suite: str) -> list[tuple[str, str]]:
     """(deck, rule id) of every rule a suite runs, in order."""
     import yaml
+
     base = DRC_DIR / kit
     pdk = yaml.safe_load((base / "pdk.yml").read_text())
     decks = {d["name"]: base / d["path"] for d in pdk.get("decks", [])}
@@ -55,25 +56,23 @@ def benchmark(gdscheck: str, args, top: str) -> int:
     suite per rule in a temporary copy of the kit's deck (gdscheck has no per-rule timing)."""
     import tempfile
     import time
+
     import yaml
+
     rules = suite_rules(args.kit, args.suite)
     with tempfile.TemporaryDirectory() as tmp:
         kit_dir = Path(tmp) / args.kit
         shutil.copytree(DRC_DIR / args.kit, kit_dir)
         pdk = yaml.safe_load((kit_dir / "pdk.yml").read_text())
         for n, (deck, rule) in enumerate(rules):
-            (kit_dir / "suites" / f"_p{n}.yml").write_text(
-                yaml.safe_dump({"include": [{"deck": deck, "rules": [rule]}]}))
+            (kit_dir / "suites" / f"_p{n}.yml").write_text(yaml.safe_dump({"include": [{"deck": deck, "rules": [rule]}]}))
             pdk["suites"].append({"name": f"_p{n}", "path": f"suites/_p{n}.yml", "description": rule})
         (kit_dir / "pdk.yml").write_text(yaml.safe_dump(pdk, sort_keys=False))
         rows = []
-        print(f"benchmarking {len(rules)} rules of {args.kit}/{args.suite} on {args.lay} "
-              f"(tile {args.tile:g} µm) ...", flush=True)
+        print(f"benchmarking {len(rules)} rules of {args.kit}/{args.suite} on {args.lay} (tile {args.tile:g} µm) ...", flush=True)
         for n, (deck, rule) in enumerate(rules):
             t0 = time.perf_counter()
-            r = subprocess.run([gdscheck, "run", "--pdk-path", tmp, "-p", args.kit, "-s", f"_p{n}",
-                                "-t", top, "--tile", str(args.tile), "-i", str(args.lay)],
-                               capture_output=True, text=True)
+            r = subprocess.run([gdscheck, "run", "--pdk-path", tmp, "-p", args.kit, "-s", f"_p{n}", "-t", top, "--tile", str(args.tile), "-i", str(args.lay)], capture_output=True, text=True)
             dt = time.perf_counter() - t0
             found = next((l.split()[0] for l in r.stdout.splitlines() if l.endswith("violation(s):")), "0")
             rows.append((dt, rule, deck, found))
@@ -92,16 +91,13 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("-o", "--out", type=Path, help="report (.lyrdb; default: next to the layout)")
     ap.add_argument("--suite", default="main", help="gdscheck suite (default: main)")
     ap.add_argument("--topcell", help="top cell (default: the layout's only top cell)")
-    ap.add_argument("--tile", type=float, default=20000.0,
-                    help="gdscheck merge tile, µm (default 20000: board/RDL scale, ~5x faster than "
-                         "2 mm on the obelix1 ladder; gdscheck's own 20 µm is for chips)")
-    ap.add_argument("--benchmark", action="store_true",
-                    help="time each rule on its own (slowest first) instead of one combined run; "
-                         "no report is written")
+    ap.add_argument("--tile", type=float, default=20000.0, help="gdscheck merge tile, µm (default 20000: board/RDL scale, ~5x faster than 2 mm on the obelix1 ladder; gdscheck's own 20 µm is for chips)")
+    ap.add_argument("--benchmark", action="store_true", help="time each rule on its own (slowest first) instead of one combined run; no report is written")
     ap.add_argument("-v", "--verbose", action="store_true", help="every violation's message")
     args = ap.parse_args(argv)
 
     from layz import solvers
+
     gdscheck = solvers.find("gdscheck")
     if args.kit not in kits():
         raise SystemExit(f"no DRC deck for kit {args.kit!r}; have: {', '.join(kits())}")
@@ -109,8 +105,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.benchmark:
         return benchmark(gdscheck, args, top)
     out = args.out or args.lay.with_suffix(".lyrdb")
-    cmd = [gdscheck, "run", "--pdk-path", str(DRC_DIR), "-p", args.kit, "-s", args.suite,
-           "-t", top, "--tile", str(args.tile), "-i", str(args.lay), "-r", str(out)]
+    cmd = [gdscheck, "run", "--pdk-path", str(DRC_DIR), "-p", args.kit, "-s", args.suite, "-t", top, "--tile", str(args.tile), "-i", str(args.lay), "-r", str(out)]
     if args.verbose:
         cmd.append("-v")
     rc = subprocess.call(cmd)

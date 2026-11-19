@@ -12,7 +12,7 @@ import os
 import re
 import sys
 
-import hyperlynx as h  # noqa: F401  (HyperLynx's module; re-exported for the runners)
+import hyperlynx as h
 
 
 def say(*args) -> None:
@@ -25,13 +25,36 @@ def load_job() -> dict:
         return json.load(f)
 
 
+# layz's names for HyperLynx's enumerations
+ENUMS = {
+    "operation": {"standard": h.hlSimOpStandard, "eye": h.hlSimOpEyeDiagram},
+    "simulator": {"auto": h.hlSimTypeAuto, "hypersim": h.hlSimTypeHyperSim, "adms": h.hlSimTypeADMS, "hspice": h.hlSimTypeHSPICE},
+    "corner": {"worst": h.hlSimCornerWorst, "typical": h.hlSimCornerTypical, "best": h.hlSimCornerBest},
+    "probe": {"pin": h.hlSimProbeAtPin, "die": h.hlSimProbeAtDie, "model": h.hlSimProbeByModel},
+    "stimulus_scope": {"global": h.hlStimScopeGlobal, "per_net_pin": h.hlStimScopePerNetPin},
+    "bit_sequence": {"edge": h.hlBitSequenceEdge, "oscillator": h.hlBitSequenceOscillator, "prbs": h.hlBitSequencePBRS, "8b10b": h.hlBitSequence10B8B, "64b66b": h.hlBitSequence64B66B, "128b130b": h.hlBitSequence128B130B, "128b132b": h.hlBitSequence128B132B},
+    "initial_state": {"low": h.hlStimInitStateLow, "high": h.hlStimInitStateHigh},
+    "method": {"electrical": h.hlCrosstalkElectrical, "geometric": h.hlCrosstalkGeometric},
+    "driver_state": {"low": h.hlDrvStateLow, "high": h.hlDrvStateHigh, "switching": h.hlDrvStateSwitching},
+    "vrm_type": {"simple": h.hlVRMTypeSimple, "advanced": h.hlVRMTypeAdvanced},
+    "sweep": {"linear": h.hlFreqSweepLinear, "log": h.hlFreqSweepLog, "adaptive": h.hlFreqSweepAdaptive},
+    "tolerance": {"low": h.hlFreqSweepToleranceLow, "medium": h.hlFreqSweepToleranceMedium, "high": h.hlFreqSweepToleranceHigh},
+}
+
+
+def enum(kind: str, name: str) -> int:
+    """HyperLynx's value for one of layz's names (ENUMS); exits naming the choices otherwise."""
+    if name not in ENUMS[kind]:
+        sys.exit(f"{kind} {name!r}: one of {', '.join(ENUMS[kind])}")
+    return ENUMS[kind][name]
+
+
 def open_board(job: dict):
     """HLApplication with the board open; exits with HyperLynx's message if it won't open."""
     app = h.HLApplication()
-    app.SetLicenseCollections(job.get("license_collection", "HyperLynx SI/PI"))
+    app.SetLicenseCollections(job["license"])
     if not app.LicensesWereAcquired():
-        sys.exit(f"no HyperLynx license from collection {job.get('license_collection')!r}: "
-                 "check MGLS_LICENSE_FILE and the collection's name (as in the GUI's licensing dialog)")
+        sys.exit(f"no HyperLynx license from collection {job['license']!r}: check MGLS_LICENSE_FILE and the collection's name (as in the GUI's licensing dialog)")
     if not app.OpenFile(os.path.abspath(job["board"])):
         sys.exit(f"HyperLynx cannot open {job['board']}: {app.LastError or 'see bsw.log in the run folder'}")
     return app
@@ -58,8 +81,7 @@ def vrms(design) -> list[dict]:
     out = []
     for v in design.VRMs:
         for ph in v.VRMPhases:
-            out.append({"voltage": v.Voltage, "power_net": ph.PowerNet, "power_pins": [str(p) for p in ph.PowerPins],
-                        "ref_net": ph.RefNet, "ref_pins": [str(p) for p in ph.RefPins]})
+            out.append({"voltage": v.Voltage, "power_net": ph.PowerNet, "power_pins": [str(p) for p in ph.PowerPins], "ref_net": ph.RefNet, "ref_pins": [str(p) for p in ph.RefPins]})
     return out
 
 

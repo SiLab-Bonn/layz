@@ -1,23 +1,11 @@
-"""Signal integrity (HyperLynx BoardSim): waveforms or an eye of one net, optionally with loss,
-crosstalk from driven aggressors, and stimulus jitter. Needs an X display (EZwave): layz runs it
-under xvfb-run.
+"""Signal integrity (HyperLynx BoardSim): waveforms or an eye of one net, at full resolution.
+Needs an X display (EZwave): layz runs it under xvfb-run.
 
-Job options:
-    net          the net to simulate (its pair, *_P/*_N, comes along)
-    mode         "eye" (PRBS, eye diagram), "std" (a pattern) or "osc" (every driver toggles at
-                 bitrate/2: a clock, used for crosstalk from aggressors)
-    bitrate      bit/s (eye, std) or 2 x clock frequency (osc)
-    prbs_order, repetitions, stop_s (std/osc), step_s
-    lossy, roughness, trapezoid   realistic line models (default: all on)
-    crosstalk    couple to neighbouring nets (needs lossy); aggressors are the nets with switching
-                 drivers within reach
-    aggressors   [{"driver": "V4.114", "receivers": ["VTX2.114"]}, ...]: give these pins the stock
-                 IBIS CMOS driver/receiver (modvsez.ibs) and switch them
-    victim_quiet hold the net's own drivers low (measure only what couples in)
-    jitter       {"Gaussian": 1e-10, "Sine": 3e-10, "SineFreq": 5e6, ...} in seconds
-    xt_threshold V, aggressors coupling less than this are left out (default 0.001)
+Every setting comes from the job (layz.hyperlynx.run.si documents them); nothing is left to what
+the board's project file last saved. The one fixed choice: results go to EZwave, the only target
+whose waveforms HyperLynx saves at full resolution (the oscilloscope gives 1024 points).
 
-Outputs: one CSV per waveform (full resolution), si.json (settings as HyperLynx read them back).
+Outputs: one CSV per waveform, si.json (the settings as HyperLynx reads them back).
 
 Order matters: select the net first; choosing the target, operation or stimulus resets the
 crosstalk switches, so those go last, and Apply() resets Crosstalk itself, so it is set again.
@@ -25,95 +13,136 @@ crosstalk switches, so those go last, and Apply() resets Crosstalk itself, so it
 
 import os
 
-from common import h, load_job, open_board, save_waves, say, write_json
+from common import ENUMS, enum, h, load_job, open_board, save_waves, say, write_json
 
 job = load_job()
 out = os.path.abspath(job["out"])
 app = open_board(job)
 d, sim = app.Design, app.Simulator
-net = job["net"]
-if d.FindNet(net) is None:
-    raise SystemExit(f"no net {net!r}")
-d.SelectNet(net)
 
-for g in job.get("aggressors", []):
-    for pin, io in [(g["driver"], h.hlIoDirOutput)] + [(r, h.hlIoDirInput) for r in g.get("receivers", [])]:
+# the net
+if d.FindNet(job["net"]) is None:
+    raise SystemExit(f"no net {job['net']!r}")
+d.SelectNet(job["net"])
+
+# models: aggressors get the given IBIS model and switch; other pins' driver states as given
+for g in job["aggressors"]:
+    for pin, io in [(g["driver"], h.hlIoDirOutput)] + [(r, h.hlIoDirInput) for r in g["receivers"]]:
         p = d.FindPin(pin)
         if p is None:
             raise SystemExit(f"aggressor pin {pin!r} not found")
-        if not p.AssignModel("modvsez.ibs", "MODvsEZIBIS", "3"):
-            raise SystemExit(f"cannot give {pin} the stock IBIS model: {app.LastError}")
+        if not p.AssignModel(g["lib"], g["device"], g["model"]):
+            raise SystemExit(f"cannot give {pin} the model {g['lib']} {g['device']} {g['model']}: {app.LastError}")
         p.Model.IoDir = io
         if io == h.hlIoDirOutput:
             p.Model.DrvState = h.hlDrvStateSwitching
-    say(f"aggressor {g['driver']} -> {', '.join(g.get('receivers', []))}")
+    say(f"aggressor {g['driver']} -> {', '.join(g['receivers'])}")
+for pin, state in job["driver_states"].items():
+    p = d.FindPin(pin)
+    if p is None or p.Model is None:
+        raise SystemExit(f"pin {pin!r} not found, or without a model")
+    p.Model.DrvState = enum("driver_state", state)
+    say(f"{pin} driver {state}")
 
-pair = [net] + ([net[:-1] + ("P" if net.endswith("N") else "N")] if net[-1:] in "NP" else [])
-if job.get("victim_quiet"):
-    for p in [q for n in pair if d.FindNet(n) is not None for q in d.FindNet(n).Pins]:
-        if p.Model is not None and p.Model.IoDir == h.hlIoDirOutput:
-            p.Model.DrvState = h.hlDrvStateLow
-            say(f"victim driver {p.FullName} held low")
+# simulator, target, operation
+sim.Type = enum("simulator", job["simulator"])
+sim.Corner = enum("corner", job["corner"])
+sim.ProbePosition = enum("probe", job["probe"])
+sim.Target = h.hlSimResultTargetEZWave
+sim.Operation = enum("operation", job["operation"])
+sim.StimScope = enum("stimulus_scope", job["stimulus_scope"])
 
-# target, operation, stimulus
-sim.Target = h.hlSimResultTargetEZWave  # full-resolution waveforms (the oscilloscope gives 1024 points)
-mode = job.get("mode", "eye")
+# stimulus
 st = sim.Stimulus
-if mode == "eye":
-    sim.Operation = h.hlSimOpEyeDiagram
-    st.BitSequenceType = h.hlBitSequencePBRS
-    st.BitOrder = int(job.get("prbs_order", 7))
-    st.Repetitions = int(job.get("repetitions", 4))
-elif mode == "osc":
-    sim.Operation = h.hlSimOpStandard
-    st.BitSequenceType = h.hlBitSequenceOscillator
-else:
-    sim.Operation = h.hlSimOpStandard
-bitrate = float(job.get("bitrate", 160e6))
-# a PRBS/pattern stimulus takes the bit rate; the oscillator its clock frequency, half of it
-st.Frequency = bitrate / 2 if mode == "osc" else bitrate
-for k in ("Gaussian", "Sine", "Uniform", "Distortion"):
-    setattr(st.Jitter, k, 0.0)
-for k, v in (job.get("jitter") or {}).items():
-    setattr(st.Jitter, k, float(v))
-if job.get("stop_s"):
-    sim.StopAuto = False
+st.BitSequenceType = enum("bit_sequence", job["bit_sequence"])
+st.BitOrder = int(job["prbs_order"])
+st.Repetitions = int(job["repetitions"])
+st.Frequency = float(job["frequency"])
+st.DutyCycle = float(job["duty_cycle"])
+st.InitialState = enum("initial_state", job["initial_state"])
+jitter_keys = ("Gaussian", "GaussianFreq", "Sine", "SineFreq", "SineInitPhase", "Uniform", "UniformMean", "Distortion")
+if set(job["jitter"]) != set(jitter_keys):
+    raise SystemExit(f"jitter needs exactly {', '.join(jitter_keys)}")
+for k in jitter_keys:
+    setattr(st.Jitter, k, float(job["jitter"][k]))
+
+# time
+sim.StopAuto = job["stop_s"] is None
+if job["stop_s"] is not None:
     sim.StopTime = float(job["stop_s"])
-else:
-    sim.StopAuto = True
-if job.get("step_s"):
-    sim.StepAuto = False
+sim.StepAuto = job["step_s"] is None
+if job["step_s"] is not None:
     sim.Step = float(job["step_s"])
 
 # line models and crosstalk, last
-xt_on = bool(job.get("crosstalk"))
 ss = d.SimSettings
-ss.Lossy = bool(job.get("lossy", True)) or xt_on  # crosstalk is off unless the simulation is lossy
-ss.SurfaceRoughness = bool(job.get("roughness", True))
-ss.TrapezoidTraces = bool(job.get("trapezoid", True))
-ss.Crosstalk = xt_on
+if job["crosstalk"] and not job["lossy"]:
+    raise SystemExit("crosstalk needs lossy=True (HyperLynx switches crosstalk off in lossless runs)")
+ss.Lossy = bool(job["lossy"])
+ss.SurfaceRoughness = bool(job["roughness"])
+ss.TrapezoidTraces = bool(job["trapezoid"])
+ss.NonfunctionPads = bool(job["nonfunctional_pads"])
+ss.Crosstalk = bool(job["crosstalk"])
 xt = d.CrosstalkSettingsEx
-xt.TraceCoupling.Enabled = xt_on
-xt.AreaFillCoupling.Enabled = xt_on
-if xt_on:
-    xt.TraceCoupling.Threshold = float(job.get("xt_threshold", 0.001))
-    xt.TraceCoupling.MaxDistToAggressor = float(job.get("xt_max_distance_m", 0.5e-3))
+tc, af, sp = job["trace_coupling"], job["area_fill_coupling"], job["sparameter_coupling"]
+xt.TraceCoupling.Enabled = bool(tc["enabled"])
+xt.TraceCoupling.Method = enum("method", tc["method"])
+xt.TraceCoupling.Threshold = float(tc["threshold"])
+xt.TraceCoupling.MaxDistToAggressor = float(tc["max_distance"])
+xt.TraceCoupling.MinCoupleSegLen = float(tc["min_segment"])
+xt.TraceCoupling.HorzNeighborLim = int(tc["horizontal_neighbours"])
+xt.TraceCoupling.VertNeighborLim = int(tc["vertical_neighbours"])
+xt.TraceCoupling.NonParallel = bool(tc["nonparallel"])
+xt.TraceCoupling.Self = bool(tc["self"])
+xt.AreaFillCoupling.Enabled = bool(af["enabled"])
+xt.AreaFillCoupling.Grid = float(af["grid"])
+xt.AreaFillCoupling.SearchDist = float(af["search_distance"])
+xt.SParameterCoupling.ConnectorEnabled = bool(sp["connector"])
+xt.SParameterCoupling.ConnectorThreshold = float(sp["connector_threshold"])
+xt.SParameterCoupling.PackageEnabled = bool(sp["package"])
+xt.SParameterCoupling.PackageThreshold = float(sp["package_threshold"])
+xt.SParameterCoupling.EMEnabled = bool(sp["em"])
+xt.SParameterCoupling.EMThreshold = float(sp["em_threshold"])
+xt.SParameterCoupling.MinFreq = float(sp["fmin"])
+xt.SParameterCoupling.MaxFreq = float(sp["fmax"])
 xt.Apply()
-ss.Crosstalk = xt_on
+ss.Crosstalk = bool(job["crosstalk"])
+if bool(job["crosstalk"]) != bool(ss.Crosstalk):
+    raise SystemExit("HyperLynx switched crosstalk off (it needs a lossy simulation and a selected net)")
 
+# the settings as HyperLynx reads them back
+names = {kind: {v: k for k, v in table.items()} for kind, table in ENUMS.items()}
 jt = st.Jitter
 settings = {
-    "net": net, "mode": mode, "bitrate": bitrate, "stimulus_frequency": st.Frequency, "operation": sim.Operation,
-    "lossy": ss.Lossy, "roughness": ss.SurfaceRoughness, "trapezoid": ss.TrapezoidTraces,
-    "crosstalk": ss.Crosstalk, "trace_coupling": xt.TraceCoupling.Enabled, "areafill_coupling": xt.AreaFillCoupling.Enabled,
-    "jitter": {k: getattr(jt, k) for k in ("Gaussian", "Sine", "SineFreq", "Uniform", "Distortion")},
-    "aggressors": job.get("aggressors", []), "victim_quiet": bool(job.get("victim_quiet")),
+    "net": job["net"],
+    "operation": names["operation"].get(sim.Operation),
+    "mode": "eye" if sim.Operation == h.hlSimOpEyeDiagram else "standard",
+    "simulator": names["simulator"].get(sim.Type),
+    "corner": names["corner"].get(sim.Corner),
+    "probe": names["probe"].get(sim.ProbePosition),
+    "stimulus_scope": names["stimulus_scope"].get(sim.StimScope),
+    "bit_sequence": names["bit_sequence"].get(st.BitSequenceType),
+    "prbs_order": st.BitOrder,
+    "repetitions": st.Repetitions,
+    "frequency": st.Frequency,
+    "bitrate": 2 * st.Frequency if st.BitSequenceType == h.hlBitSequenceOscillator else st.Frequency,
+    "duty_cycle": st.DutyCycle,
+    "initial_state": names["initial_state"].get(st.InitialState),
+    "stop_s": None if sim.StopAuto else sim.StopTime,
+    "step_s": None if sim.StepAuto else sim.Step,
+    "jitter": {k: getattr(jt, k) for k in jitter_keys},
+    "lossy": ss.Lossy,
+    "roughness": ss.SurfaceRoughness,
+    "trapezoid": ss.TrapezoidTraces,
+    "nonfunctional_pads": ss.NonfunctionPads,
+    "crosstalk": ss.Crosstalk,
+    "trace_coupling": {"enabled": xt.TraceCoupling.Enabled, "method": names["method"].get(xt.TraceCoupling.Method), "threshold": xt.TraceCoupling.Threshold, "max_distance": xt.TraceCoupling.MaxDistToAggressor, "min_segment": xt.TraceCoupling.MinCoupleSegLen, "horizontal_neighbours": xt.TraceCoupling.HorzNeighborLim, "vertical_neighbours": xt.TraceCoupling.VertNeighborLim, "nonparallel": xt.TraceCoupling.NonParallel, "self": xt.TraceCoupling.Self},
+    "area_fill_coupling": {"enabled": xt.AreaFillCoupling.Enabled, "grid": xt.AreaFillCoupling.Grid, "search_distance": xt.AreaFillCoupling.SearchDist},
+    "driver_states": job["driver_states"],
+    "aggressors": job["aggressors"],
 }
-if xt_on and not ss.Crosstalk:
-    raise SystemExit("HyperLynx switched crosstalk off (it needs a lossy simulation and a selected net)")
-say("settings: " + ", ".join(f"{k}={v}" for k, v in settings.items() if k not in ("aggressors",)))
-ok = sim.Run()
-if not ok:
+say("settings: " + ", ".join(f"{k}={v}" for k, v in settings.items() if k not in ("aggressors", "trace_coupling", "area_fill_coupling")))
+if not sim.Run():
     raise SystemExit(f"simulation failed: {app.LastError or 'see bsw.log in the run folder'}")
 settings["waves"] = save_waves(sim.Result, out)
 write_json(os.path.join(out, "si.json"), settings)

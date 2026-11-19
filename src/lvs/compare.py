@@ -43,12 +43,12 @@ import klayout.rdb as krdb
 
 from layz import stack as stackfile
 
-
 # ------------------------------------------------------------------------------- schematic side
+
 
 @dataclass
 class Schematic:
-    nets: dict[str, set[tuple[str, str]]]          # net name -> {(ref, pin)}
+    nets: dict[str, set[tuple[str, str]]]  # net name -> {(ref, pin)}
     pin_net: dict[tuple[str, str], str] = field(default_factory=dict)
 
     def __post_init__(self):
@@ -79,22 +79,22 @@ def schematic_netlist(path: Path) -> Schematic:
             raise SystemExit("kicad-cli not found: export the netlist in KiCad and pass the .net file")
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "netlist.net"
-            subprocess.run([cli, "sch", "export", "netlist", "--format", "kicadsexpr", "-o", str(out), str(path)],
-                           check=True, capture_output=True)
+            subprocess.run([cli, "sch", "export", "netlist", "--format", "kicadsexpr", "-o", str(out), str(path)], check=True, capture_output=True)
             return read_netlist(out.read_text(encoding="utf-8"))
     return read_netlist(path.read_text(encoding="utf-8"))
 
 
 # ------------------------------------------------------------------------------- layout side
 
+
 @dataclass
 class Label:
     text: str
-    x: float          # µm
+    x: float  # µm
     y: float
-    layer: str        # the label's L/D
-    copper: str       # the copper layer (L/D) it names
-    net: int | None   # layout net it sits on (cluster id), None: on no copper
+    layer: str  # the label's L/D
+    copper: str  # the copper layer (L/D) it names
+    net: int | None  # layout net it sits on (cluster id), None: on no copper
 
 
 def _ld(s: str) -> tuple[int, int]:
@@ -159,16 +159,16 @@ def extract(gds: Path, process, extra_labels: list[str]) -> tuple[dict[int, str]
                 continue
             p = sh.text_pos
             net = l2n.probe_net(copper[cu], kdb.Point(p.x, p.y))
-            labels.append(Label(sh.text_string.strip(), p.x * dbu, p.y * dbu, lab, cu,
-                                net.cluster_id if net is not None else None))
+            labels.append(Label(sh.text_string.strip(), p.x * dbu, p.y * dbu, lab, cu, net.cluster_id if net is not None else None))
     return nets, labels, names
 
 
 # ------------------------------------------------------------------------------- comparison
 
+
 @dataclass
 class Finding:
-    kind: str                     # open | short | unknown | floating
+    kind: str  # open | short | unknown | floating
     what: str
     where: list[tuple[float, float, str]]  # (x, y, label text) in µm
 
@@ -177,8 +177,8 @@ def compare(sch: Schematic, labels: list[Label]) -> tuple[list[Finding], dict]:
     by_name = {norm(n): n for n in sch.nets}
     pins = {f"{r}.{p}".upper(): (r, p) for r, p in sch.pin_net}
     findings: list[Finding] = []
-    net_of_sch = defaultdict(lambda: defaultdict(list))   # schematic net -> layout net -> labels
-    sch_of_net = defaultdict(lambda: defaultdict(list))   # layout net -> schematic net -> labels
+    net_of_sch = defaultdict(lambda: defaultdict(list))  # schematic net -> layout net -> labels
+    sch_of_net = defaultdict(lambda: defaultdict(list))  # layout net -> schematic net -> labels
     checked_pins, named = set(), set()
     for lab in labels:
         key = lab.text.upper()
@@ -189,31 +189,21 @@ def compare(sch: Schematic, labels: list[Label]) -> tuple[list[Finding], dict]:
             sn = by_name[norm(lab.text)]
             named.add(sn)
         else:
-            findings.append(Finding("unknown", f"label {lab.text!r} names no schematic net or pin",
-                                    [(lab.x, lab.y, lab.text)]))
+            findings.append(Finding("unknown", f"label {lab.text!r} names no schematic net or pin", [(lab.x, lab.y, lab.text)]))
             continue
         if lab.net is None:
-            findings.append(Finding("floating", f"label {lab.text!r} ({sn}) is not on {lab.copper} copper",
-                                    [(lab.x, lab.y, lab.text)]))
+            findings.append(Finding("floating", f"label {lab.text!r} ({sn}) is not on {lab.copper} copper", [(lab.x, lab.y, lab.text)]))
             continue
         net_of_sch[sn][lab.net].append(lab)
         sch_of_net[lab.net][sn].append(lab)
     for sn, parts in sorted(net_of_sch.items()):
         if len(parts) > 1:
-            findings.append(Finding("open", f"{sn} is split over {len(parts)} layout nets",
-                                    [(l.x, l.y, l.text) for labs in parts.values() for l in labs]))
+            findings.append(Finding("open", f"{sn} is split over {len(parts)} layout nets", [(l.x, l.y, l.text) for labs in parts.values() for l in labs]))
     for ln, snets in sorted(sch_of_net.items()):
         if len(snets) > 1:
-            findings.append(Finding("short", f"one layout net joins {', '.join(sorted(snets))}",
-                                    [(l.x, l.y, l.text) for labs in snets.values() for l in labs]))
+            findings.append(Finding("short", f"one layout net joins {', '.join(sorted(snets))}", [(l.x, l.y, l.text) for labs in snets.values() for l in labs]))
     covered = set(net_of_sch)
-    stats = {
-        "schematic nets": len(sch.nets),
-        "checked nets": len(covered),
-        "unchecked nets": sorted(set(sch.nets) - covered),
-        "pins checked": f"{len(checked_pins)} of {len(sch.pin_net)}",
-        "labels": len(labels),
-    }
+    stats = {"schematic nets": len(sch.nets), "checked nets": len(covered), "unchecked nets": sorted(set(sch.nets) - covered), "pins checked": f"{len(checked_pins)} of {len(sch.pin_net)}", "labels": len(labels)}
     return findings, stats
 
 
@@ -236,10 +226,8 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--lay", type=Path, required=True, help="layout (GDS/OASIS)")
     ap.add_argument("--stack", type=Path, required=True, help="layz stack (.toml): copper, vias, label layers")
-    ap.add_argument("--sch", type=Path, required=True,
-                    help="KiCad schematic (.kicad_sch, via kicad-cli) or its netlist (.net, kicadsexpr)")
-    ap.add_argument("--labels", action="append", default=[], metavar="L/D:COPPER",
-                    help="a label layer and the copper layer its texts name, e.g. 80/7:6/0 (repeatable)")
+    ap.add_argument("--sch", type=Path, required=True, help="KiCad schematic (.kicad_sch, via kicad-cli) or its netlist (.net, kicadsexpr)")
+    ap.add_argument("--labels", action="append", default=[], metavar="L/D:COPPER", help="a label layer and the copper layer its texts name, e.g. 80/7:6/0 (repeatable)")
     ap.add_argument("--report", type=Path, help="write a KLayout marker database (.lyrdb) of the findings")
     a = ap.parse_args(argv)
 
@@ -249,8 +237,7 @@ def main(argv: list[str] | None = None) -> int:
     findings, stats = compare(sch, labels)
 
     print(f"layout: {len(nets)} nets, {stats['labels']} labels; schematic: {stats['schematic nets']} nets")
-    print(f"checked: {stats['checked nets']} of {stats['schematic nets']} schematic nets, "
-          f"{stats['pins checked']} pins")
+    print(f"checked: {stats['checked nets']} of {stats['schematic nets']} schematic nets, {stats['pins checked']} pins")
     count = defaultdict(int)
     for f in findings:
         count[f.kind] += 1
@@ -273,8 +260,7 @@ def main(argv: list[str] | None = None) -> int:
         write_report(a.report, ly.top_cell().name, findings)
         print(f"\nwrote {a.report} (layz view {a.report} --lay {a.lay})")
     bad = count["open"] + count["short"] + count["unknown"]
-    print("\nLVS " + ("clean" if not bad and stats["checked nets"] else
-                      "incomplete: no label matched a schematic net" if not bad else "FAILED"))
+    print("\nLVS " + ("clean" if not bad and stats["checked nets"] else "incomplete: no label matched a schematic net" if not bad else "FAILED"))
     return 1 if bad or not stats["checked nets"] else 0
 
 

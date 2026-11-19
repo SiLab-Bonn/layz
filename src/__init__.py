@@ -12,11 +12,10 @@ import sys as _sys
 # own dependencies always come first. Override with LAYZ_KICAD_PYTHONPATH. The module is built for
 # one Python version (Ubuntu 26.04: 3.14), so install layz with that Python (see install.md).
 _KICAD_PATHS = [
-    "/usr/lib/python3/dist-packages",                                   # Debian, Ubuntu
-    f"/usr/lib/python3.{_sys.version_info.minor}/site-packages",       # Arch
-    f"/usr/lib64/python3.{_sys.version_info.minor}/site-packages",     # Fedora
-    "/Applications/KiCad/KiCad.app/Contents/Frameworks/Python.framework/Versions/Current"
-    f"/lib/python3.{_sys.version_info.minor}/site-packages",           # macOS
+    "/usr/lib/python3/dist-packages",  # Debian, Ubuntu
+    f"/usr/lib/python3.{_sys.version_info.minor}/site-packages",  # Arch
+    f"/usr/lib64/python3.{_sys.version_info.minor}/site-packages",  # Fedora
+    f"/Applications/KiCad/KiCad.app/Contents/Frameworks/Python.framework/Versions/Current/lib/python3.{_sys.version_info.minor}/site-packages",  # macOS
 ]
 
 

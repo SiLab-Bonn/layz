@@ -23,4 +23,4 @@ What the API needs, found by trying it (it has no documentation):
   to work.
 """
 
-from layz.hyperlynx.targets import target  # noqa: E402,F401  (for flow files)
+from layz.hyperlynx.targets import target  # noqa: F401  (for flow files)

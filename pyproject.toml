@@ -38,3 +38,18 @@ package-dir = {"layz" = "src"}
 packages = ["layz", "layz.drc", "layz.lvs", "layz.gds2pcb", "layz.gds2hyp", "layz.hyperlynx",
             "layz.hyperlynx.runner", "layz.pex", "layz.field", "layz.field.paraview", "layz.svg"]
 
+
+[tool.ruff]
+line-length = 1000          # one line per statement: no wrapping
+extend-exclude = ["results"]
+
+[tool.ruff.lint]
+extend-select = ["I"]       # sorted imports
+ignore = ["E501", "E731"]   # line length; a lambda bound to a name
+
+[tool.ruff.lint.isort]
+known-first-party = ["layz"]
+split-on-trailing-comma = false
+
+[tool.ruff.format]
+skip-magic-trailing-comma = true

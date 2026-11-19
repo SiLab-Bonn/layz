@@ -43,8 +43,10 @@ def _kicad():
     global pcbnew
     if pcbnew is None:
         import pcbnew as _pcbnew
+
         pcbnew = _pcbnew
     return pcbnew
+
 
 RESISTIVITY = 1.724e-8  # copper bulk resistivity, Ω·m (KiCad's constant)
 
@@ -55,15 +57,14 @@ def iu2hyp(iu: float) -> float:
 
 
 def _shape_ids() -> dict:
-    ids = {pcbnew.PAD_SHAPE_CIRCLE: 0, pcbnew.PAD_SHAPE_OVAL: 0,
-           pcbnew.PAD_SHAPE_RECTANGLE: 1, pcbnew.PAD_SHAPE_ROUNDRECT: 2}
+    ids = {pcbnew.PAD_SHAPE_CIRCLE: 0, pcbnew.PAD_SHAPE_OVAL: 0, pcbnew.PAD_SHAPE_RECTANGLE: 1, pcbnew.PAD_SHAPE_ROUNDRECT: 2}
     return ids
 
 
 @dataclass(frozen=True)
 class PadStack:
-    drill: int                                    # nm, 0 = no hole
-    shapes: tuple                                 # ((layer_id, shape_id, sx, sy), ...)
+    drill: int  # nm, 0 = no hole
+    shapes: tuple  # ((layer_id, shape_id, sx, sy), ...)
     angle: float
 
 
@@ -76,7 +77,7 @@ class HypWriter:
         self.board_cu = [l for l in board.GetEnabledLayers().CuStack()]
         self.stacks: list[PadStack] = []
         self.stack_id: dict[PadStack, int] = {}
-        self.stack_of: dict[str, int] = {}        # pad/via UUID -> padstack id
+        self.stack_of: dict[str, int] = {}  # pad/via UUID -> padstack id
         self.poly_id = 1
         self.shape_ids = _shape_ids()
         self.warned_shapes: set = set()
@@ -141,25 +142,21 @@ class HypWriter:
             for chain in [ps.Outline(i)] + [ps.Hole(i, h) for h in range(ps.HoleCount(i))]:
                 for j in range(chain.SegmentCount()):
                     s = chain.CSegment(j)
-                    self.p(1, "(PERIMETER_SEGMENT X1=%.9f Y1=%.9f X2=%.9f Y2=%.9f)\n" % (
-                        iu2hyp(s.A.x), iu2hyp(-s.A.y), iu2hyp(s.B.x), iu2hyp(-s.B.y)))
+                    self.p(1, "(PERIMETER_SEGMENT X1=%.9f Y1=%.9f X2=%.9f Y2=%.9f)\n" % (iu2hyp(s.A.x), iu2hyp(-s.A.y), iu2hyp(s.B.x), iu2hyp(-s.B.y)))
         self.p(0, "}\n\n")
 
     def stackup(self, process) -> None:
         self.p(0, "{STACKUP\n")
         copper = None
-        n_diel = {}
         for l in process.layers:
             t = iu2hyp(l.thickness_um * 1000)
             if l.type == "copper":
                 copper = l.name
                 self.p(1, '(SIGNAL T=%g P=%g C=%g L="%.20s" M=COPPER)\n' % (t, 0.0, RESISTIVITY, copper))
             elif l.type == "mask":
-                self.p(1, '(DIELECTRIC T=%g C=%g L="%.20s" M="%.20s")\n' % (
-                    t, l.k, l.name, l.material or "Solder Mask"))
+                self.p(1, '(DIELECTRIC T=%g C=%g L="%.20s" M="%.20s")\n' % (t, l.k, l.name, l.material or "Solder Mask"))
             else:
-                self.p(1, '(DIELECTRIC T=%g C=%g L="DE_%.17s" M="%.20s")\n' % (
-                    t, l.k, copper or "", l.material or "FR4"))
+                self.p(1, '(DIELECTRIC T=%g C=%g L="DE_%.17s" M="%.20s")\n' % (t, l.k, copper or "", l.material or "FR4"))
         self.p(0, "}\n\n")
 
     def devices(self) -> None:
@@ -194,11 +191,9 @@ class HypWriter:
     def net_objects(self, code: int) -> list:
         """Pads, then tracks/vias, then zones of a net (code -1: everything without a net)."""
         match = (lambda c: c <= 0) if code < 0 else (lambda c: c == code)
-        objs = [pad for fp in self.b.GetFootprints() for pad in fp.Pads()
-                if match(pad.GetNetCode()) and self._on_copper(pad)]
+        objs = [pad for fp in self.b.GetFootprints() for pad in fp.Pads() if match(pad.GetNetCode()) and self._on_copper(pad)]
         objs += [t for t in self.b.GetTracks() if match(t.GetNetCode()) and self._on_copper(t)]
-        objs += [z for z in self.b.Zones() if not z.GetIsRuleArea() and match(z.GetNetCode())
-                 and self._on_copper(z)]
+        objs += [z for z in self.b.Zones() if not z.GetIsRuleArea() and match(z.GetNetCode()) and self._on_copper(z)]
         return objs
 
     def write_objects(self, objs) -> None:
@@ -209,24 +204,18 @@ class HypWriter:
                 ref = (fp.GetReference() if fp else "") or "EMPTY"
                 num = o.GetNumber() or "1"
                 pos = o.GetPosition()
-                self.p(1, '(PIN X=%.10f Y=%.10f R="%s.%s" P=%d)\n' % (
-                    iu2hyp(pos.x), iu2hyp(-pos.y), ref, num, self.stack_of[o.m_Uuid.AsString()]))
+                self.p(1, '(PIN X=%.10f Y=%.10f R="%s.%s" P=%d)\n' % (iu2hyp(pos.x), iu2hyp(-pos.y), ref, num, self.stack_of[o.m_Uuid.AsString()]))
             elif cls == "PCB_VIA":
                 pos = o.GetPosition()
-                self.p(1, "(VIA X=%.10f Y=%.10f P=%d)\n" % (
-                    iu2hyp(pos.x), iu2hyp(-pos.y), self.stack_of[o.m_Uuid.AsString()]))
+                self.p(1, "(VIA X=%.10f Y=%.10f P=%d)\n" % (iu2hyp(pos.x), iu2hyp(-pos.y), self.stack_of[o.m_Uuid.AsString()]))
             elif cls == "PCB_TRACK":
                 a, b = o.GetStart(), o.GetEnd()
-                self.p(1, '(SEG X1=%.10f Y1=%.10f X2=%.10f Y2=%.10f W=%.10f L="%s")\n' % (
-                    iu2hyp(a.x), iu2hyp(-a.y), iu2hyp(b.x), iu2hyp(-b.y), iu2hyp(o.GetWidth()),
-                    self.b.GetLayerName(o.GetLayer())))
+                self.p(1, '(SEG X1=%.10f Y1=%.10f X2=%.10f Y2=%.10f W=%.10f L="%s")\n' % (iu2hyp(a.x), iu2hyp(-a.y), iu2hyp(b.x), iu2hyp(-b.y), iu2hyp(o.GetWidth()), self.b.GetLayerName(o.GetLayer())))
             elif cls == "PCB_ARC":
                 a, b, c = o.GetStart(), o.GetEnd(), o.GetCenter()
                 if not o.IsCCW():
                     a, b = b, a
-                self.p(1, '(ARC X1=%.10f Y1=%.10f X2=%.10f Y2=%.10f XC=%.10f YC=%.10f R=%.10f W=%.10f L="%s")\n' % (
-                    iu2hyp(a.x), iu2hyp(-a.y), iu2hyp(b.x), iu2hyp(-b.y), iu2hyp(c.x), iu2hyp(-c.y),
-                    iu2hyp(o.GetRadius()), iu2hyp(o.GetWidth()), self.b.GetLayerName(o.GetLayer())))
+                self.p(1, '(ARC X1=%.10f Y1=%.10f X2=%.10f Y2=%.10f XC=%.10f YC=%.10f R=%.10f W=%.10f L="%s")\n' % (iu2hyp(a.x), iu2hyp(-a.y), iu2hyp(b.x), iu2hyp(-b.y), iu2hyp(c.x), iu2hyp(-c.y), iu2hyp(o.GetRadius()), iu2hyp(o.GetWidth()), self.b.GetLayerName(o.GetLayer())))
             elif cls == "ZONE":
                 for layer in o.GetLayerSet().Seq():
                     if not o.HasFilledPolysForLayer(layer):
@@ -288,6 +277,7 @@ def _parse_nets(lines: list[str]):
     import re
 
     from shapely.geometry import Point, Polygon
+
     nets = []
     i = 0
     num = re.compile(r"\b([XY])=([-\d.eE+]+)")
@@ -295,7 +285,7 @@ def _parse_nets(lines: list[str]):
         if not lines[i].startswith("{NET="):
             i += 1
             continue
-        name = lines[i][len('{NET="'):].split('"')[0]
+        name = lines[i][len('{NET="') :].split('"')[0]
         start, polys, anchors, pins, odd = i, {}, [], 0, False
         i += 1
         while i < len(lines) and not lines[i].startswith("}"):
@@ -326,8 +316,7 @@ def _parse_nets(lines: list[str]):
     return nets
 
 
-def add_traces(text: str, select: str = "auto", max_width_mm: float = TRACE_MAX_WIDTH_MM,
-               warn=print) -> tuple[str, list[tuple[str, int, float, float]]]:
+def add_traces(text: str, select: str = "auto", max_width_mm: float = TRACE_MAX_WIDTH_MM, warn=print) -> tuple[str, list[tuple[str, int, float, float]]]:
     """Rewrite a .hyp's strip-shaped pours as traces (SEG records), net by net; see layz.gds2hyp.traces.
 
     ``select``: "auto" (nets with >= 2 pins, >= 95 % of their copper strips, no strip wider than
@@ -338,6 +327,7 @@ def add_traces(text: str, select: str = "auto", max_width_mm: float = TRACE_MAX_
     from shapely.ops import unary_union
 
     from layz.gds2hyp import traces as tr
+
     if select == "none":
         return text, []
     lines = text.splitlines(keepends=True)
@@ -383,8 +373,7 @@ def add_traces(text: str, select: str = "auto", max_width_mm: float = TRACE_MAX_
                 body.append(lines[k])
         for layer, segs in segs_by_layer.items():
             for s in segs:
-                body.append('  (SEG X1=%.10f Y1=%.10f X2=%.10f Y2=%.10f W=%.10f L="%s")\n' % (
-                    s.x1, s.y1, s.x2, s.y2, s.width, layer))
+                body.append('  (SEG X1=%.10f Y1=%.10f X2=%.10f Y2=%.10f W=%.10f L="%s")\n' % (s.x1, s.y1, s.x2, s.y2, s.width, layer))
         for layer, parts in keep_by_layer.items():
             for p in parts:
                 pts = list(p.exterior.coords)
@@ -392,7 +381,7 @@ def add_traces(text: str, select: str = "auto", max_width_mm: float = TRACE_MAX_
                 body += ["    (LINE X=%.10f Y=%.10f)\n" % q for q in pts]
                 body.append("  }\n")
                 poly_id += 1
-        out += lines[done:start + 1] + body
+        out += lines[done : start + 1] + body
         done = end
         length = sum(((s.x2 - s.x1) ** 2 + (s.y2 - s.y1) ** 2) ** 0.5 for v in segs_by_layer.values() for s in v)
         report.append((name, len(widths), length * 25.4, max(widths) * 25.4))
@@ -405,9 +394,7 @@ def board_process(pcb_path: Path, board):
     if process is None:
         cu = [board.GetLayerName(l) for l in board.GetEnabledLayers().CuStack()]
         board_mm = board.GetDesignSettings().GetBoardThickness() / 1e6
-        print(f"warning: {pcb_path.name} has no stackup: writing KiCad's default {board_mm:g} mm FR4 "
-              "stack; use `layz gds2pcb --stack` or set it in Board Setup > Physical Stackup",
-              file=sys.stderr)
+        print(f"warning: {pcb_path.name} has no stackup: writing KiCad's default {board_mm:g} mm FR4 stack; use `layz gds2pcb --stack` or set it in Board Setup > Physical Stackup", file=sys.stderr)
         process = stackfile.kicad_default(cu, board_mm)
     return process
 
@@ -424,8 +411,7 @@ def write_hyp(pcb_path: Path, hyp_path: Path, refill: bool = False) -> None:
 
 def traces_pass(hyp_path: Path, select: str, max_width_mm: float) -> None:
     """Rewrite ``hyp_path`` in place with its strip-shaped pours as traces, and say what changed."""
-    text, report = add_traces(hyp_path.read_text(encoding="utf-8"), select, max_width_mm,
-                              warn=lambda m: print(f"warning: {m}", file=sys.stderr))
+    text, report = add_traces(hyp_path.read_text(encoding="utf-8"), select, max_width_mm, warn=lambda m: print(f"warning: {m}", file=sys.stderr))
     hyp_path.write_text(text, encoding="utf-8")
     if report:
         print(f"pours -> traces: {len(report)} net(s)")
@@ -436,23 +422,14 @@ def traces_pass(hyp_path: Path, select: str, max_width_mm: float) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0],
-                                 epilog="Running HyperLynx on the .hyp: layz hyp {setup,info,dc,si,sparam,plot,run} -h")
-    ap.add_argument("input", type=Path,
-                    help=".kicad_pcb board, a GDS (converted with layz gds2pcb), or a .hyp to rewrite")
+    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0], epilog="Running HyperLynx on the .hyp: layz hyp {setup,info,dc,si,sparam,plot,run} -h")
+    ap.add_argument("input", type=Path, help=".kicad_pcb board, a GDS (converted with layz gds2pcb), or a .hyp to rewrite")
     ap.add_argument("-o", "--out", type=Path, help="output .hyp (default: next to the input)")
     ap.add_argument("--stack", type=Path, help="GDS input: layz process stack (.toml)")
-    ap.add_argument("--keep-pcb", action="store_true",
-                    help="GDS input: keep the intermediate .kicad_pcb next to the .hyp")
-    ap.add_argument("--refill", action="store_true",
-                    help="refill zones with KiCad's zone filler first (default: use the fills as saved)")
-    ap.add_argument("--traces", default="auto", metavar="auto|none|NET,...",
-                    help="write strip-shaped pours as traces (centreline + width), so HyperLynx models "
-                         "their transmission lines, loss and crosstalk: 'auto' (default) every net that "
-                         "is >= 95 %% strips no wider than --trace-max-width, 'none' (KiCad's own output), "
-                         "or the nets named")
-    ap.add_argument("--trace-max-width", type=float, default=TRACE_MAX_WIDTH_MM, metavar="MM",
-                    help=f"auto: widest strip of a net made traces (default {TRACE_MAX_WIDTH_MM} mm)")
+    ap.add_argument("--keep-pcb", action="store_true", help="GDS input: keep the intermediate .kicad_pcb next to the .hyp")
+    ap.add_argument("--refill", action="store_true", help="refill zones with KiCad's zone filler first (default: use the fills as saved)")
+    ap.add_argument("--traces", default="auto", metavar="auto|none|NET,...", help="write strip-shaped pours as traces (centreline + width), so HyperLynx models their transmission lines, loss and crosstalk: 'auto' (default) every net that is >= 95 %% strips no wider than --trace-max-width, 'none' (KiCad's own output), or the nets named")
+    ap.add_argument("--trace-max-width", type=float, default=TRACE_MAX_WIDTH_MM, metavar="MM", help=f"auto: widest strip of a net made traces (default {TRACE_MAX_WIDTH_MM} mm)")
     args = ap.parse_args(argv)
     suffix = args.input.suffix.lower()
     out = args.out or args.input.with_suffix(".hyp")
@@ -467,6 +444,7 @@ def main(argv: list[str] | None = None) -> int:
         if not args.stack:
             ap.error("a GDS input needs --stack (its layer mapping and stackup)")
         from layz.gds2pcb import convert as gds2pcb
+
         with tempfile.TemporaryDirectory() as tmp:
             pcb = out.with_suffix(".kicad_pcb") if args.keep_pcb else Path(tmp) / (out.stem + ".kicad_pcb")
             gds2pcb.main(["--lay", str(args.input), "-o", str(pcb), "--stack", str(args.stack)])

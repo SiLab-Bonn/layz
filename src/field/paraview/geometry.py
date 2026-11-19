@@ -13,8 +13,7 @@ import argparse
 import os
 import re
 
-from paraview.simple import (Clip, CreateView, LoadPalette, OpenDataFile, Render, SaveScreenshot,
-                             SaveState, Show, Threshold, Transform)
+from paraview.simple import Clip, CreateView, LoadPalette, OpenDataFile, Render, SaveScreenshot, SaveState, Show, Threshold, Transform
 
 ap = argparse.ArgumentParser()
 ap.add_argument("run")
@@ -52,16 +51,14 @@ for i, name in owners:
     if i not in diel_ids:
         continue
     k = max(float(x) for x in name.split(":")[1:])
-    one = Threshold(Input=panels, Scalars=["CELLS", "owner"], LowerThreshold=i - 0.5,
-                    UpperThreshold=i + 0.5)
+    one = Threshold(Input=panels, Scalars=["CELLS", "owner"], LowerThreshold=i - 0.5, UpperThreshold=i + 0.5)
     d = Show(stretched(one), view)
     d.ColorArrayName = ["POINTS", ""]
     d.DiffuseColor = [0.25, 0.55 + 0.04 * min(k, 6), 0.35]
     d.Opacity = 0.12 + 0.03 * min(k, 6)
 
 # conductors: copper
-cond = Clip(Input=panels, ClipType="Scalar", Scalars=["CELLS", "owner"],
-            Value=max(cond_ids) + 0.5, Invert=1)
+cond = Clip(Input=panels, ClipType="Scalar", Scalars=["CELLS", "owner"], Value=max(cond_ids) + 0.5, Invert=1)
 cd = Show(stretched(cond), view)
 cd.ColorArrayName = ["POINTS", ""]
 cd.DiffuseColor = [0.80, 0.50, 0.25]

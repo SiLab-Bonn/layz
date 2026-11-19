@@ -63,7 +63,7 @@ import uuid
 from collections import defaultdict
 from pathlib import Path
 
-import klayout.db as db
+from klayout import db
 from pycbnew.primitives.kicad import KiCadObject
 from pycbnew.primitives.net import KNet
 from pycbnew.primitives.project import KProject
@@ -74,22 +74,18 @@ from pycbnew.primitives.zone import KZone
 from pycbnew.utils.geometry import Point
 
 # GDS layer keys for the footprint pad layers.
-FRONT_PAD_LAYER = (8, 0)   # -> F.Cu pads
-BACK_PAD_LAYER = (68, 0)   # -> B.Cu pads
+FRONT_PAD_LAYER = (8, 0)  # -> F.Cu pads
+BACK_PAD_LAYER = (68, 0)  # -> B.Cu pads
 
 # GDS layer carrying the board outline (closed polygons/paths -> Edge.Cuts).
 BOARD_OUTLINE_LAYER = (70, 0)
 OUTLINE_WIDTH_MM = 0.1
 
 # Physical/process defaults (overridable via --layer-map / --via-map).
-DEFAULT_POLYGON_LAYER_MAP: dict[tuple[int, int], str] = {
-    (68, 0): "B.Cu",
-    (3, 0): "In2.Cu",
-    (6, 0): "In1.Cu",
-}
+DEFAULT_POLYGON_LAYER_MAP: dict[tuple[int, int], str] = {(68, 0): "B.Cu", (3, 0): "In2.Cu", (6, 0): "In1.Cu"}
 
 DEFAULT_VIA_LAYER_MAP: dict[tuple[int, int], tuple[str, str]] = {
-    (7, 0): ("F.Cu", "In1.Cu"),   # blind vias under the F.Cu pads
+    (7, 0): ("F.Cu", "In1.Cu"),  # blind vias under the F.Cu pads
     (2, 0): ("B.Cu", "In2.Cu"),
     (4, 0): ("In2.Cu", "In1.Cu"),
 }
@@ -103,42 +99,11 @@ class KFilledZone(KZone):
     """
 
     def __init__(self, *, net: KNet, layer: str, points: list[Point], priority: int = 0):
-        super().__init__(
-            net=net,
-            layer=layer,
-            points=points,
-            hatch_type="none",
-            hatch_size=0.5,
-            clearance=0,
-            min_thickness=0,
-            thermal_gap=0.5,
-            thermal_bridge_width=0.5,
-            priority=priority,
-            connect_pads=KZone.ConnectPads.Solid,
-        )
+        super().__init__(net=net, layer=layer, points=points, hatch_type="none", hatch_size=0.5, clearance=0, min_thickness=0, thermal_gap=0.5, thermal_bridge_width=0.5, priority=priority, connect_pads=KZone.ConnectPads.Solid)
 
     def sexp_tree(self) -> list[list | str]:
         pts = [sexp_xy(pt) for pt in self.points]
-        return [
-            "zone",
-            ["net", f"{self.net.number}"],
-            ["net_name", f'"{self.net.name}"'],
-            ["layer", f'"{self.layer}"'],
-            ["uuid", f'"{self.uuid}"'],
-            ["hatch", self.hatch_type, fnum(self.hatch_size)],
-            ["priority", f"{self.priority}"],
-            ["connect_pads", ["clearance", fnum(self.clearance)]],
-            ["min_thickness", fnum(self.min_thickness)],
-            [
-                "fill",
-                "yes",
-                ["thermal_gap", fnum(self.thermal_gap)],
-                ["thermal_bridge_width", fnum(self.thermal_bridge_width)],
-                ["island_removal_mode", "0"],
-            ],
-            ["polygon", ["pts"] + pts],
-            ["filled_polygon", ["layer", f'"{self.layer}"'], ["pts"] + pts],
-        ]
+        return ["zone", ["net", f"{self.net.number}"], ["net_name", f'"{self.net.name}"'], ["layer", f'"{self.layer}"'], ["uuid", f'"{self.uuid}"'], ["hatch", self.hatch_type, fnum(self.hatch_size)], ["priority", f"{self.priority}"], ["connect_pads", ["clearance", fnum(self.clearance)]], ["min_thickness", fnum(self.min_thickness)], ["fill", "yes", ["thermal_gap", fnum(self.thermal_gap)], ["thermal_bridge_width", fnum(self.thermal_bridge_width)], ["island_removal_mode", "0"]], ["polygon", ["pts"] + pts], ["filled_polygon", ["layer", f'"{self.layer}"'], ["pts"] + pts]]
 
 
 class KFootprintBlock(KiCadObject):
@@ -156,17 +121,7 @@ class KFootprintBlock(KiCadObject):
     rotated_pad_size).
     """
 
-    def __init__(
-        self,
-        name: str,
-        at: Point,
-        angle: float,
-        layer: str,
-        ref: str,
-        value: str,
-        pads: list[tuple[str, Point, tuple[float, float]]],
-        net: KNet,
-    ):
+    def __init__(self, name: str, at: Point, angle: float, layer: str, ref: str, value: str, pads: list[tuple[str, Point, tuple[float, float]]], net: KNet):
         super().__init__()
         self.name = name
         self.at = at
@@ -184,30 +139,9 @@ class KFootprintBlock(KiCadObject):
         if back:
             effects.append(["justify", "mirror"])
 
-        ret: list[list | str] = [
-            "footprint",
-            f'"{self.name}"',
-            ["layer", f'"{self.layer}"'],
-            ["at", fnum(self.at.x), fnum(self.at.y), fnum(self.angle)],
-            ["uuid", f'"{self.uuid}"'],
-            ["descr", f'"GDS cell {self.name}"'],
-            ["tedit", f'"{uuid.uuid4().hex[:16]}"'],
-            ["property", "Reference", f'"{self.ref}"',
-             ["at", "0", "0"], ["layer", f'"{silk}"'], effects],
-            ["property", "Value", f'"{self.value}"',
-             ["at", "0", "-1"], ["layer", '"F.Fab"' if not back else '"B.Fab"'], effects],
-        ]
+        ret: list[list | str] = ["footprint", f'"{self.name}"', ["layer", f'"{self.layer}"'], ["at", fnum(self.at.x), fnum(self.at.y), fnum(self.angle)], ["uuid", f'"{self.uuid}"'], ["descr", f'"GDS cell {self.name}"'], ["tedit", f'"{uuid.uuid4().hex[:16]}"'], ["property", "Reference", f'"{self.ref}"', ["at", "0", "0"], ["layer", f'"{silk}"'], effects], ["property", "Value", f'"{self.value}"', ["at", "0", "-1"], ["layer", '"F.Fab"' if not back else '"B.Fab"'], effects]]
         for pad_id, local, (w, h) in self.pads:
-            ret.append([
-                "pad",
-                f'"{pad_id}"',
-                "smd",
-                "rect",
-                ["net", f"{self.net.number}", f'"{self.net.name}"'],
-                ["at", fnum(local.x), fnum(local.y)],
-                ["size", fnum(w), fnum(h)],
-                sexp_layers([self.layer]),
-            ])
+            ret.append(["pad", f'"{pad_id}"', "smd", "rect", ["net", f"{self.net.number}", f'"{self.net.name}"'], ["at", fnum(local.x), fnum(local.y)], ["size", fnum(w), fnum(h)], sexp_layers([self.layer])])
         return ret
 
 
@@ -306,15 +240,7 @@ def dpolygon_to_points(poly: db.DPolygon, scale: float, flip_y: bool, y_ref_db: 
     return pts
 
 
-def via_from_dpolygon(
-    poly: db.DPolygon,
-    scale: float,
-    flip_y: bool,
-    y_ref_db: float,
-    net: KNet,
-    layers: tuple[str, str],
-    drill_shrink_um: float,
-) -> KVia:
+def via_from_dpolygon(poly: db.DPolygon, scale: float, flip_y: bool, y_ref_db: float, net: KNet, layers: tuple[str, str], drill_shrink_um: float) -> KVia:
     """Convert a GDS via polygon to a circular KiCad via (same approach as v1).
 
     KiCad `via` objects only store circular diameter/drill, so we use the
@@ -329,15 +255,7 @@ def via_from_dpolygon(
     #     drill_size = None
     # if drill_size == 0:
     #     drill_size = None
-    via = KVia(
-        at=to_file_point((bbox.left + bbox.right) / 2, (bbox.bottom + bbox.top) / 2,
-                         scale, flip_y, y_ref_db),
-        net=net,
-        size=size_size,
-        drill=drill_size,
-        layers=layers,
-        via_type="buried" if "F.Cu" not in layers and "B.Cu" not in layers else "blind",
-    )
+    via = KVia(at=to_file_point((bbox.left + bbox.right) / 2, (bbox.bottom + bbox.top) / 2, scale, flip_y, y_ref_db), net=net, size=size_size, drill=drill_size, layers=layers, via_type="buried" if "F.Cu" not in layers and "B.Cu" not in layers else "blind")
     return via
 
 
@@ -353,13 +271,7 @@ def rotated_pad_size(w: float, h: float, angle_deg: float) -> tuple[float, float
     return (w * c + h * s, w * s + h * c)
 
 
-def build_pads(
-    cell: db.Cell,
-    layer_index: int,
-    scale: float,
-    mirrored: bool,
-    angle_deg: float,
-) -> list[tuple[str, Point, tuple[float, float]]]:
+def build_pads(cell: db.Cell, layer_index: int, scale: float, mirrored: bool, angle_deg: float) -> list[tuple[str, Point, tuple[float, float]]]:
     """Build SMD rect pads from a cell's direct shapes on one pad layer.
 
     Local pad coordinates are in KiCad file space: GDS x is kept, GDS y is
@@ -377,25 +289,18 @@ def build_pads(
         cx = (bbox.left + bbox.right) / 2
         cy = (bbox.bottom + bbox.top) / 2
         y_sign = 1.0 if mirrored else -1.0
-        pads.append((
-            Point(cx * scale, y_sign * cy * scale),
-            rotated_pad_size(bbox.width() * scale, bbox.height() * scale, angle_deg),
-            (cy, cx),  # sort key
-        ))
+        pads.append(
+            (
+                Point(cx * scale, y_sign * cy * scale),
+                rotated_pad_size(bbox.width() * scale, bbox.height() * scale, angle_deg),
+                (cy, cx),  # sort key
+            )
+        )
     pads.sort(key=lambda p: p[2])
     return [(str(i + 1), pos, size) for i, (pos, size, _) in enumerate(pads)]
 
 
-def convert_gds_to_kicad(
-    gds_path: Path,
-    pcb_path: Path,
-    polygon_layer_map: dict[tuple[int, int], str],
-    via_layer_map: dict[tuple[int, int], tuple[str, str]],
-    scale_mm_per_um: float,
-    drill_shrink_um: float,
-    flip_y: bool,
-    net_name: str,
-) -> None:
+def convert_gds_to_kicad(gds_path: Path, pcb_path: Path, polygon_layer_map: dict[tuple[int, int], str], via_layer_map: dict[tuple[int, int], tuple[str, str]], scale_mm_per_um: float, drill_shrink_um: float, flip_y: bool, net_name: str) -> None:
     layout = db.Layout()
     layout.read(str(gds_path))
 
@@ -448,10 +353,7 @@ def convert_gds_to_kicad(
                     # (no continue here: iterator.next() must still run below)
                     skipped += 1
                 elif kicad_via_layers is not None:
-                    project.add(via_from_dpolygon(
-                        poly, scale, flip_y, y_ref_db, gds_net,
-                        kicad_via_layers, drill_shrink_um,
-                    ))
+                    project.add(via_from_dpolygon(poly, scale, flip_y, y_ref_db, gds_net, kicad_via_layers, drill_shrink_um))
                     via_counts[(info.layer, info.datatype, *kicad_via_layers)] += 1
                 elif kicad_poly_layer is not None:
                     points = dpolygon_to_points(poly, scale, flip_y, y_ref_db)
@@ -501,13 +403,12 @@ def convert_gds_to_kicad(
         key = (cell_name, angle, mirrored)
         if key not in fp_definitions:
             li = layer_indexes.get(FRONT_PAD_LAYER if layer == "F.Cu" else BACK_PAD_LAYER)
-            work = cell.dup()   # flatten() is non-const; work on a copy
+            work = cell.dup()  # flatten() is non-const; work on a copy
             work.flatten(True)  # expands sub-instances into local shapes
             fp_definitions[key] = build_pads(work, li, scale, mirrored, angle)
             variant = ""
             if angle or mirrored:
-                variant = (" (variant: " + (f"rot {int(angle)}deg" if angle else "")
-                           + (", mirrored" if mirrored else "") + ")")
+                variant = " (variant: " + (f"rot {int(angle)}deg" if angle else "") + (", mirrored" if mirrored else "") + ")"
             print(f"footprint '{cell_name}': {len(fp_definitions[key])} pads on {layer}{variant}")
         if not fp_definitions[key]:
             return
@@ -518,16 +419,7 @@ def convert_gds_to_kicad(
             fp_name += f"_R{int(angle)}"
         if mirrored:
             fp_name += "_M"
-        block = KFootprintBlock(
-            name=fp_name,
-            at=at,
-            angle=angle,
-            layer=layer,
-            ref=f"FP{ref_counter}",
-            value=cell_name,
-            pads=fp_definitions[key],
-            net=gds_net,
-        )
+        block = KFootprintBlock(name=fp_name, at=at, angle=angle, layer=layer, ref=f"FP{ref_counter}", value=cell_name, pads=fp_definitions[key], net=gds_net)
         project.footprints.append(block)
 
     def collect_pad_instances(gds_key: tuple[int, int]):
@@ -550,13 +442,7 @@ def convert_gds_to_kicad(
                 place_footprint(cell, side, at=Point(0, 0), angle=0, mirrored=False)
                 continue
             tx, ty = parse_trans_translation(dt)
-            place_footprint(
-                cell,
-                side,
-                at=to_file_point(tx, ty, scale, flip_y, y_ref_db),
-                angle=dt.rot() * 90,
-                mirrored=dt.is_mirror(),
-            )
+            place_footprint(cell, side, at=to_file_point(tx, ty, scale, flip_y, y_ref_db), angle=dt.rot() * 90, mirrored=dt.is_mirror())
 
     project.save()
     normalize_layer_block(Path(project.filename))
@@ -578,8 +464,7 @@ def convert_gds_to_kicad(
     print("footprint definitions and placements:")
     for cell_name, count in sorted(fp_placements.items()):
         print(f"  {cell_name}: {count} placements")
-    print(f"board outline (GDS {BOARD_OUTLINE_LAYER[0]}/{BOARD_OUTLINE_LAYER[1]} -> Edge.Cuts): "
-          f"{outline_segments} segments")
+    print(f"board outline (GDS {BOARD_OUTLINE_LAYER[0]}/{BOARD_OUTLINE_LAYER[1]} -> Edge.Cuts): {outline_segments} segments")
     if skipped:
         print(f"skipped shapes: {skipped}")
 
@@ -623,32 +508,14 @@ def normalize_layer_block(pcb_path: Path) -> None:
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--lay", type=Path, required=True, help="layout (.gds)")
-    parser.add_argument("-o", "--out", type=Path,
-                        help="KiCad board (default: the layout's name with .kicad_pcb)")
-    parser.add_argument(
-        "--stack", type=Path,
-        help="layz process stack (.toml): sets the GDS layer mapping (copper zones, footprint pad "
-             "layers, vias, outline) and is written into the board as its KiCad stackup; "
-             "--layer-map/--via-map then override single entries",
-    )
-    parser.add_argument(
-        "--layer-map", action="append", default=[],
-        help="Map a GDS polygon layer/datatype to a KiCad layer, e.g. --layer-map 3/0=In2.Cu",
-    )
-    parser.add_argument(
-        "--via-map", action="append", default=[],
-        help="Map a GDS via layer/datatype to a KiCad via layer pair, e.g. --via-map 7/0=F.Cu,In1.Cu",
-    )
+    parser.add_argument("-o", "--out", type=Path, help="KiCad board (default: the layout's name with .kicad_pcb)")
+    parser.add_argument("--stack", type=Path, help="layz process stack (.toml): sets the GDS layer mapping (copper zones, footprint pad layers, vias, outline) and is written into the board as its KiCad stackup; --layer-map/--via-map then override single entries")
+    parser.add_argument("--layer-map", action="append", default=[], help="Map a GDS polygon layer/datatype to a KiCad layer, e.g. --layer-map 3/0=In2.Cu")
+    parser.add_argument("--via-map", action="append", default=[], help="Map a GDS via layer/datatype to a KiCad via layer pair, e.g. --via-map 7/0=F.Cu,In1.Cu")
     parser.add_argument("--scale-mm-per-um", type=float, default=1)
     parser.add_argument("--drill-shrink-um", type=float, default=10.0)
-    parser.add_argument(
-        "--net-name", default="",
-        help="KiCad net name assigned to generated zones, vias and pads; default: empty string",
-    )
-    parser.add_argument(
-        "--no-flip-y", action="store_true",
-        help="Do not flip Y (raw GDS->KiCad coordinate mapping)",
-    )
+    parser.add_argument("--net-name", default="", help="KiCad net name assigned to generated zones, vias and pads; default: empty string")
+    parser.add_argument("--no-flip-y", action="store_true", help="Do not flip Y (raw GDS->KiCad coordinate mapping)")
     args = parser.parse_args(argv)
     args.gds = args.lay
     args.pcb = args.out or args.lay.with_suffix(".kicad_pcb")
@@ -658,11 +525,11 @@ def main(argv: list[str] | None = None) -> None:
     zones, vias = DEFAULT_POLYGON_LAYER_MAP, DEFAULT_VIA_LAYER_MAP
     if args.stack:
         from layz import stack as stackfile
+
         process = stackfile.load(args.stack)
         process.check_kicad()
         if len(process.copper) != 4:
-            parser.error("gds2pcb writes 4-copper boards (F.Cu, In1.Cu, In2.Cu, B.Cu) for now; "
-                         f"{args.stack} has {len(process.copper)} copper layers")
+            parser.error(f"gds2pcb writes 4-copper boards (F.Cu, In1.Cu, In2.Cu, B.Cu) for now; {args.stack} has {len(process.copper)} copper layers")
         zones, vias, pads = process.gds_layer_maps()
         side_pads = {name: key for key, name in pads.items()}
         FRONT_PAD_LAYER = side_pads.get("F.Cu", (-1, -1))
@@ -672,20 +539,10 @@ def main(argv: list[str] | None = None) -> None:
     polygon_layer_map = {**zones, **parse_layer_map(args.layer_map)}
     via_layer_map = {**vias, **parse_via_map(args.via_map)}
 
-    convert_gds_to_kicad(
-        args.gds,
-        args.pcb,
-        polygon_layer_map,
-        via_layer_map,
-        args.scale_mm_per_um,
-        args.drill_shrink_um,
-        flip_y=not args.no_flip_y,
-        net_name=args.net_name,
-    )
+    convert_gds_to_kicad(args.gds, args.pcb, polygon_layer_map, via_layer_map, args.scale_mm_per_um, args.drill_shrink_um, flip_y=not args.no_flip_y, net_name=args.net_name)
     if process is not None:
         write_stackup(args.pcb, process)
-        print(f"stackup: {process.name} ({len(process.layers)} layers, "
-              f"{process.thickness_um:g} µm) written into the board")
+        print(f"stackup: {process.name} ({len(process.layers)} layers, {process.thickness_um:g} µm) written into the board")
 
 
 if __name__ == "__main__":

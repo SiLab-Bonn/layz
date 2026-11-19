@@ -30,9 +30,7 @@ try:
     from shapely.ops import unary_union
     from shapely.strtree import STRtree
 except ImportError as exc:  # pragma: no cover - depends on the user's environment
-    raise SystemExit(
-        "This script requires Shapely >= 2.0. Install it with: python3 -m pip install shapely"
-    ) from exc
+    raise SystemExit("This script requires Shapely >= 2.0. Install it with: python3 -m pip install shapely") from exc
 
 
 TOKEN_RE = re.compile(r'"(?:\\.|[^"\\])*"|[()]|[^\s()";]+|;[^\n]*')
@@ -260,9 +258,7 @@ def pad_geometry(pad: Form, footprint_at: Form, description: str) -> Any:
         if radius > 0:
             geometry = geometry.buffer(radius, quad_segs=16)
     else:
-        raise ValueError(
-            f"Unsupported pad shape {shape!r} on {description}; add explicit geometry handling before assigning nets"
-        )
+        raise ValueError(f"Unsupported pad shape {shape!r} on {description}; add explicit geometry handling before assigning nets")
 
     geometry = rotate(geometry, -(footprint_angle + pad_angle), origin=(0, 0), use_radians=False)
     return translate(geometry, xoff=cx, yoff=cy)
@@ -293,11 +289,7 @@ def arc_geometry(arc: Form, width: float) -> Any:
     ccw_mid = (angles[1] - angles[0]) % (2 * math.pi)
     sweep = ccw_sweep if ccw_mid <= ccw_sweep else ccw_sweep - 2 * math.pi
     steps = max(8, math.ceil(abs(sweep) * radius / max(width / 4, 0.005)))
-    points = [
-        (cx + radius * math.cos(angles[0] + sweep * i / steps),
-         cy + radius * math.sin(angles[0] + sweep * i / steps))
-        for i in range(steps + 1)
-    ]
+    points = [(cx + radius * math.cos(angles[0] + sweep * i / steps), cy + radius * math.sin(angles[0] + sweep * i / steps)) for i in range(steps + 1)]
     return LineString(points).buffer(width / 2, quad_segs=8)
 
 
@@ -348,7 +340,7 @@ def source_modifications(source: str, nodes: list[Conductor], assigned: dict[int
             elif node.net_form is None:
                 tag = node.form[0]
                 line_start = source.rfind("\n", 0, node.form.start) + 1
-                indentation = source[line_start:node.form.start] + "\t"
+                indentation = source[line_start : node.form.start] + "\t"
                 modifications.append((tag.end, tag.end, f"\n{indentation}(net {json.dumps(net_name, ensure_ascii=False)})"))
         elif node.kind == "via":
             if node.net_form is not None and len(node.net_form) > 1 and str(node.net_form[1]) != net_name:
@@ -358,7 +350,7 @@ def source_modifications(source: str, nodes: list[Conductor], assigned: dict[int
                 # KiCad requires a net field on a via; insert after its type (e.g. blind/buried).
                 tag = node.form[1] if len(node.form) > 1 else node.form[0]
                 line_start = source.rfind("\n", 0, node.form.start) + 1
-                indentation = source[line_start:node.form.start] + "\t"
+                indentation = source[line_start : node.form.start] + "\t"
                 modifications.append((tag.end, tag.end, f"\n{indentation}(net {json.dumps(net_name, ensure_ascii=False)})"))
     return modifications
 
@@ -398,8 +390,7 @@ def build_graph(root: Form, all_copper: list[str], tolerance: float, seed_footpr
                     continue
                 geometry = pad_geometry(pad, fp_at, description)
                 pad_net = get_net(pad)
-                node_id = add("pad", description, pad_net, layers, geometry, pad,
-                              seed_source=(ref == seed_footprint and bool(pad_net)))
+                node_id = add("pad", description, pad_net, layers, geometry, pad, seed_source=(ref == seed_footprint and bool(pad_net)))
                 if node_id >= 0:
                     pad_nodes.append(node_id)
 
@@ -436,8 +427,7 @@ def build_graph(root: Form, all_copper: list[str], tolerance: float, seed_footpr
             if not start or not end or not width_form or not layer_form:
                 continue
             width = number(width_form[1], "track width")
-            line = LineString([(number(start[1], "track x"), number(start[2], "track y")),
-                               (number(end[1], "track x"), number(end[2], "track y"))])
+            line = LineString([(number(start[1], "track x"), number(start[2], "track y")), (number(end[1], "track x"), number(end[2], "track y"))])
             layer = str(layer_form[1])
             if layer in all_copper:
                 add("track", f"segment-{len(nodes)}", get_net(top), [layer], line.buffer(width / 2, quad_segs=8), top)
@@ -473,21 +463,13 @@ def build_graph(root: Form, all_copper: list[str], tolerance: float, seed_footpr
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        description="Assign KiCad zone/via nets from a selected footprint's authoritative pad nets."
-    )
+    parser = argparse.ArgumentParser(description="Assign KiCad zone/via nets from a selected footprint's authoritative pad nets.")
     parser.add_argument("board", type=Path, help="Input .kicad_pcb board")
     parser.add_argument("-o", "--output", type=Path, help="Output board (default: *_nets_assigned.kicad_pcb)")
-    parser.add_argument(
-        "--seed-footprint", default="VTX2",
-        help="Reference designator whose pad nets are authoritative (default: VTX2)",
-    )
+    parser.add_argument("--seed-footprint", default="VTX2", help="Reference designator whose pad nets are authoritative (default: VTX2)")
     parser.add_argument("--in-place", action="store_true", help="Modify the input board after making a .bak backup")
     parser.add_argument("--dry-run", action="store_true", help="Analyze and report only; do not write a board")
-    parser.add_argument(
-        "--tolerance-mm", type=float, default=0.001,
-        help="Maximum extra gap bridged between copper shapes (default: 0.001 mm; use 0 for exact touch/overlap)",
-    )
+    parser.add_argument("--tolerance-mm", type=float, default=0.001, help="Maximum extra gap bridged between copper shapes (default: 0.001 mm; use 0 for exact touch/overlap)")
     args = parser.parse_args(argv)
 
     if args.tolerance_mm < 0:
@@ -503,11 +485,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         root = parse_sexpr(source)
         all_copper = copper_layers(root)
-        seed_footprints = [
-            top for top in root[1:]
-            if isinstance(top, Form) and head(top) == "footprint"
-            and footprint_reference(top, 0) == args.seed_footprint
-        ]
+        seed_footprints = [top for top in root[1:] if isinstance(top, Form) and head(top) == "footprint" and footprint_reference(top, 0) == args.seed_footprint]
         if not seed_footprints:
             print(f"ERROR: no footprint with Reference {args.seed_footprint!r} exists in {board_path}", file=sys.stderr)
             return 2
@@ -515,17 +493,10 @@ def main(argv: list[str] | None = None) -> int:
         seed_pads = [pad for footprint in seed_footprints for pad in children(footprint, "pad")]
         netted_seed_pads = [pad for pad in seed_pads if get_net(pad)]
         if not netted_seed_pads:
-            print(
-                f"ERROR: found footprint {args.seed_footprint!r} with {len(seed_pads)} pad(s), "
-                "but none has a (net ...) assignment in this board file. "
-                "Save/assign the VTX2 pad nets in the PCB first, or select a different seed footprint.",
-                file=sys.stderr,
-            )
+            print(f"ERROR: found footprint {args.seed_footprint!r} with {len(seed_pads)} pad(s), but none has a (net ...) assignment in this board file. Save/assign the VTX2 pad nets in the PCB first, or select a different seed footprint.", file=sys.stderr)
             return 2
 
-        nodes, union_find, _layer_geometries, pad_nodes = build_graph(
-            root, all_copper, args.tolerance_mm, args.seed_footprint
-        )
+        nodes, union_find, _layer_geometries, pad_nodes = build_graph(root, all_copper, args.tolerance_mm, args.seed_footprint)
     except (ValueError, TypeError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2
@@ -587,10 +558,7 @@ def main(argv: list[str] | None = None) -> int:
         seed_nets = component_seed_nets[component]
         if not seed_nets:
             continue
-        expected_net = (
-            next(iter(seed_nets)) if len(seed_nets) == 1
-            else "one of " + ", ".join(sorted(seed_nets))
-        )
+        expected_net = next(iter(seed_nets)) if len(seed_nets) == 1 else "one of " + ", ".join(sorted(seed_nets))
         for node_id in members:
             node = nodes[node_id]
             if node.kind == "pad" and not node.seed_source and node.net not in seed_nets:
@@ -602,17 +570,10 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Authoritative pad-net source: footprint {args.seed_footprint}")
     print("Conductors: " + ", ".join(f"{kind}={counts[kind]}" for kind in ("pad", "track", "via", "zone")))
     print(f"Geometric tolerance: {args.tolerance_mm:g} mm")
-    print(
-        "Updated zone/via nets from the seed footprint: "
-        f"zones={assigned_counts['zone']} ({overwritten_counts['zone']} replaced existing labels), "
-        f"vias={assigned_counts['via']} ({overwritten_counts['via']} replaced existing labels)"
-    )
+    print(f"Updated zone/via nets from the seed footprint: zones={assigned_counts['zone']} ({overwritten_counts['zone']} replaced existing labels), vias={assigned_counts['via']} ({overwritten_counts['via']} replaced existing labels)")
 
     if conflict_components:
-        print(
-            f"\nERROR: {len(conflict_components)} connected copper component(s) touch pads "
-            f"on {args.seed_footprint} with different nets; left those components unchanged:"
-        )
+        print(f"\nERROR: {len(conflict_components)} connected copper component(s) touch pads on {args.seed_footprint} with different nets; left those components unchanged:")
         for component, members, nets in conflict_components:
             seed_pads = sorted(set(component_seed_pads[component]))
             net_list = nets[:8]
@@ -624,10 +585,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  NET CLASH: seed nets={net_list}; {args.seed_footprint} pads={pad_list}")
 
     if pad_mismatches:
-        print(
-            f"\nERROR: {len(pad_mismatches)} other-footprint pad(s) have a net different "
-            f"from the connected {args.seed_footprint} pad net:"
-        )
+        print(f"\nERROR: {len(pad_mismatches)} other-footprint pad(s) have a net different from the connected {args.seed_footprint} pad net:")
         for name, actual_net, expected_net in pad_mismatches[:50]:
             print(f"  PAD NET VIOLATION: {name} is {actual_net}; connected seed net is {expected_net}")
         if len(pad_mismatches) > 50:
@@ -637,10 +595,7 @@ def main(argv: list[str] | None = None) -> int:
         print("\nWARNING: zone/via objects left unchanged:")
         for kind in ("zone", "via"):
             if no_seed_source[kind] or withheld_by_clash[kind]:
-                print(
-                    f"  {kind}: {no_seed_source[kind]} not connected to {args.seed_footprint}; "
-                    f"{withheld_by_clash[kind]} touch different-net seed pads"
-                )
+                print(f"  {kind}: {no_seed_source[kind]} not connected to {args.seed_footprint}; {withheld_by_clash[kind]} touch different-net seed pads")
 
     if not args.dry_run and assigned:
         modifications = source_modifications(source, nodes, assigned)
@@ -658,9 +613,7 @@ def main(argv: list[str] | None = None) -> int:
             shutil.copy2(board_path, backup)
             print(f"Backup: {backup}")
         else:
-            target = args.output.expanduser().resolve() if args.output else board_path.with_name(
-                board_path.stem + "_nets_assigned" + board_path.suffix
-            )
+            target = args.output.expanduser().resolve() if args.output else board_path.with_name(board_path.stem + "_nets_assigned" + board_path.suffix)
             if target == board_path:
                 parser.error("Output would overwrite the input; use --in-place to allow this")
 

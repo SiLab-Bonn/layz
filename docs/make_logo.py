@@ -15,7 +15,7 @@ from matplotlib.font_manager import FontProperties
 from matplotlib.path import Path as MPath
 from matplotlib.textpath import TextPath
 
-KEY, GAP, LIP, R = 100.0, 14.0, 8.0, 14.0   # key size, gap between keys, side/bottom lip, corner radius
+KEY, GAP, LIP, R = 100.0, 14.0, 8.0, 14.0  # key size, gap between keys, side/bottom lip, corner radius
 PLAIN = {"cap": "#ECEFF4", "lip": "#D8DEE9", "edge": "#4C566A", "text": "#2E3440"}
 SWAP = {"cap": "#5E81AC", "lip": "#4C6A93", "edge": "#2E3440", "text": "#ECEFF4"}
 MONO = FontProperties(family="DejaVu Sans Mono", weight="bold")
@@ -33,8 +33,7 @@ def glyph(ch: str, size: float, x: float, y: float, anchor: str = "center") -> s
     out = []
     for verts, code in tp.iter_segments():
         pts = [(dx + verts[i], dy - verts[i + 1]) for i in range(0, len(verts), 2)]
-        cmd = {MPath.MOVETO: "M", MPath.LINETO: "L", MPath.CURVE3: "Q", MPath.CURVE4: "C",
-               MPath.CLOSEPOLY: "Z"}[code]
+        cmd = {MPath.MOVETO: "M", MPath.LINETO: "L", MPath.CURVE3: "Q", MPath.CURVE4: "C", MPath.CLOSEPOLY: "Z"}[code]
         out.append(cmd if cmd == "Z" else cmd + " ".join(f"{px:.2f},{py:.2f}" for px, py in pts))
     return " ".join(out)
 
@@ -44,10 +43,8 @@ def key(x: float, letter: str, swap: str | None) -> str:
     top_w = KEY - 2 * LIP
     parts = [
         # the key's body and its lip (darker sides), then the top face, raised towards the back
-        f'<rect x="{x:.1f}" y="0" width="{KEY}" height="{KEY}" rx="{R}" fill="{c["lip"]}" '
-        f'stroke="{c["edge"]}" stroke-width="3"/>',
-        f'<rect x="{x + LIP:.1f}" y="{LIP * 0.5:.1f}" width="{top_w}" height="{top_w}" rx="{R * 0.7}" '
-        f'fill="{c["cap"]}"/>',
+        f'<rect x="{x:.1f}" y="0" width="{KEY}" height="{KEY}" rx="{R}" fill="{c["lip"]}" stroke="{c["edge"]}" stroke-width="3"/>',
+        f'<rect x="{x + LIP:.1f}" y="{LIP * 0.5:.1f}" width="{top_w}" height="{top_w}" rx="{R * 0.7}" fill="{c["cap"]}"/>',
         f'<path d="{glyph(letter, 54, x + KEY / 2, LIP * 0.5 + top_w * 0.56)}" fill="{c["text"]}"/>',
     ]
     return "\n  ".join(parts)
@@ -59,9 +56,7 @@ def main() -> None:
     width = 4 * KEY + 3 * GAP + 2 * pad
     height = KEY + 2 * pad
     body = "\n  ".join(key(i * (KEY + GAP), ch, swap) for i, (ch, swap) in enumerate(keys))
-    svg = (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{-pad} {-pad} {width} {height}" '
-           f'width="{width * 0.6:.0f}" height="{height * 0.6:.0f}" role="img" aria-label="layz">\n'
-           f"  <title>layz</title>\n  {body}\n</svg>\n")
+    svg = f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{-pad} {-pad} {width} {height}" width="{width * 0.6:.0f}" height="{height * 0.6:.0f}" role="img" aria-label="layz">\n  <title>layz</title>\n  {body}\n</svg>\n'
     out = Path(__file__).with_name("logo.svg")
     out.write_text(svg)
     print(f"wrote {out}")

@@ -4,14 +4,16 @@
 #   layz hyp -d ivtx_rdl                 list the targets
 #   layz hyp -d ivtx_rdl dc si           run some, by name
 #   layz hyp -d ivtx_rdl all             run them all, in this file's order
-# Each target names its own inputs, runs HyperLynx, checks the results against its limits and
-# plots them, all in results/ivtx_rdl/<target>/.
+# Each target names its own inputs and every HyperLynx setting it uses (layz.hyperlynx.run
+# documents them), runs, checks the results against its limits and plots them, all in
+# results/ivtx_rdl/<target>/.
 
 import shutil
 from pathlib import Path
 
 from layz.gds2hyp import convert as gds2hyp
-from layz.hyperlynx import analysis, plots, run, setup as hyperlynx, target
+from layz.hyperlynx import analysis, plots, run, target
+from layz.hyperlynx import setup as hyperlynx
 
 
 @target
@@ -25,7 +27,7 @@ def setup():
     out = Path("results/ivtx_rdl/setup")
     out.mkdir(parents=True, exist_ok=True)
     export = Path(__file__).parent / "obelix1_ivtx_ladder_with_nets_v3.1.hyp"
-    gds2hyp.main([str(export), "-o", str(out / "obelix1_ivtx_ladder_with_nets_v3.1.hyp")])
+    gds2hyp.main([str(export), "-o", str(out / "obelix1_ivtx_ladder_with_nets_v3.1.hyp"), "--traces", "auto", "--trace-max-width", "0.08"])
 
     # Andreas' HyperLynx project: VRMs, DC sinks and pin models he set up in the GUI
     project = Path("/users/aulm/HyperLynx/simulations/VTX_Obelix_1/v3.1")
@@ -44,7 +46,7 @@ def info():
     board = Path("results/ivtx_rdl/setup/obelix1_ivtx_ladder_with_nets_v3.1.hyp")
     if not board.exists():
         setup()
-    run.info(board, Path("results/ivtx_rdl/info"))
+    run.info(board, Path("results/ivtx_rdl/info"), license="HyperLynx SI/PI")
 
 
 @target
@@ -56,16 +58,16 @@ def dc():
         setup()
     out = Path("results/ivtx_rdl/dc")
 
-    # the four 3 V rails (PSUB and PWell have VRMs without reference pins)
-    supply = run.dc(board, out / "supply", nets=["/3V_1", "/3V_2", "/3V_3", "/3V_4"])
+    # the four 3 V rails (PSUB and PWell have VRMs without reference pins), with their returns;
+    # HyperLynx's report flags more than 5 % drop, 1.5e7 A/m^2 and 1 A per via
+    supply = run.dc(board, out / "supply", license="HyperLynx SI/PI", nets=["/3V_1", "/3V_2", "/3V_3", "/3V_4"], include_ref=True, max_voltage_drop=5.0, max_current_density=1.5e7, max_via_current=1.0, return_from=None, return_vrm_type="simple", return_sink_resistance=1e6)
 
     # HyperLynx maps the loss of supply nets only: the returns, re-solved as the supply with the
-    # currents the first run measured, give theirs.
-    ret = run.dc(board, out / "return", nets=["/3V_1", "/3V_2", "/3V_3", "/3V_4"],
-                 return_from=supply / "ports.csv")
+    # currents the first run measured as sinks (1 Mohm across each), give theirs
+    ret = run.dc(board, out / "return", license="HyperLynx SI/PI", nets=["/3V_1", "/3V_2", "/3V_3", "/3V_4"], include_ref=True, max_voltage_drop=5.0, max_current_density=1.5e7, max_via_current=1.0, return_from=supply / "ports.csv", return_vrm_type="simple", return_sink_resistance=1e6)
 
     # supply drop + return rise, at most 5 % of the VRM voltage
-    analysis.dc_drop(supply, 0.05, out / "dc_drop.csv")
+    analysis.dc_drop(supply, max_drop=0.05, out=out / "dc_drop.csv")
     plots.plot_dc(supply, out, ret)
 
 
@@ -78,26 +80,110 @@ def si():
         setup()
     out = Path("results/ivtx_rdl/si")
 
-    # eye with ideal lines: lossless, smooth, no jitter
-    ideal = run.si(board, out / "eye_ideal", net="/D4_N", mode="eye", bitrate=160e6,
-                   lossy=False, roughness=False, trapezoid=False)
+    # eye with ideal lines: lossless, smooth, no jitter, no coupling
+    ideal = run.si(
+        board,
+        out / "eye_ideal",
+        license="HyperLynx SI/PI",
+        net="/D4_N",
+        operation="eye",
+        simulator="auto",
+        corner="typical",
+        probe="pin",
+        stimulus_scope="global",
+        bit_sequence="prbs",
+        prbs_order=7,
+        repetitions=4,
+        frequency=160e6,
+        duty_cycle=50.0,
+        initial_state="low",
+        stop_s=None,
+        step_s=None,
+        jitter={"Gaussian": 0.0, "GaussianFreq": 1e6, "Sine": 0.0, "SineFreq": 1e6, "SineInitPhase": 0.0, "Uniform": 0.0, "UniformMean": 0.0, "Distortion": 0.0},
+        lossy=False,
+        roughness=False,
+        trapezoid=False,
+        nonfunctional_pads=False,
+        crosstalk=False,
+        trace_coupling={"enabled": False, "method": "geometric", "threshold": 0.001, "max_distance": 0.5e-3, "min_segment": 0.0127, "horizontal_neighbours": 1, "vertical_neighbours": 1, "nonparallel": False, "self": True},
+        area_fill_coupling={"enabled": False, "grid": 0.001016, "search_distance": 0.001016},
+        sparameter_coupling={"connector": False, "connector_threshold": -20.0, "package": False, "package_threshold": -20.0, "em": False, "em_threshold": -20.0, "fmin": 1e5, "fmax": 2e10},
+        driver_states={},
+        aggressors=[],
+    )
 
-    # eye with loss, roughness, crosstalk, and jitter: 100 ps rms random, 300 ps at 5 MHz sine
-    real = run.si(board, out / "eye_real", net="/D4_N", mode="eye", bitrate=160e6, crosstalk=True,
-                  jitter={"Gaussian": 100e-12, "Sine": 300e-12, "SineFreq": 5e6})
+    # eye with loss, roughness, crosstalk (traces within 0.5 mm, area fills), and jitter:
+    # 100 ps rms random, 300 ps at 5 MHz sine
+    real = run.si(
+        board,
+        out / "eye_real",
+        license="HyperLynx SI/PI",
+        net="/D4_N",
+        operation="eye",
+        simulator="auto",
+        corner="typical",
+        probe="pin",
+        stimulus_scope="global",
+        bit_sequence="prbs",
+        prbs_order=7,
+        repetitions=4,
+        frequency=160e6,
+        duty_cycle=50.0,
+        initial_state="low",
+        stop_s=None,
+        step_s=None,
+        jitter={"Gaussian": 100e-12, "GaussianFreq": 1e6, "Sine": 300e-12, "SineFreq": 5e6, "SineInitPhase": 0.0, "Uniform": 0.0, "UniformMean": 0.0, "Distortion": 0.0},
+        lossy=True,
+        roughness=True,
+        trapezoid=True,
+        nonfunctional_pads=False,
+        crosstalk=True,
+        trace_coupling={"enabled": True, "method": "geometric", "threshold": 0.001, "max_distance": 0.5e-3, "min_segment": 0.0127, "horizontal_neighbours": 1, "vertical_neighbours": 1, "nonparallel": False, "self": True},
+        area_fill_coupling={"enabled": True, "grid": 0.001016, "search_distance": 0.001016},
+        sparameter_coupling={"connector": False, "connector_threshold": -20.0, "package": False, "package_threshold": -20.0, "em": False, "em_threshold": -20.0, "fmin": 1e5, "fmax": 2e10},
+        driver_states={},
+        aggressors=[],
+    )
 
-    # D4 held low while ADC_4 (95 um away, 25 mm) and rst (100 um, 26 mm) switch at 80 MHz,
-    # with HyperLynx's stock IBIS CMOS driver and receivers
-    xt = run.si(board, out / "crosstalk", net="/D4_N", mode="osc", bitrate=160e6, stop_s=200e-9,
-                crosstalk=True, victim_quiet=True,
-                aggressors=[{"driver": "V4.114", "receivers": ["VTX2.114"]},
-                            {"driver": "VTX2.100", "receivers": ["V1.100", "V2.100", "V3.100", "V4.100"]}])
+    # D4's drivers held low while ADC_4 (95 um away, 25 mm) and rst (100 um, 26 mm) switch as an
+    # 80 MHz clock, with HyperLynx's stock IBIS CMOS driver and receivers
+    xt = run.si(
+        board,
+        out / "crosstalk",
+        license="HyperLynx SI/PI",
+        net="/D4_N",
+        operation="standard",
+        simulator="auto",
+        corner="typical",
+        probe="pin",
+        stimulus_scope="global",
+        bit_sequence="oscillator",
+        prbs_order=7,
+        repetitions=1,
+        frequency=80e6,
+        duty_cycle=50.0,
+        initial_state="low",
+        stop_s=200e-9,
+        step_s=None,
+        jitter={"Gaussian": 0.0, "GaussianFreq": 1e6, "Sine": 0.0, "SineFreq": 1e6, "SineInitPhase": 0.0, "Uniform": 0.0, "UniformMean": 0.0, "Distortion": 0.0},
+        lossy=True,
+        roughness=True,
+        trapezoid=True,
+        nonfunctional_pads=False,
+        crosstalk=True,
+        trace_coupling={"enabled": True, "method": "geometric", "threshold": 0.001, "max_distance": 0.5e-3, "min_segment": 0.0127, "horizontal_neighbours": 1, "vertical_neighbours": 1, "nonparallel": False, "self": True},
+        area_fill_coupling={"enabled": True, "grid": 0.001016, "search_distance": 0.001016},
+        sparameter_coupling={"connector": False, "connector_threshold": -20.0, "package": False, "package_threshold": -20.0, "em": False, "em_threshold": -20.0, "fmin": 1e5, "fmax": 2e10},
+        driver_states={"V4.101": "low", "V4.102": "low"},
+        aggressors=[{"driver": "V4.114", "receivers": ["VTX2.114"], "lib": "modvsez.ibs", "device": "MODvsEZIBIS", "model": "3"}, {"driver": "VTX2.100", "receivers": ["V1.100", "V2.100", "V3.100", "V4.100"], "lib": "modvsez.ibs", "device": "MODvsEZIBIS", "model": "3"}],
+    )
 
-    # at the receiver (VTX2): eye at least 200 mV and 0.7 UI, crosstalk at most 100 mV p-p
-    # (first guesses, to agree on)
-    analysis.eyes([ideal, real], 0.2, 0.7, out / "eyes.csv", at="VTX2")
-    analysis.crosstalk(xt, 0.1, out / "crosstalk.csv", at="VTX2")
-    plots.plot_si([ideal, real, xt], out)
+    # at the receiver (VTX2): eye at least 200 mV and 0.7 UI, crosstalk at most 100 mV p-p (first
+    # guesses, to agree on); eyes measured after 4 UI, height within +-5 % UI of the centre,
+    # rise and fall 20-80 %; crosstalk after the first 10 % of the run
+    analysis.eyes([ideal, real], min_height=0.2, min_width_ui=0.7, at="VTX2", skip_ui=4, centre_window=0.05, edge_levels=(0.2, 0.8), out=out / "eyes.csv")
+    analysis.crosstalk(xt, max_noise=0.1, at="VTX2", settle=0.1, out=out / "crosstalk.csv")
+    plots.plot_si([ideal, real, xt], out, skip_ui=4, centre_window=0.05, edge_levels=(0.2, 0.8), settle=0.1)
 
 
 @target
@@ -109,8 +195,9 @@ def sparams():
         setup()
     out = Path("results/ivtx_rdl/sparams")
 
-    d4 = run.sparam(board, out / "d4", pins=["V4.101", "V4.102", "VTX2.107", "VTX2.108"])
+    # 1 MHz to 5 GHz, adaptive sweep at medium tolerance, 50 ohm ports, real line models
+    d4 = run.sparam(board, out / "d4", license="HyperLynx SI/PI", pins=["V4.101", "V4.102", "VTX2.107", "VTX2.108"], fmin=1e6, fmax=5e9, sweep="adaptive", steps=500, steps_per_decade=100, tolerance="medium", reference_impedance=50.0, lossy=True, roughness=True, trapezoid=True, nonfunctional_pads=False)
 
     # SDD21 at least -3 dB, SDD11 at most -10 dB (first guesses, to agree on)
-    analysis.sparams(d4, 80e6, -3.0, -10.0, out / "sparams.csv")
+    analysis.sparams(d4, at_hz=80e6, min_sdd21_db=-3.0, max_sdd11_db=-10.0, out=out / "sparams.csv")
     plots.plot_sparam(d4, out)

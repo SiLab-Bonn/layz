@@ -23,7 +23,6 @@ import shapely
 from shapely.geometry import LineString, MultiLineString, Point, Polygon
 from shapely.ops import linemerge, unary_union
 
-
 # blobs (pads, via landings) are what survives an opening by OPEN x the strip width: more than a
 # right-angle corner of the strip (its largest inscribed circle has radius 0.586 w)
 OPEN = 0.7
@@ -44,7 +43,7 @@ def rect_width(area: float, perimeter: float) -> float:
     long strip ~2A/P, but right for short ones too. 2A/P where no rectangle fits."""
     h = perimeter / 2
     disc = h * h - 4 * area
-    return (h - disc ** 0.5) / 2 if disc > 0 else 2 * area / perimeter
+    return (h - disc**0.5) / 2 if disc > 0 else 2 * area / perimeter
 
 
 def strip_width(poly: Polygon, erode: float = 0.6, keep: float = 0.1) -> float | None:
@@ -101,8 +100,7 @@ def _prune(lines: list[LineString], w: float) -> list[LineString]:
     return lines
 
 
-def _extend(line: LineString, poly: Polygon, anchors: list[Point], w: float, reach: float = 1.5,
-            blobs: list[tuple[Polygon, Point]] = ()) -> LineString:
+def _extend(line: LineString, poly: Polygon, anchors: list[Point], w: float, reach: float = 1.5, blobs: list[tuple[Polygon, Point]] = ()) -> LineString:
     """Extend both free ends: on to an anchor (via/pin, or a blob's middle) within ``reach``
     widths, as one more vertex (a short dog-leg into the via, the route's own shape kept), else
     along their last direction to the copper's edge. A tip at a blob (pad, via landing) always
@@ -156,11 +154,9 @@ REJECTED: list[str] = []  # why the last split_route calls gave None (for warnin
 
 def _reject(why: str) -> None:
     REJECTED.append(why)
-    return None
 
 
-def split_route(poly: Polygon, anchors: list[Point] | None = None, simplify: float = 0.15
-                ) -> tuple[list[Seg], list[Polygon]] | None:
+def split_route(poly: Polygon, anchors: list[Point] | None = None, simplify: float = 0.15) -> tuple[list[Seg], list[Polygon]] | None:
     """A route polygon as traces: (segments along the strip parts, the pad-like blobs left over).
 
     Blobs are what survives an opening (erode then dilate) at ~the strip width: pads and via
@@ -198,9 +194,7 @@ def split_route(poly: Polygon, anchors: list[Point] | None = None, simplify: flo
     for piece, pw in strips:
         lines = _prune(_medial_axis(piece, pw), pw)
         for line in lines:
-            line = _extend(line.simplify(simplify * pw, preserve_topology=False),
-                           piece.union(blobs).buffer(0), targets, max(pw, 0.5 * w), reach=4.0,
-                           blobs=blob_targets)
+            line = _extend(line.simplify(simplify * pw, preserve_topology=False), piece.union(blobs).buffer(0), targets, max(pw, 0.5 * w), reach=4.0, blobs=blob_targets)
             c = list(line.coords)
             segs += [Seg(*c[i], *c[i + 1], pw) for i in range(len(c) - 1) if c[i] != c[i + 1]]
     if not segs:
@@ -210,8 +204,7 @@ def split_route(poly: Polygon, anchors: list[Point] | None = None, simplify: flo
         for a in anchors:
             if a is not t and b.buffer(0.5 * w).contains(a) and a.distance(t) > 1e-3 * w:
                 segs.append(Seg(t.x, t.y, a.x, a.y, w))
-    covered = unary_union([LineString([(s.x1, s.y1), (s.x2, s.y2)]).buffer(s.width / 2, cap_style="square")
-                           for s in segs])
+    covered = unary_union([LineString([(s.x1, s.y1), (s.x2, s.y2)]).buffer(s.width / 2, cap_style="square") for s in segs])
     strip_area = sum(p.area for p, _ in strips)
     cover = covered.intersection(core).area / strip_area
     if cover < 0.8:

@@ -35,15 +35,14 @@ def find_flow(design: str | None, flow: Path | None) -> Path:
 
 
 def main(argv: list[str]) -> int:
-    ap = argparse.ArgumentParser(prog="layz hyp", description=__doc__.split("\n\n")[0],
-                                 formatter_class=argparse.RawDescriptionHelpFormatter,
-                                 epilog=__doc__.split("\n\n", 1)[1])
+    ap = argparse.ArgumentParser(prog="layz hyp", description=__doc__.split("\n\n")[0], formatter_class=argparse.RawDescriptionHelpFormatter, epilog=__doc__.split("\n\n", 1)[1])
     ap.add_argument("targets", nargs="*", help="target names, or 'all' (none: list them)")
     ap.add_argument("-d", "--design", help="designs/DESIGN/flow.py")
     ap.add_argument("-f", "--flow", type=Path, help="a flow file")
     a = ap.parse_args(argv)
 
     from layz.hyperlynx import targets
+
     flow = find_flow(a.design, a.flow)
     found = targets.load(flow)
     if not a.targets:

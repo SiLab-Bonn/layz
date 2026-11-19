@@ -48,7 +48,7 @@ def read_panels(path: Path) -> tuple[np.ndarray, np.ndarray, list[str]]:
         if not t or t[0] not in ("T", "Q"):
             continue
         n = 3 if t[0] == "T" else 4
-        v = np.array(t[2:2 + 3 * n], float).reshape(n, 3)
+        v = np.array(t[2 : 2 + 3 * n], float).reshape(n, 3)
         sigma = float(t[-1])  # dielectric lines carry a reference point before the charge
         for tri in ([v[0], v[1], v[2]],) if n == 3 else ([v[0], v[1], v[2]], [v[0], v[2], v[3]]):
             tris.append(tri)
@@ -94,12 +94,11 @@ def _split(t: np.ndarray, levels: int) -> np.ndarray:
     for _ in range(levels):
         a, b, c = t[..., 0, :], t[..., 1, :], t[..., 2, :]
         ab, bc, ca = (a + b) / 2, (b + c) / 2, (c + a) / 2
-        t = np.concatenate([np.stack(x, -2) for x in
-                            ((a, ab, ca), (ab, b, bc), (ca, bc, c), (ab, bc, ca))], axis=1)
+        t = np.concatenate([np.stack(x, -2) for x in ((a, ab, ca), (ab, b, bc), (ca, bc, c), (ab, bc, ca))], axis=1)
     return t
 
 
-NEAR = 3.0      # a (sub-)triangle closer than NEAR x its size is split further
+NEAR = 3.0  # a (sub-)triangle closer than NEAR x its size is split further
 MAX_DEPTH = 12  # down to size/4096
 
 
@@ -119,15 +118,14 @@ def _near(p: np.ndarray, tris: np.ndarray, q: np.ndarray) -> tuple[np.ndarray, n
         done = (r2 >= (NEAR * size) ** 2) | (depth == MAX_DEPTH - 1)
         r = np.sqrt(r2[done])
         np.add.at(ph, idx[done], Q[done] / r)
-        np.add.at(e, idx[done], (Q[done] / r ** 3)[:, None] * d[done])
+        np.add.at(e, idx[done], (Q[done] / r**3)[:, None] * d[done])
         T, Q, idx = T[~done], Q[~done], idx[~done]
         if not len(idx):
             break
     return ph, e
 
 
-def coulomb(tris: np.ndarray, sig: np.ndarray, pts: np.ndarray,
-            threads: int) -> tuple[np.ndarray, np.ndarray]:
+def coulomb(tris: np.ndarray, sig: np.ndarray, pts: np.ndarray, threads: int) -> tuple[np.ndarray, np.ndarray]:
     """phi (V) and E (V/m) at pts (µm) from uniformly charged triangles (FasterCap units).
 
     Far panels act as point charges at their centroids; panels within NEAR panel sizes of
@@ -141,22 +139,22 @@ def coulomb(tris: np.ndarray, sig: np.ndarray, pts: np.ndarray,
     chunk = max(1, int(1e6 // max(len(tris), 1)))  # ~60 MB of temporaries per thread
 
     def work(i0):
-        p = pts[i0:i0 + chunk]
+        p = pts[i0 : i0 + chunk]
         d = p[:, None, :] - cen[None, :, :]
         r2 = np.maximum(np.einsum("ijk,ijk->ij", d, d), 1e-18)
         inv = 1.0 / np.sqrt(r2)
         near = r2 < (NEAR * size[None, :]) ** 2
         inv[near] = 0.0  # handled by _near
         ph = inv @ q
-        e = np.einsum("ij,ijk->ik", q[None, :] * inv ** 3, d)
+        e = np.einsum("ij,ijk->ik", q[None, :] * inv**3, d)
         pi, ji = np.nonzero(near)
         for s0 in range(0, len(pi), 4000):
-            pp, jj = pi[s0:s0 + 4000], ji[s0:s0 + 4000]
+            pp, jj = pi[s0 : s0 + 4000], ji[s0 : s0 + 4000]
             nph, ne = _near(p[pp], tris[jj], q[jj])
             np.add.at(ph, pp, nph)
             np.add.at(e, pp, ne)
-        phi[i0:i0 + chunk] = KE * ph
-        E[i0:i0 + chunk] = KE * e / UM
+        phi[i0 : i0 + chunk] = KE * ph
+        E[i0 : i0 + chunk] = KE * e / UM
 
     with ThreadPoolExecutor(threads) as ex:
         list(ex.map(work, range(0, len(pts), chunk)))
@@ -167,9 +165,7 @@ def coulomb(tris: np.ndarray, sig: np.ndarray, pts: np.ndarray,
 
 
 def write_vtk_grid(path: Path, origin, spacing, dims, phi, E) -> None:
-    _write_vtk_points(path, "fieldview E field (V/m), potential (V), lengths in um",
-                      dims, origin, spacing, vectors={"E": E},
-                      scalars={"Emag": np.linalg.norm(E, axis=1), "Ez": E[:, 2], "phi": phi})
+    _write_vtk_points(path, "fieldview E field (V/m), potential (V), lengths in um", dims, origin, spacing, vectors={"E": E}, scalars={"Emag": np.linalg.norm(E, axis=1), "Ez": E[:, 2], "phi": phi})
 
 
 def write_vtk_panels(path: Path, tris, sig, owner) -> None:
@@ -177,8 +173,7 @@ def write_vtk_panels(path: Path, tris, sig, owner) -> None:
     ids = np.array([names.index(o) for o in owner])
     n = len(tris)
     with open(path, "w") as f:
-        f.write("# vtk DataFile Version 3.0\nfieldview panels; owner ids: "
-                + " ".join(f"{i}={nm}" for i, nm in enumerate(names)) + "\n")
+        f.write("# vtk DataFile Version 3.0\nfieldview panels; owner ids: " + " ".join(f"{i}={nm}" for i, nm in enumerate(names)) + "\n")
         f.write(f"ASCII\nDATASET POLYDATA\nPOINTS {3 * n} float\n")
         np.savetxt(f, tris.reshape(-1, 3), fmt="%.6g")
         f.write(f"POLYGONS {n} {4 * n}\n")
@@ -189,8 +184,7 @@ def write_vtk_panels(path: Path, tris, sig, owner) -> None:
         np.savetxt(f, ids, fmt="%d")
 
 
-def write_html(path: Path, title: str, info: str, zs: float, unit: str, scale: float,
-               conductors: list, dielectrics: list, planes: list) -> None:
+def write_html(path: Path, title: str, info: str, zs: float, unit: str, scale: float, conductors: list, dielectrics: list, planes: list) -> None:
     """Self-contained plotly page (plotly.js inlined, works offline).
 
     conductors: [(label, triangles)], dielectrics: [(εr, triangles)], planes: [(label, X, Y, Z, |E|
@@ -212,48 +206,23 @@ def write_html(path: Path, title: str, info: str, zs: float, unit: str, scale: f
     for n, (k, tris) in enumerate(sorted(dielectrics, key=lambda d: d[0])):
         frac = 0.0 if len(ks) == 1 else ks.index(k) / (len(ks) - 1)
         color = f"rgb({int(60 - 20 * frac)},{int(140 + 40 * frac)},{int(90 - 20 * frac)})"
-        fig.add_trace(mesh(tris, color=color, opacity=0.10 + 0.06 * frac, flatshading=True,
-                           name="dielectrics", legendgroup="diel", showlegend=(n == 0),
-                           hovertemplate=f"dielectric εr={k:g}<extra></extra>",
-                           lighting=dict(ambient=0.8, diffuse=0.3, specular=0.0)))
+        fig.add_trace(mesh(tris, color=color, opacity=0.10 + 0.06 * frac, flatshading=True, name="dielectrics", legendgroup="diel", showlegend=(n == 0), hovertemplate=f"dielectric εr={k:g}<extra></extra>", lighting=dict(ambient=0.8, diffuse=0.3, specular=0.0)))
     for label, tris in conductors:
-        fig.add_trace(mesh(tris, color="#d08a4a", opacity=1.0, flatshading=True, name=label,
-                           hovertemplate=f"{label}<extra></extra>",
-                           lighting=dict(ambient=0.45, diffuse=0.8, specular=0.6, roughness=0.35),
-                           lightposition=dict(x=2000, y=-5000, z=8000)))
+        fig.add_trace(mesh(tris, color="#d08a4a", opacity=1.0, flatshading=True, name=label, hovertemplate=f"{label}<extra></extra>", lighting=dict(ambient=0.45, diffuse=0.8, specular=0.6, roughness=0.35), lightposition=dict(x=2000, y=-5000, z=8000)))
 
     vals = np.concatenate([p[4][np.isfinite(p[4])].ravel() for p in planes])
     vmax = float(np.nanpercentile(vals, 99.5))
     for j, (label, X, Y, Z, C, visible) in enumerate(planes):
-        fig.add_trace(go.Surface(x=X, y=Y, z=Z * zs, surfacecolor=C, colorscale="Turbo",
-                                 cmin=0, cmax=vmax, name=label, showlegend=True,
-                                 visible=True if visible else "legendonly", opacity=0.92,
-                                 showscale=(j == 0),
-                                 colorbar=dict(title=dict(text=f"|E| ({unit})", font=dict(color=fg)),
-                                               tickfont=dict(color=fg), x=1.0, len=0.75,
-                                               outlinewidth=0),
-                                 lighting=dict(ambient=1.0, diffuse=0.0, specular=0.0),
-                                 hovertemplate=f"{label}<br>x=%{{x:.0f}} y=%{{y:.0f}} µm"
-                                               f"<br>|E|=%{{surfacecolor:.3g}} {unit}<extra></extra>"))
-    axis = dict(color=fg, gridcolor=grid, zerolinecolor=grid, showbackground=False,
-                title_font=dict(size=12))
+        fig.add_trace(go.Surface(x=X, y=Y, z=Z * zs, surfacecolor=C, colorscale="Turbo", cmin=0, cmax=vmax, name=label, showlegend=True, visible=True if visible else "legendonly", opacity=0.92, showscale=(j == 0), colorbar=dict(title=dict(text=f"|E| ({unit})", font=dict(color=fg)), tickfont=dict(color=fg), x=1.0, len=0.75, outlinewidth=0), lighting=dict(ambient=1.0, diffuse=0.0, specular=0.0), hovertemplate=f"{label}<br>x=%{{x:.0f}} y=%{{y:.0f}} µm<br>|E|=%{{surfacecolor:.3g}} {unit}<extra></extra>"))
+    axis = dict(color=fg, gridcolor=grid, zerolinecolor=grid, showbackground=False, title_font=dict(size=12))
     zaxis = dict(axis, tickvals=None, title=f"z (µm) ×{zs:.3g}" if zs != 1 else "z (µm)")
     if zs != 1:  # label the stretched axis in real µm
         zmin = min(float(np.nanmin(p[3])) for p in planes)
         zmax = max(float(np.nanmax(p[3])) for p in planes)
         ticks = np.linspace(zmin, zmax, 5)
         zaxis.update(tickvals=ticks * zs, ticktext=[f"{t:.0f}" for t in ticks])
-    fig.update_layout(
-        template="plotly_dark", paper_bgcolor=bg, font=dict(color=fg),
-        title=dict(text=f"{title}<br><sup>{info}</sup>", x=0.02),
-        scene=dict(xaxis=dict(axis, title="x (µm)"), yaxis=dict(axis, title="y (µm)"), zaxis=zaxis,
-                   aspectmode="data", bgcolor=bg,
-                   camera=dict(eye=dict(x=0.25, y=-1.55, z=0.55), up=dict(x=0, y=0, z=1))),
-        legend=dict(itemclick="toggle", x=0.01, y=0.92, bgcolor="rgba(13,17,23,0.6)",
-                    font=dict(color=fg)),
-        margin=dict(l=0, r=0, t=70, b=0))
-    fig.write_html(str(path), include_plotlyjs=True, full_html=True,
-                   config=dict(displaylogo=False, toImageButtonOptions=dict(scale=2)))
+    fig.update_layout(template="plotly_dark", paper_bgcolor=bg, font=dict(color=fg), title=dict(text=f"{title}<br><sup>{info}</sup>", x=0.02), scene=dict(xaxis=dict(axis, title="x (µm)"), yaxis=dict(axis, title="y (µm)"), zaxis=zaxis, aspectmode="data", bgcolor=bg, camera=dict(eye=dict(x=0.25, y=-1.55, z=0.55), up=dict(x=0, y=0, z=1))), legend=dict(itemclick="toggle", x=0.01, y=0.92, bgcolor="rgba(13,17,23,0.6)", font=dict(color=fg)), margin=dict(l=0, r=0, t=70, b=0))
+    fig.write_html(str(path), include_plotlyjs=True, full_html=True, config=dict(displaylogo=False, toImageButtonOptions=dict(scale=2)))
 
 
 # --------------------------------------------------------------------------- cross-section
@@ -316,25 +285,18 @@ def write_vtk_section(path: Path, axis: int, value: float, gu, gz, phi, Eu, Eo, 
     if axis == 1:  # y cut: u = x
         dims, origin, spacing = (nu, 1, nz), (gu[0], value, gz[0]), (du, 1.0, dz)
         E, Ep = (Eu, Eo, Ez), (Eu, 0 * Eo, Ez)
-    else:          # x cut: u = y
+    else:  # x cut: u = y
         dims, origin, spacing = (1, nu, nz), (value, gu[0], gz[0]), (1.0, du, dz)
         E, Ep = (Eo, Eu, Ez), (0 * Eo, Eu, Ez)
     vec = lambda c: np.column_stack([a.ravel() for a in c])
-    _write_vtk_points(path, "fieldview cross-section: E (V/m), phi (V), lengths in um",
-                      dims, origin, spacing,
-                      vectors={"E": vec(E), "E_plane": vec(Ep)},
-                      scalars={"Emag": np.hypot(np.hypot(Eu, Ez), Eo), "Ez": Ez, "phi": phi})
+    _write_vtk_points(path, "fieldview cross-section: E (V/m), phi (V), lengths in um", dims, origin, spacing, vectors={"E": vec(E), "E_plane": vec(Ep)}, scalars={"Emag": np.hypot(np.hypot(Eu, Ez), Eo), "Ez": Ez, "phi": phi})
 
 
-def _write_vtk_points(path: Path, title: str, dims, origin, spacing,
-                      vectors: dict, scalars: dict) -> None:
+def _write_vtk_points(path: Path, title: str, dims, origin, spacing, vectors: dict, scalars: dict) -> None:
     """Legacy VTK STRUCTURED_POINTS, binary (big-endian float32: compact, and NaN-safe)."""
     n = int(np.prod(dims))
     with open(path, "wb") as f:
-        head = (f"# vtk DataFile Version 3.0\n{title}\nBINARY\nDATASET STRUCTURED_POINTS\n"
-                f"DIMENSIONS {dims[0]} {dims[1]} {dims[2]}\n"
-                "ORIGIN {} {} {}\nSPACING {} {} {}\n".format(*origin, *spacing)
-                + f"POINT_DATA {n}\n")
+        head = f"# vtk DataFile Version 3.0\n{title}\nBINARY\nDATASET STRUCTURED_POINTS\nDIMENSIONS {dims[0]} {dims[1]} {dims[2]}\nORIGIN {{}} {{}} {{}}\nSPACING {{}} {{}} {{}}\n".format(*origin, *spacing) + f"POINT_DATA {n}\n"
         f.write(head.encode())
         for name, arr in vectors.items():
             f.write(f"VECTORS {name} float\n".encode())
@@ -393,17 +355,15 @@ def write_vtk_seeds(path: Path, axis: int, value: float, seeds: np.ndarray) -> N
     xyz = np.zeros((k, 3))
     xyz[:, axis], xyz[:, 1 - axis], xyz[:, 2] = value, seeds[:, 0], seeds[:, 1]
     with open(path, "w") as f:
-        f.write("# vtk DataFile Version 3.0\nfieldview field-line seeds (um)\nASCII\n"
-                f"DATASET POLYDATA\nPOINTS {k} float\n")
+        f.write(f"# vtk DataFile Version 3.0\nfieldview field-line seeds (um)\nASCII\nDATASET POLYDATA\nPOINTS {k} float\n")
         np.savetxt(f, xyz, fmt="%.6g")
         f.write(f"VERTICES {k} {2 * k}\n")
         np.savetxt(f, np.column_stack([np.ones(k, int), np.arange(k)]), fmt="%d")
 
 
-def cross_section(run: Path, tris, sig, owner, volts, axis: int, value: float, threads: int,
-                  windows: list[tuple[str, tuple[float, float, float, float]]], res: int,
-                  n_seeds: int = 60) -> None:
+def cross_section(run: Path, tris, sig, owner, volts, axis: int, value: float, threads: int, windows: list[tuple[str, tuple[float, float, float, float]]], res: int, n_seeds: int = 60) -> None:
     import matplotlib
+
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     from matplotlib.path import Path as MPath
@@ -436,10 +396,8 @@ def cross_section(run: Path, tris, sig, owner, volts, axis: int, value: float, t
             for poly in polys:
                 inside |= MPath(poly).contains_points(np.column_stack([U.ravel(), Z.ravel()])).reshape(U.shape)
         phi[inside], Em[inside], Eu[inside], Ez[inside], Eo[inside] = np.nan, np.nan, 0, 0, 0
-        write_vtk_section(run / f"section_{an}{value:g}_{tag}.vtk", axis, value, gu, gz,
-                          phi, Eu, Eo, Ez)
-        write_vtk_seeds(run / f"section_{an}{value:g}_{tag}_seeds.vtk", axis, value,
-                        section_seeds(outlines, gu, gz, Em, n_seeds))
+        write_vtk_section(run / f"section_{an}{value:g}_{tag}.vtk", axis, value, gu, gz, phi, Eu, Eo, Ez)
+        write_vtk_seeds(run / f"section_{an}{value:g}_{tag}_seeds.vtk", axis, value, section_seeds(outlines, gu, gz, Em, n_seeds))
         unit, k = ("kV/mm", 1e-6) if np.nanmax(Em) > 1e6 else ("V/mm", 1e-3)
         Ek = Em * k
         ecap = np.nanpercentile(Ek, 99.5)
@@ -447,11 +405,8 @@ def cross_section(run: Path, tris, sig, owner, volts, axis: int, value: float, t
         fig_w = 13
         panel_h = max(2.4, min(5.5, fig_w / 2 * (sz * stretch) / su * 1.15))
         fig, axs = plt.subplots(1, 2, figsize=(fig_w, panel_h + 1.2), constrained_layout=True)
-        for ax, data, cmap, lim, label in (
-                (axs[0], phi, "turbo", (vmin, vmax), "potential φ (V)"),
-                (axs[1], Ek, "turbo", (0, ecap), f"|E| ({unit})" + (" (clipped)" if np.nanmax(Ek) > ecap * 1.01 else ""))):
-            im = ax.imshow(data, origin="lower", extent=(u0, u1, z0, z1), cmap=cmap,
-                           vmin=lim[0], vmax=lim[1], aspect=stretch, interpolation="bilinear")
+        for ax, data, cmap, lim, label in ((axs[0], phi, "turbo", (vmin, vmax), "potential φ (V)"), (axs[1], Ek, "turbo", (0, ecap), f"|E| ({unit})" + (" (clipped)" if np.nanmax(Ek) > ecap * 1.01 else ""))):
+            im = ax.imshow(data, origin="lower", extent=(u0, u1, z0, z1), cmap=cmap, vmin=lim[0], vmax=lim[1], aspect=stretch, interpolation="bilinear")
             fig.colorbar(im, ax=ax, label=label, shrink=0.9)
             # arrows in screen space: z component scaled like the geometry, length ~ sqrt(|E|)
             step_u = max(1, nu // 28)
@@ -462,8 +417,7 @@ def cross_section(run: Path, tris, sig, owner, volts, axis: int, value: float, t
             ln = np.sqrt(np.nan_to_num(Em[sl]) / np.nanmax(Em))
             with np.errstate(invalid="ignore", divide="ignore"):
                 du, dz = np.where(mag > 0, du / mag * ln, 0), np.where(mag > 0, dz / mag * ln, 0)
-            ax.quiver(U[sl], Z[sl], du, dz, angles="uv", scale_units="width", scale=36,
-                      width=0.0022, headwidth=4, color="k", alpha=0.75)
+            ax.quiver(U[sl], Z[sl], du, dz, angles="uv", scale_units="width", scale=36, width=0.0022, headwidth=4, color="k", alpha=0.75)
             for seg in diel_segs:
                 ax.plot(seg[:, 0], seg[:, 1], color="0.35", lw=0.6)
             for n, polys in outlines.items():
@@ -471,8 +425,7 @@ def cross_section(run: Path, tris, sig, owner, volts, axis: int, value: float, t
                     ax.fill(poly[:, 0], poly[:, 1], facecolor="white", edgecolor="black", lw=1.0)
                     if (poly[:, 0].max() - poly[:, 0].min()) > 0.15 * su:
                         cu = np.clip(poly[:, 0].mean(), u0 + 0.1 * su, u1 - 0.1 * su)
-                        ax.text(cu, poly[:, 1].mean(), f"{n}  {volts.get(n, 0.0):g} V",
-                                ha="center", va="center", fontsize=7, clip_on=True)
+                        ax.text(cu, poly[:, 1].mean(), f"{n}  {volts.get(n, 0.0):g} V", ha="center", va="center", fontsize=7, clip_on=True)
             ax.set_xlim(u0, u1)
             ax.set_ylim(z0, z1)
             ax.set_xlabel(f"{un} (µm)")
@@ -505,25 +458,16 @@ def default_windows(tris, owner, axis: int, value: float):
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("run", type=Path, help="fieldsolve.py run directory (made with --charges)")
-    ap.add_argument("--voltage", action="append", default=[], metavar="NAME=VOLTS",
-                    help="conductor voltage; unlisted conductors are at 0 V "
-                         "(default: the first conductor at 1 V)")
-    ap.add_argument("--box", help="field region x0,y0,z0,x1,y1,z1 in µm "
-                                  "(default: conductor bounding box + 10 %%)")
+    ap.add_argument("--voltage", action="append", default=[], metavar="NAME=VOLTS", help="conductor voltage; unlisted conductors are at 0 V (default: the first conductor at 1 V)")
+    ap.add_argument("--box", help="field region x0,y0,z0,x1,y1,z1 in µm (default: conductor bounding box + 10 %%)")
     ap.add_argument("--points", type=float, default=60000, help="approximate grid size (points)")
-    ap.add_argument("--z-stretch", type=float, default=None,
-                    help="HTML only: exaggerate z by this factor (default: auto for flat boards)")
-    ap.add_argument("--seeds", type=int, default=60,
-                    help="--plane: field-line seeds written next to each section (for ParaView)")
+    ap.add_argument("--z-stretch", type=float, default=None, help="HTML only: exaggerate z by this factor (default: auto for flat boards)")
+    ap.add_argument("--seeds", type=int, default=60, help="--plane: field-line seeds written next to each section (for ParaView)")
     ap.add_argument("--threads", type=int, default=min(8, os.cpu_count() or 1))
-    ap.add_argument("--plane", metavar="x=V|y=V",
-                    help="2-D cross-section instead of the 3-D grid: plot potential and |E| with "
-                         "arrows on the plane x=V or y=V (µm) as PNGs (full cut and an edge zoom)")
-    ap.add_argument("--window", metavar="U0,U1,Z0,Z1",
-                    help="--plane: plot only this window (µm, U = the in-plane horizontal axis)")
+    ap.add_argument("--plane", metavar="x=V|y=V", help="2-D cross-section instead of the 3-D grid: plot potential and |E| with arrows on the plane x=V or y=V (µm) as PNGs (full cut and an edge zoom)")
+    ap.add_argument("--window", metavar="U0,U1,Z0,Z1", help="--plane: plot only this window (µm, U = the in-plane horizontal axis)")
     ap.add_argument("--res", type=int, default=320, help="--plane: points across the window")
-    ap.add_argument("--probe", action="append", default=[], metavar="X,Y,Z",
-                    help="print phi and E at this point (µm); repeatable")
+    ap.add_argument("--probe", action="append", default=[], metavar="X,Y,Z", help="print phi and E at this point (µm); repeatable")
     args = ap.parse_args(argv)
 
     cols = load_run(args.run)
@@ -556,8 +500,7 @@ def main(argv: list[str] | None = None) -> None:
             windows = [("window", tuple(float(v) for v in args.window.split(",")))]
         else:
             windows = default_windows(tris, owner, axis, value)
-        cross_section(args.run, tris, sig, owner, volts, axis, value, args.threads, windows, args.res,
-                      args.seeds)
+        cross_section(args.run, tris, sig, owner, volts, axis, value, args.threads, windows, args.res, args.seeds)
         return
 
     cond = np.array([not o.startswith("diel") for o in owner])
@@ -579,9 +522,7 @@ def main(argv: list[str] | None = None) -> None:
         sxy = math.sqrt(args.points / dims[2] / (ext[0] * ext[1]))
         dims[:2] = np.maximum(np.round(ext[:2] * sxy).astype(int) + 1, 2)
     spacing = ext / (dims - 1)
-    print(f"grid {dims[0]}x{dims[1]}x{dims[2]} = {np.prod(dims)} points, "
-          f"spacing {spacing[0]:.3g},{spacing[1]:.3g},{spacing[2]:.3g} µm")
-
+    print(f"grid {dims[0]}x{dims[1]}x{dims[2]} = {np.prod(dims)} points, spacing {spacing[0]:.3g},{spacing[1]:.3g},{spacing[2]:.3g} µm")
 
     gx, gy, gz = (lo[i] + spacing[i] * np.arange(dims[i]) for i in range(3))
     Z, Y, X = np.meshgrid(gz, gy, gx, indexing="ij")  # VTK order: x fastest
@@ -594,8 +535,7 @@ def main(argv: list[str] | None = None) -> None:
     for p in args.probe:
         r = np.array([[float(x) for x in p.split(",")]])
         ph, e = coulomb(tris, sig, r, 1)
-        print(f"probe ({p}) µm: phi={ph[0]:.4g} V  E=({e[0, 0]:.4g}, {e[0, 1]:.4g}, {e[0, 2]:.4g}) V/m"
-              f"  |E|={np.linalg.norm(e[0]):.4g} V/m")
+        print(f"probe ({p}) µm: phi={ph[0]:.4g} V  E=({e[0, 0]:.4g}, {e[0, 1]:.4g}, {e[0, 2]:.4g}) V/m  |E|={np.linalg.norm(e[0]):.4g} V/m")
 
     # HTML page: copper, dielectric slabs, |E| on cut planes, field lines in the xz cut
     Em = np.linalg.norm(E, axis=1).reshape(dims[2], dims[1], dims[0])
@@ -603,24 +543,16 @@ def main(argv: list[str] | None = None) -> None:
     Ek = Em * scale
     zs = args.z_stretch or max(1.0, min(20.0, 0.25 * max(ext[0], ext[1]) / ext[2]))
     ix, iy, iz = dims[0] // 2, dims[1] // 2, dims[2] // 2
-    planes = [
-        (f"xz cut, y={gy[iy]:.0f} µm", X[:, iy, :], Y[:, iy, :], Z[:, iy, :], Ek[:, iy, :], True),
-        (f"yz cut, x={gx[ix]:.0f} µm", X[:, :, ix], Y[:, :, ix], Z[:, :, ix], Ek[:, :, ix], False),
-        (f"xy cut, z={gz[iz]:.1f} µm", X[iz], Y[iz], Z[iz], Ek[iz], False),
-    ]
+    planes = [(f"xz cut, y={gy[iy]:.0f} µm", X[:, iy, :], Y[:, iy, :], Z[:, iy, :], Ek[:, iy, :], True), (f"yz cut, x={gx[ix]:.0f} µm", X[:, :, ix], Y[:, :, ix], Z[:, :, ix], Ek[:, :, ix], False), (f"xy cut, z={gz[iz]:.1f} µm", X[iz], Y[iz], Z[iz], Ek[iz], False)]
     ownr = np.array(owner)
-    conductors = [(f"{n} ({volts.get(n, 0.0):g} V)", tris[ownr == n])
-                  for n in sorted({o for o in owner if not o.startswith("diel")})]
+    conductors = [(f"{n} ({volts.get(n, 0.0):g} V)", tris[ownr == n]) for n in sorted({o for o in owner if not o.startswith("diel")})]
     dielectrics = []
     for key in sorted({o for o in owner if o.startswith("diel:")}):
         _, k1, k2 = key.split(":")
         dielectrics.append((max(float(k1), float(k2)), tris[ownr == key]))
-    info = ("|E| on the xz cut; "
-            + ", ".join(f"{n}={volts.get(n, 0.0):g} V" for n in names)
-            + (f"; z stretched ×{zs:.3g}" if zs != 1 else ""))
+    info = "|E| on the xz cut; " + ", ".join(f"{n}={volts.get(n, 0.0):g} V" for n in names) + (f"; z stretched ×{zs:.3g}" if zs != 1 else "")
     try:
-        write_html(args.run / "field.html", args.run.name, info, zs, unit, scale,
-                   conductors, dielectrics, planes)
+        write_html(args.run / "field.html", args.run.name, info, zs, unit, scale, conductors, dielectrics, planes)
         html = f", {args.run / 'field.html'}"
     except ImportError:
         html = " (install plotly for field.html)"

@@ -57,16 +57,16 @@ TYPES = ("copper", "dielectric", "mask")
 @dataclass
 class Layer:
     name: str
-    type: str                     # copper | dielectric | mask
+    type: str  # copper | dielectric | mask
     thickness_um: float
     er: float | None = None
     material: str | None = None
     loss_tangent: float | None = None
-    gds: str | None = None        # copper only: "L/D"
-    pads: bool = False            # copper only: sub-cell shapes become footprint pads
-    zones: bool = True            # copper only: top-level shapes become zones
+    gds: str | None = None  # copper only: "L/D"
+    pads: bool = False  # copper only: sub-cell shapes become footprint pads
+    zones: bool = True  # copper only: top-level shapes become zones
     labels: list[str] = field(default_factory=list)  # copper only: text layers naming its nets
-    z_um: float = 0.0             # bottom face, filled in by Process (z = 0 at the bottom)
+    z_um: float = 0.0  # bottom face, filled in by Process (z = 0 at the bottom)
 
     @property
     def k(self) -> float:
@@ -128,14 +128,12 @@ class Process:
             if l.type == "mask":
                 side = "F" if i == 0 else "B"
                 kind = "Top Solder Mask" if side == "F" else "Bottom Solder Mask"
-                out.append(f'\t\t\t(layer "{side}.Mask" (type "{kind}") (thickness {mm}){mat}'
-                           f" (epsilon_r {l.k:g}))")
+                out.append(f'\t\t\t(layer "{side}.Mask" (type "{kind}") (thickness {mm}){mat} (epsilon_r {l.k:g}))')
             elif l.type == "copper":
                 out.append(f'\t\t\t(layer "{l.name}" (type "copper") (thickness {mm}))')
             else:
                 n_diel += 1
-                out.append(f'\t\t\t(layer "dielectric {n_diel}" (type "core") (thickness {mm})'
-                           f"{mat} (epsilon_r {l.k:g}) (loss_tangent {l.loss_tangent or 0:g}))")
+                out.append(f'\t\t\t(layer "dielectric {n_diel}" (type "core") (thickness {mm}){mat} (epsilon_r {l.k:g}) (loss_tangent {l.loss_tangent or 0:g}))')
         out += ['\t\t\t(copper_finish "None")', "\t\t\t(dielectric_constraints no)", "\t\t)"]
         return "\n".join(out) + "\n"
 
@@ -160,10 +158,10 @@ def _check(p: Process, path: str) -> Process:
         if l.type == "mask" and 0 < i < len(p.layers) - 1:
             raise ValueError(f"{path}: mask layer {l.name} must be the first or last layer")
         if l.gds and not re.fullmatch(r"\d+/\d+", l.gds):
-            raise ValueError(f"{path}: layer {l.name}: gds must look like \"8/0\"")
+            raise ValueError(f'{path}: layer {l.name}: gds must look like "8/0"')
         for lab in l.labels:
             if not re.fullmatch(r"\d+/\d+", lab):
-                raise ValueError(f"{path}: layer {l.name}: labels entries must look like \"8/25\"")
+                raise ValueError(f'{path}: layer {l.name}: labels entries must look like "8/25"')
     copper = {l.name for l in p.copper}
     for v in p.vias:
         if v.top not in copper or v.bottom not in copper:
@@ -190,8 +188,7 @@ def resolve(path: str | Path) -> Path:
     for cand in (TECH / str(path) / "stack.toml", TECH / f"{path}.toml"):
         if cand.is_file():
             return cand
-    known = sorted(str(f.relative_to(TECH).with_suffix("")).removesuffix("/stack")
-                   for f in TECH.glob("**/*.toml"))
+    known = sorted(str(f.relative_to(TECH).with_suffix("")).removesuffix("/stack") for f in TECH.glob("**/*.toml"))
     raise FileNotFoundError(f"no stack file {path} (or a process: {', '.join(known)})")
 
 
@@ -200,16 +197,9 @@ def load(path: str | Path) -> Process:
     d = tomllib.loads(path.read_text())
     if "layer" not in d:
         raise ValueError(f"{path}: no [[layer]] entries (a layz stack lists its layers top to bottom)")
-    layers = [Layer(name=x["name"], type=x["type"], thickness_um=float(x["thickness_um"]),
-                    er=x.get("er"), material=x.get("material"), loss_tangent=x.get("loss_tangent"),
-                    gds=x.get("gds"),
-                    pads=bool(x.get("pads", False)), zones=bool(x.get("zones", True)),
-                    labels=[str(v) for v in x["labels"]] if "labels" in x else _pin_layer(x.get("gds")))
-              for x in d["layer"]]
+    layers = [Layer(name=x["name"], type=x["type"], thickness_um=float(x["thickness_um"]), er=x.get("er"), material=x.get("material"), loss_tangent=x.get("loss_tangent"), gds=x.get("gds"), pads=bool(x.get("pads", False)), zones=bool(x.get("zones", True)), labels=[str(v) for v in x["labels"]] if "labels" in x else _pin_layer(x.get("gds"))) for x in d["layer"]]
     vias = [ViaLayer(gds=v["gds"], top=v["top"], bottom=v["bottom"]) for v in d.get("via", [])]
-    return _check(Process(name=d.get("name", Path(path).stem), layers=layers, vias=vias,
-                          outline=d.get("outline"), halo_um=float(d.get("halo_um", 200.0))),
-                  str(path))
+    return _check(Process(name=d.get("name", Path(path).stem), layers=layers, vias=vias, outline=d.get("outline"), halo_um=float(d.get("halo_um", 200.0))), str(path))
 
 
 # ------------------------------------------------------------------- from a .kicad_pcb
@@ -241,7 +231,7 @@ def from_kicad_pcb(pcb_path: str | Path) -> Process | None:
         if depth == 0:
             break
     layers = []
-    for node in _sexp(text[start:end + 1])[0][1:]:
+    for node in _sexp(text[start : end + 1])[0][1:]:
         if not isinstance(node, list) or node[0] != "layer":
             continue
         d = {"name": node[1]}
@@ -249,16 +239,11 @@ def from_kicad_pcb(pcb_path: str | Path) -> Process | None:
             if isinstance(kv, list) and len(kv) >= 2:
                 d.setdefault(kv[0], kv[1])  # first sublayer of a multi-sublayer dielectric
         t = d.get("type", "")
-        kind = ("copper" if t == "copper" else "mask" if "Mask" in t
-                else "dielectric" if t in ("core", "prepreg") or d["name"].startswith("dielectric")
-                else None)
+        kind = "copper" if t == "copper" else "mask" if "Mask" in t else "dielectric" if t in ("core", "prepreg") or d["name"].startswith("dielectric") else None
         mm = float(d.get("thickness", 0) or 0)
         if kind is None or mm <= 0:
             continue  # silkscreen, paste, ...
-        layers.append(Layer(name=d["name"], type=kind, thickness_um=mm * 1000,
-                            er=float(d["epsilon_r"]) if "epsilon_r" in d else None,
-                            material=d.get("material"),
-                            loss_tangent=float(d["loss_tangent"]) if "loss_tangent" in d else None))
+        layers.append(Layer(name=d["name"], type=kind, thickness_um=mm * 1000, er=float(d["epsilon_r"]) if "epsilon_r" in d else None, material=d.get("material"), loss_tangent=float(d["loss_tangent"]) if "loss_tangent" in d else None))
     return Process(name=Path(pcb_path).stem, layers=layers)
 
 

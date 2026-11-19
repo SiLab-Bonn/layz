@@ -189,13 +189,15 @@ layz hyp -d ivtx_rdl all                                  # all, in the file's o
 layz hyp -f path/to/flow.py TARGET                        # a flow file elsewhere (default ./flow.py)
 ```
 
-The usual targets are `setup`, `info`, `dc`, `si` and `sparams`. Each names its own files, nets
-and limits, so it reads on its own; one from
+The usual targets are `setup`, `info`, `dc`, `si` and `sparams`. Each names its own files, nets,
+limits and every HyperLynx setting it uses (no defaults: `layz.hyperlynx.run` documents them),
+so it reads on its own; one from
 [designs/ivtx_rdl/flow.py](designs/ivtx_rdl/flow.py):
 
 ```python
 from pathlib import Path
 from layz.hyperlynx import analysis, plots, run, target
+
 
 @target
 def dc():
@@ -204,10 +206,9 @@ def dc():
     if not board.exists():
         setup()
     out = Path("results/ivtx_rdl/dc")
-    supply = run.dc(board, out / "supply", nets=["/3V_1", "/3V_2", "/3V_3", "/3V_4"])
-    ret = run.dc(board, out / "return", nets=["/3V_1", "/3V_2", "/3V_3", "/3V_4"],
-                 return_from=supply / "ports.csv")
-    analysis.dc_drop(supply, 0.05, out / "dc_drop.csv")
+    supply = run.dc(board, out / "supply", license="HyperLynx SI/PI", nets=["/3V_1", "/3V_2", "/3V_3", "/3V_4"], include_ref=True, max_voltage_drop=5.0, max_current_density=1.5e7, max_via_current=1.0, return_from=None, return_vrm_type="simple", return_sink_resistance=1e6)
+    ret = run.dc(board, out / "return", license="HyperLynx SI/PI", nets=["/3V_1", "/3V_2", "/3V_3", "/3V_4"], include_ref=True, max_voltage_drop=5.0, max_current_density=1.5e7, max_via_current=1.0, return_from=supply / "ports.csv", return_vrm_type="simple", return_sink_resistance=1e6)
+    analysis.dc_drop(supply, max_drop=0.05, out=out / "dc_drop.csv")
     plots.plot_dc(supply, out, ret)
 ```
 

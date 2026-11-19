@@ -48,6 +48,7 @@ def load(flow: Path) -> dict[str, Callable[[], None]]:
 
 def describe(targets: dict[str, Callable[[], None]]) -> str:
     import textwrap
+
     width = max(len(n) for n in targets)
     lines = []
     for name, fn in targets.items():

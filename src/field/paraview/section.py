@@ -18,9 +18,7 @@ import re
 
 import numpy as np
 from paraview import servermanager as sm
-from paraview.simple import (Clip, ColorBy, CreateView, GetColorTransferFunction, GetScalarBar,
-                             LoadPalette, OpenDataFile, Render, SaveScreenshot, SaveState, Show,
-                             Slice, StreamTracerWithCustomSource)
+from paraview.simple import Clip, ColorBy, CreateView, GetColorTransferFunction, GetScalarBar, LoadPalette, OpenDataFile, Render, SaveScreenshot, SaveState, Show, Slice, StreamTracerWithCustomSource
 from vtkmodules.numpy_interface import dataset_adapter as dsa
 
 ap = argparse.ArgumentParser()
@@ -34,7 +32,7 @@ stem = os.path.splitext(args.section)[0]
 sec = OpenDataFile(os.path.abspath(args.section))
 sec.UpdatePipeline()
 b = sec.GetDataInformation().GetBounds()
-ycut = (b[3] - b[2]) < 1e-6           # y = const section (u = x), else x = const (u = y)
+ycut = (b[3] - b[2]) < 1e-6  # y = const section (u = x), else x = const (u = y)
 u0, u1 = (b[0], b[1]) if ycut else (b[2], b[3])
 z0, z1 = b[4], b[5]
 plane = b[2] if ycut else b[0]
@@ -75,8 +73,7 @@ if os.path.exists(panels_path):
     header = open(panels_path).readlines()[1]
     cond_ids = [int(i) for i, n in re.findall(r"(\d+)=(\S+)", header) if not n.startswith("diel")]
     panels = OpenDataFile(panels_path)
-    cond = Clip(Input=panels, ClipType="Scalar", Scalars=["CELLS", "owner"],
-                Value=max(cond_ids) + 0.5, Invert=1)
+    cond = Clip(Input=panels, ClipType="Scalar", Scalars=["CELLS", "owner"], Value=max(cond_ids) + 0.5, Invert=1)
     cut = Slice(Input=cond)
     cut.SliceType.Origin = [0, plane + 1e-3, 0] if ycut else [plane + 1e-3, 0, 0]
     cut.SliceType.Normal = [0, 1, 0] if ycut else [1, 0, 0]
@@ -119,8 +116,7 @@ view.CameraViewUp = [0, 0, 1]
 aspect = view.ViewSize[0] / view.ViewSize[1]
 view.CameraParallelScale = 0.53 * max(z1 - z0, (u1 - u0) / (0.88 * aspect))
 view.CameraFocalPoint = [cu + 0.05 * (u1 - u0), plane, cz] if ycut else [plane, cu + 0.05 * (u1 - u0), cz]
-view.CameraPosition = ([cu + 0.05 * (u1 - u0), plane - 1e5, cz] if ycut
-                       else [plane + 1e5, cu + 0.05 * (u1 - u0), cz])
+view.CameraPosition = [cu + 0.05 * (u1 - u0), plane - 1e5, cz] if ycut else [plane + 1e5, cu + 0.05 * (u1 - u0), cz]
 Render(view)
 
 png = args.out or f"{stem}_{args.color}.png"

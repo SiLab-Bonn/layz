@@ -21,8 +21,7 @@ from pathlib import Path
 
 WRITABLE = ("Bsw.pak", "Bsw.alg", "Bsw.fbd", "Bsw.mask")  # opened read-write by BoardSim
 ARCH = "amd64_linux"
-SEARCH = ("/eda/Siemens/*/RHELx86/HLVX_*/*/SDD_HOME", "/eda/Siemens/*/RHELx86/HLVX_*/SDD_HOME",
-          "/opt/*/HLVX*/*/SDD_HOME", "/opt/*/HLVX*/SDD_HOME")
+SEARCH = ("/eda/Siemens/*/RHELx86/HLVX_*/*/SDD_HOME", "/eda/Siemens/*/RHELx86/HLVX_*/SDD_HOME", "/opt/*/HLVX*/*/SDD_HOME", "/opt/*/HLVX*/SDD_HOME")
 
 
 def find_install() -> Path:
@@ -32,11 +31,9 @@ def find_install() -> Path:
         if not (p / "Scripting" / "bin" / "pythonHL").exists():
             raise SystemExit(f"LAYZ_HYPERLYNX_HOME={env} has no Scripting/bin/pythonHL (point it at SDD_HOME)")
         return p
-    hits = sorted({Path(h) for pat in SEARCH for h in glob.glob(pat)
-                   if (Path(h) / "Scripting" / "bin" / "pythonHL").exists()})
+    hits = sorted({Path(h) for pat in SEARCH for h in glob.glob(pat) if (Path(h) / "Scripting" / "bin" / "pythonHL").exists()})
     if not hits:
-        raise SystemExit("HyperLynx not found: set LAYZ_HYPERLYNX_HOME to its SDD_HOME folder "
-                         "(the one holding hyperlynx/ and Scripting/)")
+        raise SystemExit("HyperLynx not found: set LAYZ_HYPERLYNX_HOME to its SDD_HOME folder (the one holding hyperlynx/ and Scripting/)")
     return hits[-1]  # newest release by path (2024-25/... sorts after 2023-24/...)
 
 
@@ -98,29 +95,13 @@ def environment(install: Path, overlay: Path) -> dict[str, str]:
     """The environment HyperLynx's setup script makes, pointed at the overlay."""
     lic = license_value()
     if not lic:
-        raise SystemExit("no HyperLynx license server: set MGLS_LICENSE_FILE (or LAYZ_HYPERLYNX_LICENSE) "
-                         "to port@server, e.g. 27504@nexus.physik.uni-bonn.de")
+        raise SystemExit("no HyperLynx license server: set MGLS_LICENSE_FILE (or LAYZ_HYPERLYNX_LICENSE) to port@server, e.g. 27504@nexus.physik.uni-bonn.de")
     env = dict(os.environ)
     common = install / "common" / ARCH
     hl = overlay / "hyperlynx"
-    env.update({
-        "MGC_HLVX": str(install.parent),
-        "MG_HLVX_ARCH": ARCH,
-        "MWHOME": str(common / "MainWin5"),
-        "MGLS_HOME": str(common / "mgls"),
-        "HYP_HOME": f"{hl}/",
-        "HLAS_HOME": str(install / "Nimbic" / "bin"),
-        "HLD_HOME": str(install / "hldrc" / "linux64" / "bin"),
-        "MW64BIT": "1",
-        "MGLS_LICENSE_FILE": lic,
-        "SALT_LICENSE_SERVER": os.environ.get("SALT_LICENSE_SERVER", lic),
-        "PYTHONUNBUFFERED": "1",
-    })
-    env["PATH"] = os.pathsep.join([str(hl), str(install / "Nimbic" / "bin"),
-                                   str(install / "hldrc" / "linux64" / "bin"), str(common / "bin"),
-                                   env.get("PATH", "")])
-    env["LD_LIBRARY_PATH"] = os.pathsep.join([str(common / "lib"), str(install / "hldrc" / "linux64" / "bin"),
-                                              env.get("LD_LIBRARY_PATH", "")]).rstrip(os.pathsep)
+    env.update({"MGC_HLVX": str(install.parent), "MG_HLVX_ARCH": ARCH, "MWHOME": str(common / "MainWin5"), "MGLS_HOME": str(common / "mgls"), "HYP_HOME": f"{hl}/", "HLAS_HOME": str(install / "Nimbic" / "bin"), "HLD_HOME": str(install / "hldrc" / "linux64" / "bin"), "MW64BIT": "1", "MGLS_LICENSE_FILE": lic, "SALT_LICENSE_SERVER": os.environ.get("SALT_LICENSE_SERVER", lic), "PYTHONUNBUFFERED": "1"})
+    env["PATH"] = os.pathsep.join([str(hl), str(install / "Nimbic" / "bin"), str(install / "hldrc" / "linux64" / "bin"), str(common / "bin"), env.get("PATH", "")])
+    env["LD_LIBRARY_PATH"] = os.pathsep.join([str(common / "lib"), str(install / "hldrc" / "linux64" / "bin"), env.get("LD_LIBRARY_PATH", "")]).rstrip(os.pathsep)
     return env
 
 

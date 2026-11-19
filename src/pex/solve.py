@@ -19,15 +19,12 @@ Run in the repo's venv (see install.md):
 from __future__ import annotations
 
 import argparse
-import math
-import os
 import re
 import sys
-import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import klayout.db as db
+from klayout import db
 
 from layz import solvers
 
@@ -74,16 +71,7 @@ class Stack:
 
     @classmethod
     def from_dict(cls, d: dict) -> Stack:
-        conds = [
-            Conductor(
-                name=c["name"],
-                layer=str(c["layer"]),
-                z=float(c["z"]),
-                thickness=float(c["thickness"]),
-                labels=[str(x) for x in c.get("labels", [])],
-            )
-            for c in d.get("conductor", [])
-        ]
+        conds = [Conductor(name=c["name"], layer=str(c["layer"]), z=float(c["z"]), thickness=float(c["thickness"]), labels=[str(x) for x in c.get("labels", [])]) for c in d.get("conductor", [])]
         by_name = {c.name: c for c in conds}
         vias = []
         for v in d.get("via", []):
@@ -103,17 +91,8 @@ class Stack:
             if t <= 0:
                 raise ValueError(f"via {v['name']}: non-positive height {t} µm")
             vias.append(Via(v["name"], str(v["layer"]), bot, top, z0, t))
-        diels = [
-            Dielectric(x["name"], float(x["k"]), float(x["z"]), float(x["thickness"]))
-            for x in d.get("dielectric", [])
-        ]
-        return cls(
-            k_void=float(d.get("k_void", 1.0)),
-            halo_um=float(d.get("halo_um", 100.0)),
-            conductors=conds,
-            vias=vias,
-            dielectrics=diels,
-        )
+        diels = [Dielectric(x["name"], float(x["k"]), float(x["z"]), float(x["thickness"])) for x in d.get("dielectric", [])]
+        return cls(k_void=float(d.get("k_void", 1.0)), halo_um=float(d.get("halo_um", 100.0)), conductors=conds, vias=vias, dielectrics=diels)
 
 
 def stack_from_process(p, gds: bool, via_spans: set[tuple[str, str]] | None = None) -> Stack:
@@ -132,8 +111,7 @@ def stack_from_process(p, gds: bool, via_spans: set[tuple[str, str]] | None = No
         if l.type == "copper":
             if gds and not l.gds:
                 continue
-            conductors.append(Conductor(name=l.name, layer=l.gds if gds else l.name,
-                                        z=l.z_um, thickness=l.thickness_um))
+            conductors.append(Conductor(name=l.name, layer=l.gds if gds else l.name, z=l.z_um, thickness=l.thickness_um))
             nbrs = [items[j] for j in (i - 1, i + 1) if 0 <= j < len(items) and items[j].type != "copper"]
             nbrs.sort(key=lambda n: (0 if n.type == "mask" else 1, n.thickness_um))
             if nbrs:
@@ -147,8 +125,7 @@ def stack_from_process(p, gds: bool, via_spans: set[tuple[str, str]] | None = No
             merged[-1][3] += t
         else:
             merged.append([name, k, z0, t])
-    dielectrics = [Dielectric(name=n, k=k, z=z0, thickness=t)
-                   for n, k, z0, t in sorted(merged, key=lambda d: -d[2])]
+    dielectrics = [Dielectric(name=n, k=k, z=z0, thickness=t) for n, k, z0, t in sorted(merged, key=lambda d: -d[2])]
 
     by = {c.name: c for c in conductors}
     vias = []
@@ -156,15 +133,12 @@ def stack_from_process(p, gds: bool, via_spans: set[tuple[str, str]] | None = No
         for v in p.vias:
             if v.top in by and v.bottom in by:
                 b, t = by[v.bottom], by[v.top]
-                vias.append(Via(name=f"V_{v.gds.replace('/', '_')}", layer=v.gds, bottom=v.bottom,
-                                top=v.top, z=b.z + b.thickness, thickness=t.z - (b.z + b.thickness)))
+                vias.append(Via(name=f"V_{v.gds.replace('/', '_')}", layer=v.gds, bottom=v.bottom, top=v.top, z=b.z + b.thickness, thickness=t.z - (b.z + b.thickness)))
     else:
         for top, bot in sorted(via_spans or ()):
             b, t = by[bot], by[top]
-            vias.append(Via(name=f"V_{top}_{bot}".replace(".", ""), layer=f"V:{top}:{bot}",
-                            bottom=bot, top=top, z=b.z, thickness=t.z + t.thickness - b.z))
-    return Stack(k_void=1.0, halo_um=p.halo_um, conductors=conductors, vias=vias,
-                 dielectrics=dielectrics)
+            vias.append(Via(name=f"V_{top}_{bot}".replace(".", ""), layer=f"V:{top}:{bot}", bottom=bot, top=top, z=b.z, thickness=t.z + t.thickness - b.z))
+    return Stack(k_void=1.0, halo_um=p.halo_um, conductors=conductors, vias=vias, dielectrics=dielectrics)
 
 
 def _material_key(l) -> str:
@@ -224,17 +198,14 @@ def sanitize(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9_.+-]", "_", name).strip("_") or "net"
 
 
-def extract_bodies(layout: db.Layout, top: db.Cell, stack: Stack,
-                   ports: list[tuple[str, str, float, float]],
-                   merge_names: bool = True) -> list[Body]:
+def extract_bodies(layout: db.Layout, top: db.Cell, stack: Stack, ports: list[tuple[str, str, float, float]], merge_names: bool = True) -> list[Body]:
     cond_by_name = {c.name: c for c in stack.conductors}
 
     # CLI ports become texts on a per-conductor port layer
     port_layers: dict[str, int] = {}
     for name, cond, x, y in ports:
         if cond not in cond_by_name:
-            raise SystemExit(f"--name {name}: unknown conductor {cond!r} "
-                             f"(stack has {', '.join(cond_by_name)})")
+            raise SystemExit(f"--name {name}: unknown conductor {cond!r} (stack has {', '.join(cond_by_name)})")
         li = port_layers.setdefault(cond, layout.layer(db.LayerInfo(f"__port_{cond}")))
         p = db.DPoint(x, y)
         top.shapes(li).insert(db.DText(name, db.DTrans(p)))
@@ -290,8 +261,7 @@ def extract_bodies(layout: db.Layout, top: db.Cell, stack: Stack,
             auto += 1
             name = f"n{auto}"
         elif "," in name:
-            print(f"warning: one body carries several names {name!r}; they are shorted",
-                  file=sys.stderr)
+            print(f"warning: one body carries several names {name!r}; they are shorted", file=sys.stderr)
         bodies.append(Body(sanitize(name), parts))
 
     if merge_names:
@@ -356,8 +326,7 @@ def _robust_delaunay(self: db.Region, *args):
     pad that disagree), each at its own origin, and a polygon still rejected is split into
     trapezoids (exact geometry, coarser mesh)."""
     global SLIVERS_DROPPED, SNAPPED
-    for attempt in (lambda: _delaunay(self, *args), lambda: _at_origin(self, *args),
-                    lambda: _at_origin(self, args[0], 0.0)):
+    for attempt in (lambda: _delaunay(self, *args), lambda: _at_origin(self, *args), lambda: _at_origin(self, args[0], 0.0)):
         try:
             return attempt()
         except RuntimeError:
@@ -382,8 +351,7 @@ db.Region.delaunay = _robust_delaunay
 def build_model(bodies: list[Body], stack: Stack, amax_um2: float, delaunay_b: float):
     from klayout_pex.fastercap.fastercap_model_generator import FasterCapModelBuilder
 
-    mb = FasterCapModelBuilder(dbu=MODEL_DBU_UM, k_void=stack.k_void,
-                               delaunay_amax=amax_um2, delaunay_b=delaunay_b)
+    mb = FasterCapModelBuilder(dbu=MODEL_DBU_UM, k_void=stack.k_void, delaunay_amax=amax_um2, delaunay_b=delaunay_b)
     bbox = db.Box()
     for b in bodies:
         bbox += b.bbox()
@@ -402,6 +370,7 @@ def build_model(bodies: list[Body], stack: Stack, amax_um2: float, delaunay_b: f
 @dataclass
 class CapacitanceMatrix:
     """A solver's capacitance matrix: conductor names and rows, in F."""
+
     conductor_names: list[str]
     rows: list[list[float]]
 
@@ -410,10 +379,7 @@ class CapacitanceMatrix:
 
 
 # FasterCap 6.2 exit codes (iic-jku fork); earlier versions exit 0 or 1
-FASTERCAP_EXIT = {1: "other error", 64: "wrong command line", 65: "NaN or infinite results",
-                  66: "input file can't be opened", 71: "out of memory", 74: "input can't be read",
-                  75: "GMRES didn't converge", 97: "can't go out-of-core", 98: "unexpected exception",
-                  125: "stopped"}
+FASTERCAP_EXIT = {1: "other error", 64: "wrong command line", 65: "NaN or infinite results", 66: "input file can't be opened", 71: "out of memory", 74: "input can't be read", 75: "GMRES didn't converge", 97: "can't go out-of-core", 98: "unexpected exception", 125: "stopped"}
 
 
 def run_solver(args, lst: Path, log: Path) -> CapacitanceMatrix:
@@ -424,14 +390,11 @@ def run_solver(args, lst: Path, log: Path) -> CapacitanceMatrix:
     import subprocess
 
     if args.solver == "fastercap":
-        cmd = [solvers.find("fastercap"), "-b", "-i", f"-a{args.tolerance}", f"-d{args.d_coeff}",
-               f"-m{args.mesh}", "-ap", *(["-c"] if args.charges else []),
-               *(["-g"] if args.galerkin else []), lst.name]
+        cmd = [solvers.find("fastercap"), "-b", "-i", f"-a{args.tolerance}", f"-d{args.d_coeff}", f"-m{args.mesh}", "-ap", *(["-c"] if args.charges else []), *(["-g"] if args.galerkin else []), lst.name]
     else:
         cmd = [solvers.find("fastcap2"), "-o2", "-p1.0", f"-t{args.tolerance}", f"-l{lst.name}"]
     with open(log, "w") as f:
-        rc = subprocess.run(cmd, cwd=lst.parent, stdin=subprocess.DEVNULL, stdout=f,
-                            stderr=subprocess.STDOUT).returncode
+        rc = subprocess.run(cmd, cwd=lst.parent, stdin=subprocess.DEVNULL, stdout=f, stderr=subprocess.STDOUT).returncode
     if rc != 0:
         why = FASTERCAP_EXIT.get(rc, "") if args.solver == "fastercap" else ""
         raise SystemExit(f"{cmd[0]} failed with exit code {rc}{f' ({why})' if why else ''}, see {log}")
@@ -441,10 +404,10 @@ def run_solver(args, lst: Path, log: Path) -> CapacitanceMatrix:
 def parse_fastercap(log: Path) -> CapacitanceMatrix:
     """Last capacitance matrix of a FasterCap log, in F (geometry in µm, the solver assumes m).
 
-        Capacitance matrix is:
-        Dimension 2 x 2
-        g1_bot  9.21794e-07 -9.01492e-07
-        g2_top  -9.01492e-07 9.21794e-07
+    Capacitance matrix is:
+    Dimension 2 x 2
+    g1_bot  9.21794e-07 -9.01492e-07
+    g2_top  -9.01492e-07 9.21794e-07
     """
     lines = log.read_text(errors="replace").splitlines()
     starts = [i for i, l in enumerate(lines) if l.strip() == "Capacitance matrix is:"]
@@ -455,16 +418,14 @@ def parse_fastercap(log: Path) -> CapacitanceMatrix:
     if not m:
         raise SystemExit(f"can't read the matrix dimension in {log}")
     names, rows = [], []
-    for line in lines[i + 2:i + 2 + int(m.group(1))]:
+    for line in lines[i + 2 : i + 2 + int(m.group(1))]:
         cells = line.split()
         names.append(cells[0])
         rows.append([float(c) * 1e-6 for c in cells[1:]])
     return CapacitanceMatrix(conductor_names=names, rows=rows)
 
 
-FASTCAP2_UNITS = {"farads": 1.0, "millifarads": 1e-3, "microfarads": 1e-6,
-                  "nanofarads": 1e-9, "picofarads": 1e-12, "femtofarads": 1e-15,
-                  "attofarads": 1e-18}
+FASTCAP2_UNITS = {"farads": 1.0, "millifarads": 1e-3, "microfarads": 1e-6, "nanofarads": 1e-9, "picofarads": 1e-12, "femtofarads": 1e-15, "attofarads": 1e-18}
 
 
 def parse_fastcap2(log: Path) -> CapacitanceMatrix:
@@ -477,7 +438,7 @@ def parse_fastcap2(log: Path) -> CapacitanceMatrix:
     scale = FASTCAP2_UNITS[lines[i].split(",")[1].strip().lower()] * 1e-6
     dim = len(lines[i + 1].split())
     names, rows = [], []
-    for line in lines[i + 2:i + 2 + dim]:
+    for line in lines[i + 2 : i + 2 + dim]:
         cells = line.split()
         names.append(cells[0])
         rows.append([float(c) * scale for c in cells[2:]])  # cells[1] is the row index
@@ -500,16 +461,14 @@ def report(cm, bodies: list[Body], out: Path) -> None:
 
     with open(out / "maxwell_matrix_fF.csv", "w") as f:
         f.write("," + ",".join(names) + "\n")
-        for i in range(n):
-            f.write(names[i] + "," + ",".join(f"{v:.6g}" for v in C[i]) + "\n")
+        f.writelines(names[i] + "," + ",".join(f"{v:.6g}" for v in C[i]) + "\n" for i in range(n))
 
     # SPICE / "mutual" view: C_ij = -Maxwell_ij, C_i,inf = row sum
     with open(out / "spice_caps_fF.csv", "w") as f:
         f.write("a,b,C_fF\n")
         for i in range(n):
             f.write(f"{names[i]},INF,{sum(C[i]):.6g}\n")
-            for j in range(i + 1, n):
-                f.write(f"{names[i]},{names[j]},{-C[i][j]:.6g}\n")
+            f.writelines(f"{names[i]},{names[j]},{-C[i][j]:.6g}\n" for j in range(i + 1, n))
 
     w = max(8, *(len(x) for x in names))
     print("\nMaxwell capacitance matrix [fF] (diagonal = total, off-diagonal = -mutual):")
@@ -534,22 +493,17 @@ def parse_port(text: str) -> tuple[str, str, float, float]:
 
 def add_flow_args(ap: argparse.ArgumentParser) -> None:
     """Options shared by fieldsolve.py (GDS) and kicad2fastercap.py (KiCad)."""
-    ap.add_argument("--split-nets", action="store_true",
-                    help="keep disconnected bodies of the same name as separate conductors")
+    ap.add_argument("--split-nets", action="store_true", help="keep disconnected bodies of the same name as separate conductors")
     ap.add_argument("--nets", help="comma-separated body names to keep (default: all)")
     ap.add_argument("--solver", choices=["fastercap", "fastcap2"], default="fastercap")
     ap.add_argument("--out", type=Path, help="run directory (default: run_<input stem>)")
-    ap.add_argument("--amax", type=float, default=None,
-                    help="max triangle area µm² (default: 0 = FasterCap refines itself; "
-                         "for fastcap2 bbox/2000)")
+    ap.add_argument("--amax", type=float, default=None, help="max triangle area µm² (default: 0 = FasterCap refines itself; for fastcap2 bbox/2000)")
     ap.add_argument("--delaunay-b", type=float, default=0.5)
-    ap.add_argument("--tolerance", type=float, default=0.01,
-                    help="relative tolerance (keep <= 0.01 with dielectrics)")
+    ap.add_argument("--tolerance", type=float, default=0.01, help="relative tolerance (keep <= 0.01 with dielectrics)")
     ap.add_argument("--mesh", type=float, default=0.5, help="FasterCap -m refinement")
     ap.add_argument("--d-coeff", type=float, default=0.5, help="FasterCap -d coefficient")
     ap.add_argument("--galerkin", action="store_true", help="FasterCap Galerkin scheme")
-    ap.add_argument("--charges", action="store_true",
-                    help="FasterCap: also dump panel charges, for fieldview.py (E-field, potential)")
+    ap.add_argument("--charges", action="store_true", help="FasterCap: also dump panel charges, for fieldview.py (E-field, potential)")
     ap.add_argument("--stl", action="store_true", help="also dump STL of each body/dielectric")
     ap.add_argument("--list", action="store_true", help="only list the conductor bodies")
     ap.add_argument("--dry-run", action="store_true", help="write solver input, don't solve")
@@ -561,14 +515,14 @@ def setup_logging(verbose: bool) -> None:
     try:
         from klayout_pex.log import LogLevel, set_log_level
         from klayout_pex.log.logger import configure_logger
+
         configure_logger()
         set_log_level(LogLevel.SUBPROCESS if verbose else LogLevel.WARNING)
     except (ImportError, AttributeError):
         pass
 
 
-def run_flow(args, layout: db.Layout, top: db.Cell, stack: Stack, out: Path,
-             ports: list[tuple[str, str, float, float]] = ()) -> None:
+def run_flow(args, layout: db.Layout, top: db.Cell, stack: Stack, out: Path, ports: list[tuple[str, str, float, float]] = ()) -> None:
     """Conductor bodies -> 3-D model (.lst/.geo) -> FasterCap/FastCap2 -> capacitance matrix."""
     to_model_grid(layout)
     bodies = extract_bodies(layout, top, stack, list(ports), merge_names=not args.split_nets)
@@ -582,9 +536,7 @@ def run_flow(args, layout: db.Layout, top: db.Cell, stack: Stack, out: Path,
     for b in bodies:
         bb = b.bbox()
         layers = sorted({p[0] for p in b.parts})
-        print(f"  {b.name:<16} layers={','.join(layers):<20} "
-              f"bbox=({bb.left * MODEL_DBU_UM:.1f},{bb.bottom * MODEL_DBU_UM:.1f};"
-              f"{bb.right * MODEL_DBU_UM:.1f},{bb.top * MODEL_DBU_UM:.1f}) µm")
+        print(f"  {b.name:<16} layers={','.join(layers):<20} bbox=({bb.left * MODEL_DBU_UM:.1f},{bb.bottom * MODEL_DBU_UM:.1f};{bb.right * MODEL_DBU_UM:.1f},{bb.top * MODEL_DBU_UM:.1f}) µm")
     if args.list:
         return
 
@@ -594,7 +546,7 @@ def run_flow(args, layout: db.Layout, top: db.Cell, stack: Stack, out: Path,
             bb = db.Box()
             for b in bodies:
                 bb += b.bbox()
-            amax = bb.width() * bb.height() * MODEL_DBU_UM ** 2 / 2000
+            amax = bb.width() * bb.height() * MODEL_DBU_UM**2 / 2000
         else:
             amax = 0.0
 
@@ -605,8 +557,7 @@ def run_flow(args, layout: db.Layout, top: db.Cell, stack: Stack, out: Path,
     if SLIVERS_DROPPED:
         print(f"note: dropped {SLIVERS_DROPPED} sub-2 nm sliver polygon(s) the triangulator rejected")
     if SNAPPED:
-        print(f"note: {SNAPPED} polygon(s) meshed from trapezoids (the triangulator rejected them); "
-              "exact geometry, coarser start mesh")
+        print(f"note: {SNAPPED} polygon(s) meshed from trapezoids (the triangulator rejected them); exact geometry, coarser start mesh")
     files = gen.write_fastcap(str(out), prefix="m")
     lst = Path(files[0])
     print(f"solver input: {lst} ({len(files) - 1} panel files)")
@@ -620,27 +571,23 @@ def run_flow(args, layout: db.Layout, top: db.Cell, stack: Stack, out: Path,
     if args.solver == "fastercap":
         passes = (out / "fastercap.log").read_text().count("Iteration number")
         if passes < 2:
-            print(f"WARNING: FasterCap stopped after {passes} refinement pass(es); with dielectrics "
-                  f"the first pass can be far off (e.g. 35 % low). Lower --tolerance "
-                  f"(now {args.tolerance}) and compare.", file=sys.stderr)
+            print(f"WARNING: FasterCap stopped after {passes} refinement pass(es); with dielectrics the first pass can be far off (e.g. 35 % low). Lower --tolerance (now {args.tolerance}) and compare.", file=sys.stderr)
     report(cm, bodies, out)
 
 
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("input", type=Path, help="GDS or OASIS file")
-    ap.add_argument("--stack", type=Path, required=True,
-                    help="layz process stack (.toml, a file, or a process in tech/: uni-bonn-rdl, multicb/4L-01, ...)")
+    ap.add_argument("--stack", type=Path, required=True, help="layz process stack (.toml, a file, or a process in tech/: uni-bonn-rdl, multicb/4L-01, ...)")
     ap.add_argument("--cell", help="top cell (default: the top cell)")
-    ap.add_argument("--name", dest="ports", action="append", default=[], type=parse_port,
-                    metavar="NAME=CONDUCTOR@X,Y",
-                    help="name the body on CONDUCTOR touching point X,Y (µm); repeatable")
+    ap.add_argument("--name", dest="ports", action="append", default=[], type=parse_port, metavar="NAME=CONDUCTOR@X,Y", help="name the body on CONDUCTOR touching point X,Y (µm); repeatable")
     add_flow_args(ap)
     args = ap.parse_args(argv)
     setup_logging(args.verbose)
 
     layout, top = load_gds(args.input, args.cell)
     from layz import stack as stackfile
+
     stack = stack_from_process(stackfile.load(args.stack), gds=True)
     run_flow(args, layout, top, stack, args.out or Path(f"run_{args.input.stem}"), args.ports)
 

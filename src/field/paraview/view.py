@@ -11,9 +11,7 @@ import argparse
 import os
 import re
 
-from paraview.simple import (Calculator, Clip, ColorBy, CreateView, GetColorTransferFunction,
-                             GetScalarBar, Glyph, LoadPalette, OpenDataFile, Render, SaveScreenshot,
-                             Show, Slice, Transform)
+from paraview.simple import Calculator, Clip, ColorBy, CreateView, GetColorTransferFunction, GetScalarBar, Glyph, LoadPalette, OpenDataFile, Render, SaveScreenshot, Show, Slice, Transform
 
 ap = argparse.ArgumentParser()
 ap.add_argument("run")
@@ -55,13 +53,12 @@ def stretched(src):
 
 
 # conductors: panels whose owner is a conductor; only the half behind the cut plane
-cond = Clip(Input=panels, ClipType="Scalar", Scalars=["CELLS", "owner"],
-            Value=max(cond_ids) + 0.5, Invert=1)
+cond = Clip(Input=panels, ClipType="Scalar", Scalars=["CELLS", "owner"], Value=max(cond_ids) + 0.5, Invert=1)
 back = Clip(Input=cond, ClipType="Plane")
 back.ClipType.Origin = [0, Y, 0]
 back.ClipType.Normal = [0, -1, 0]
 cd = Show(stretched(back), view)
-cd.ColorArrayName = ['POINTS', '']
+cd.ColorArrayName = ["POINTS", ""]
 cd.DiffuseColor = [0.80, 0.50, 0.20]
 cd.Opacity = 0.6
 
@@ -70,7 +67,7 @@ xs = Slice(Input=cond)
 xs.SliceType.Origin = [0, Y, 0]
 xs.SliceType.Normal = [0, 1, 0]
 xd = Show(stretched(xs), view)
-xd.ColorArrayName = ['POINTS', '']
+xd.ColorArrayName = ["POINTS", ""]
 xd.DiffuseColor = [0.55, 0.30, 0.05]
 xd.LineWidth = 4.0
 
@@ -95,13 +92,12 @@ bar.ComponentTitle = ""
 # arrows in the stretched space: tilt E like the geometry, keep arrow shapes undistorted
 evec = Calculator(Input=cut_s, ResultArrayName="E_plot", Function=f"E_X*iHat+E_Y*jHat+E_Z*{zs}*kHat")
 emax = max(abs(v) for v in cut.PointData["Emag"].GetRange())
-gl = Glyph(Input=evec, GlyphType="Arrow", OrientationArray=["POINTS", "E_plot"],
-           ScaleArray=["POINTS", "Emag"])
+gl = Glyph(Input=evec, GlyphType="Arrow", OrientationArray=["POINTS", "E_plot"], ScaleArray=["POINTS", "Emag"])
 gl.ScaleFactor = 0.035 * (b[1] - b[0]) / emax  # the strongest field gets an arrow of 3.5 % width
 gl.GlyphMode = "Every Nth Point"
 gl.Stride = 5
 gd = Show(gl, view)
-gd.ColorArrayName = ['POINTS', '']
+gd.ColorArrayName = ["POINTS", ""]
 gd.DiffuseColor = [0.1, 0.1, 0.1]
 
 # look at the cut plane from the front (-y), z up, slightly from above and the side

@@ -58,26 +58,9 @@ SPECTRAL_DENSITY_LIMITS_NV = (1.0, 1.0e5)
 # The per-decade RMS panels below them share this range in µV.
 DECADE_RMS_LIMITS_UV = (0.1, 1.0e4)
 
-CURVE_COLORS = (
-    NORD_BLUE,
-    NORD_ORANGE,
-    NORD_GREEN,
-    NORD_PURPLE,
-    NORD_YELLOW,
-    NORD_RED,
-    NORD_CYAN,
-    NORD_TEAL,
-    NORD_LIGHT_BLUE,
-    NORD_DARK,
-)
-SPECTRUM_COLOR_MAP = LinearSegmentedColormap.from_list(
-    "nord_blue_orange_yellow",
-    (NORD_BLUE, NORD_ORANGE, NORD_YELLOW),
-)
-DENSITY_COLOR_MAP = LinearSegmentedColormap.from_list(
-    "nord_purple_orange_yellow",
-    SPECTRUM_COLOR_MAP(np.linspace(0.2, 1.0, 256)),
-)
+CURVE_COLORS = (NORD_BLUE, NORD_ORANGE, NORD_GREEN, NORD_PURPLE, NORD_YELLOW, NORD_RED, NORD_CYAN, NORD_TEAL, NORD_LIGHT_BLUE, NORD_DARK)
+SPECTRUM_COLOR_MAP = LinearSegmentedColormap.from_list("nord_blue_orange_yellow", (NORD_BLUE, NORD_ORANGE, NORD_YELLOW))
+DENSITY_COLOR_MAP = LinearSegmentedColormap.from_list("nord_purple_orange_yellow", SPECTRUM_COLOR_MAP(np.linspace(0.2, 1.0, 256)))
 PLOT_STYLE = mpl.RcParams(
     {
         "text.usetex": False,
@@ -148,29 +131,11 @@ def style_grid(ax: plt.Axes) -> None:
     if isinstance(ax.yaxis.get_minor_locator(), NullLocator):
         ax.yaxis.set_minor_locator(AutoMinorLocator())
     ax.set_axisbelow(True)
-    ax.grid(
-        True,
-        which="major",
-        color=GRID_MAJOR_COLOR,
-        alpha=0.95,
-        linewidth=0.8,
-    )
-    ax.grid(
-        True,
-        which="minor",
-        color=GRID_MINOR_COLOR,
-        alpha=1.0,
-        linewidth=0.5,
-    )
+    ax.grid(True, which="major", color=GRID_MAJOR_COLOR, alpha=0.95, linewidth=0.8)
+    ax.grid(True, which="minor", color=GRID_MINOR_COLOR, alpha=1.0, linewidth=0.5)
 
 
-def style_info_box(
-    ax: plt.Axes,
-    lines: Sequence[str],
-    *,
-    location: str = "upper right",
-    line_colors: Sequence[str] | None = None,
-) -> None:
+def style_info_box(ax: plt.Axes, lines: Sequence[str], *, location: str = "upper right", line_colors: Sequence[str] | None = None) -> None:
     """Add measurement setup using the same spacing and frame as a legend."""
 
     # Legend rcParams do not apply automatically to anchored offset boxes.
@@ -181,22 +146,8 @@ def style_info_box(
     if line_colors is None:
         child = TextArea("\n".join(lines), textprops={"size": INFO_BOX_FONT_SIZE})
     else:
-        child = VPacker(
-            children=[
-                TextArea(line, textprops={"color": color, "size": INFO_BOX_FONT_SIZE})
-                for line, color in zip(lines, line_colors, strict=True)
-            ],
-            align="left",
-            pad=0.0,
-            sep=1.0,
-        )
-    box = AnchoredOffsetbox(
-        loc=location,
-        child=child,
-        frameon=True,
-        pad=mpl.rcParams["legend.borderpad"],
-        borderpad=mpl.rcParams["legend.borderaxespad"],
-    )
+        child = VPacker(children=[TextArea(line, textprops={"color": color, "size": INFO_BOX_FONT_SIZE}) for line, color in zip(lines, line_colors, strict=True)], align="left", pad=0.0, sep=1.0)
+    box = AnchoredOffsetbox(loc=location, child=child, frameon=True, pad=mpl.rcParams["legend.borderpad"], borderpad=mpl.rcParams["legend.borderaxespad"])
     box.patch.set_boxstyle(f"round,pad={mpl.rcParams['legend.borderpad']}")
     box.patch.set_facecolor(mpl.rcParams["legend.facecolor"])
     box.patch.set_edgecolor(mpl.rcParams["legend.edgecolor"])
@@ -228,26 +179,13 @@ def style_ratio_limits(*ratios: np.ndarray) -> tuple[float, float]:
     return min(0.9, float(np.min(finite)) - 0.05), max(1.1, float(np.max(finite)) + 0.05)
 
 
-def save_figure(
-    fig: plt.Figure,
-    output_path: Path,
-    *,
-    pdf_metadata: Mapping[str, str] | None = None,
-) -> tuple[Path, ...]:
+def save_figure(fig: plt.Figure, output_path: Path, *, pdf_metadata: Mapping[str, str] | None = None) -> tuple[Path, ...]:
     output_path = Path(output_path)
     if output_path.suffix:
         raise ValueError("plot output_path must be a suffixless artifact stem")
     output_path.parent.mkdir(parents=True, exist_ok=True)
     paths = []
-    formats = tuple(
-        output_format
-        for output_format, enabled in (
-            ("png", PLOT_PNGS),
-            ("svg", PLOT_SVGS),
-            ("pdf", PLOT_PDFS),
-        )
-        if enabled
-    )
+    formats = tuple(output_format for output_format, enabled in (("png", PLOT_PNGS), ("svg", PLOT_SVGS), ("pdf", PLOT_PDFS)) if enabled)
     if not formats:
         raise RuntimeError("at least one plot output format must be enabled")
     # Preserve figures that explicitly disable automatic layout. Matplotlib can
@@ -264,5 +202,3 @@ def save_figure(
             paths.append(path)
     plt.close(fig)
     return tuple(paths)
-
-

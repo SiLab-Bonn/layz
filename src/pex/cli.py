@@ -10,6 +10,8 @@ def main(argv: list[str] | None = None) -> int | None:
     target = next((a for a in argv if not a.startswith("-")), "")
     if target.lower().endswith(".kicad_pcb"):
         from layz.pex.kicad import main as kicad_main
+
         return kicad_main(argv)
     from layz.pex.solve import main as gds_main
+
     return gds_main(argv)

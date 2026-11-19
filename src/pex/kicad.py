@@ -26,15 +26,14 @@ import re
 import sys
 from pathlib import Path
 
-import klayout.db as db
 import pcbnew
+from klayout import db
 
 from layz import stack as stackfile
-from layz.pex.solve import (MODEL_DBU_UM, Conductor, Dielectric, Stack, Via, add_flow_args,
-                        run_flow, setup_logging, stack_from_process)
+from layz.pex.solve import MODEL_DBU_UM, Stack, add_flow_args, run_flow, setup_logging, stack_from_process
 
-MAX_ERROR_NM = 1000    # arc/circle polygonization error
-BARREL_SIDES = 16      # via barrels as 16-gons
+MAX_ERROR_NM = 1000  # arc/circle polygonization error
+BARREL_SIDES = 16  # via barrels as 16-gons
 
 
 # --------------------------------------------------------------------------- geometry
@@ -69,14 +68,12 @@ def load_board(pcb_path: Path, refill: bool) -> tuple[db.Layout, db.Cell, Stack,
     warnings: list[str] = []
 
     def has_fill(z) -> bool:
-        return any(z.HasFilledPolysForLayer(l) and z.GetFilledPolysList(l).OutlineCount() > 0
-                   for l in z.GetLayerSet().CuStack())
+        return any(z.HasFilledPolysForLayer(l) and z.GetFilledPolysList(l).OutlineCount() > 0 for l in z.GetLayerSet().CuStack())
 
     unfilled = [z for z in board.Zones() if not z.GetIsRuleArea() and not has_fill(z)]
     if unfilled and refill:
         pcbnew.ZONE_FILLER(board).Fill(board.Zones())
-        warnings.append(f"filled {len(unfilled)} unfilled zone(s) with KiCad's zone filler "
-                        "(the .kicad_pcb is not modified)")
+        warnings.append(f"filled {len(unfilled)} unfilled zone(s) with KiCad's zone filler (the .kicad_pcb is not modified)")
 
     cu_ids = list(board.GetEnabledLayers().CuStack())  # top -> bottom
     cu_names = [board.GetLayerName(l) for l in cu_ids]
@@ -104,15 +101,12 @@ def load_board(pcb_path: Path, refill: bool) -> tuple[db.Layout, db.Cell, Stack,
         via_spans.add((top_name, bot_name))
         li = layout.layer(db.LayerInfo(f"V:{top_name}:{bot_name}"))
         r = drill_nm / 2
-        pts = [db.Point(round(pos.x + r * math.cos(2 * math.pi * i / BARREL_SIDES)),
-                        round(pos.y + r * math.sin(2 * math.pi * i / BARREL_SIDES)))
-               for i in range(BARREL_SIDES)]
+        pts = [db.Point(round(pos.x + r * math.cos(2 * math.pi * i / BARREL_SIDES)), round(pos.y + r * math.sin(2 * math.pi * i / BARREL_SIDES))) for i in range(BARREL_SIDES)]
         top.shapes(li).insert(db.Polygon(pts))
 
     for t in board.GetTracks():
         if t.GetClass() == "PCB_VIA":
-            a, b = sorted((board.GetLayerName(t.TopLayer()), board.GetLayerName(t.BottomLayer())),
-                          key=order.get)
+            a, b = sorted((board.GetLayerName(t.TopLayer()), board.GetLayerName(t.BottomLayer())), key=order.get)
             for lid in cu_ids:
                 if order[a] <= order[board.GetLayerName(lid)] <= order[b] and t.FlashLayer(lid):
                     add(t, lid)
@@ -126,8 +120,7 @@ def load_board(pcb_path: Path, refill: bool) -> tuple[db.Layout, db.Cell, Stack,
                 if pad.IsOnLayer(lid) and pad.FlashLayer(lid):
                     add(pad, lid)
             if pad.GetAttribute() == pcbnew.PAD_ATTRIB_PTH and pad.GetDrillSizeX() > 0:
-                barrel(cu_names[0], cu_names[-1], pad.GetPosition(),
-                       min(pad.GetDrillSizeX(), pad.GetDrillSizeY()), pad.GetNetname())
+                barrel(cu_names[0], cu_names[-1], pad.GetPosition(), min(pad.GetDrillSizeX(), pad.GetDrillSizeY()), pad.GetNetname())
 
     for z in board.Zones():
         if z.GetIsRuleArea():
@@ -149,9 +142,7 @@ def load_board(pcb_path: Path, refill: bool) -> tuple[db.Layout, db.Cell, Stack,
     process = stackfile.from_kicad_pcb(pcb_path)
     if process is None:
         board_mm = board.GetDesignSettings().GetBoardThickness() / 1e6
-        warnings.append(f"{pcb_path.name} has no stackup: using KiCad's default {board_mm:g} mm FR4 "
-                        "stack; set the real one in Board Setup > Physical Stackup, or write the "
-                        "board with `layz gds2pcb --stack`")
+        warnings.append(f"{pcb_path.name} has no stackup: using KiCad's default {board_mm:g} mm FR4 stack; set the real one in Board Setup > Physical Stackup, or write the board with `layz gds2pcb --stack`")
         process = stackfile.kicad_default(cu_names, board_mm)
     process.halo_um = 1000.0
     return layout, top, stack_from_process(process, gds=False, via_spans=via_spans), warnings
@@ -160,8 +151,7 @@ def load_board(pcb_path: Path, refill: bool) -> tuple[db.Layout, db.Cell, Stack,
 def print_stack(stack: Stack) -> None:
     print("stack (µm, z = bottom face):")
     rows = [(c.z, f"  copper     {c.name:<14} z={c.z:9.3f}  t={c.thickness:8.3f}") for c in stack.conductors]
-    rows += [(d.z, f"  dielectric {d.name:<14} z={d.z:9.3f}  t={d.thickness:8.3f}  εr={d.k:g}")
-             for d in stack.dielectrics]
+    rows += [(d.z, f"  dielectric {d.name:<14} z={d.z:9.3f}  t={d.thickness:8.3f}  εr={d.k:g}") for d in stack.dielectrics]
     for _, line in sorted(rows, key=lambda r: -r[0]):
         print(line)
 
@@ -169,8 +159,7 @@ def print_stack(stack: Stack) -> None:
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("pcb", type=Path, help=".kicad_pcb board")
-    ap.add_argument("--no-fill", action="store_true",
-                    help="don't fill unfilled zones (keeps cached fills, e.g. from layz gds2pcb)")
+    ap.add_argument("--no-fill", action="store_true", help="don't fill unfilled zones (keeps cached fills, e.g. from layz gds2pcb)")
     add_flow_args(ap)
     args = ap.parse_args(argv)
     setup_logging(args.verbose)

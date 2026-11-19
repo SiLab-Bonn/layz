@@ -12,18 +12,9 @@ import argparse
 from collections import defaultdict
 from pathlib import Path
 
-import klayout.db as db
+from klayout import db
 
-DEFAULT_COLORS = [
-    "#c83434",
-    "#3a7bd5",
-    "#33a852",
-    "#f4b400",
-    "#9c27b0",
-    "#00acc1",
-    "#ef6c00",
-    "#6d4c41",
-]
+DEFAULT_COLORS = ["#c83434", "#3a7bd5", "#33a852", "#f4b400", "#9c27b0", "#00acc1", "#ef6c00", "#6d4c41"]
 
 
 def svg_num(value: float) -> str:
@@ -47,13 +38,7 @@ def polygon_to_path(poly: db.DPolygon, scale: float, flip_y: bool, y_ref: float)
     return " ".join(commands)
 
 
-def render_gds_to_svg(
-    gds_path: Path,
-    svg_path: Path,
-    scale_mm_per_um: float,
-    width_px: int,
-    flip_y: bool,
-) -> None:
+def render_gds_to_svg(gds_path: Path, svg_path: Path, scale_mm_per_um: float, width_px: int, flip_y: bool) -> None:
     layout = db.Layout()
     layout.read(str(gds_path))
 
@@ -86,19 +71,12 @@ def render_gds_to_svg(
                 paths_by_layer[key].append(path)
             iterator.next()
 
-    lines = [
-        '<?xml version="1.0" encoding="UTF-8"?>',
-        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width_px}" height="{height_px}" '
-        f'viewBox="{svg_num(min_x)} {svg_num(min_y)} {svg_num(width)} {svg_num(height)}">',
-        f"  <title>GDS preview: {gds_path.name}</title>",
-    ]
+    lines = ['<?xml version="1.0" encoding="UTF-8"?>', f'<svg xmlns="http://www.w3.org/2000/svg" width="{width_px}" height="{height_px}" viewBox="{svg_num(min_x)} {svg_num(min_y)} {svg_num(width)} {svg_num(height)}">', f"  <title>GDS preview: {gds_path.name}</title>"]
 
     for index, key in enumerate(sorted(paths_by_layer)):
         color = DEFAULT_COLORS[index % len(DEFAULT_COLORS)]
         layer, datatype = key
-        lines.append(
-            f'  <g id="gds-{layer}-{datatype}" fill="{color}" fill-opacity="0.72" stroke="{color}" stroke-width="0.001">'
-        )
+        lines.append(f'  <g id="gds-{layer}-{datatype}" fill="{color}" fill-opacity="0.72" stroke="{color}" stroke-width="0.001">')
         lines.append(f"    <title>GDS layer {layer}/{datatype}</title>")
         for path in paths_by_layer[key]:
             lines.append(f'    <path d="{path}"/>')
@@ -121,13 +99,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--flip-y", action="store_true")
     args = parser.parse_args(argv)
 
-    render_gds_to_svg(
-        args.gds,
-        args.svg,
-        args.scale_mm_per_um,
-        args.width_px,
-        args.flip_y,
-    )
+    render_gds_to_svg(args.gds, args.svg, args.scale_mm_per_um, args.width_px, args.flip_y)
 
 
 if __name__ == "__main__":

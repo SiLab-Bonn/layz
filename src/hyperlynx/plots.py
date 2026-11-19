@@ -19,8 +19,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.colors import LogNorm
 
-from layz.plotstyle import (CURVE_COLORS, DENSITY_COLOR_MAP, GRID_MAJOR_COLOR, PLOT_STYLE, SPINE_COLOR,
-                            save_figure, style_grid, style_info_box)
+from layz.plotstyle import CURVE_COLORS, DENSITY_COLOR_MAP, GRID_MAJOR_COLOR, PLOT_STYLE, SPINE_COLOR, save_figure, style_grid, style_info_box
 
 MM, IN = 1e3, 25.4
 
@@ -28,10 +27,6 @@ MM, IN = 1e3, 25.4
 def _rows(path: Path) -> list[dict]:
     with open(path, newline="") as f:
         return list(csv.DictReader(f))
-
-
-def _job(run: Path) -> dict:
-    return json.loads((run / "job.json").read_text())
 
 
 def wave(path: Path) -> tuple[np.ndarray, np.ndarray]:
@@ -63,12 +58,13 @@ def load_thermal(path: Path):
             grids[cur] = np.full((ny, nx), np.nan)
         elif l.startswith("Row ") and cur is not None:
             k, vals = l[4:].split(":", 1)
-            a = np.array([float(t) if t else np.nan for t in vals.split(",")[1:nx + 1]])
-            grids[cur][int(k), :len(a)] = a
+            a = np.array([float(t) if t else np.nan for t in vals.split(",")[1 : nx + 1]])
+            grids[cur][int(k), : len(a)] = a
     return grids, dx * dy * IN * IN, [x0 * IN, (x0 + nx * dx) * IN, y0 * IN, (y0 + ny * dy) * IN]
 
 
 # ------------------------------------------------------------------------------------------ DC
+
 
 def _sides(run: Path):
     """(supply nets, reference nets, {net: VRM voltage}) of a DC run."""
@@ -91,21 +87,18 @@ def plot_dc(run: Path, out: Path, ret: Path | None = None) -> list[Path]:
 
     fig, axes = plt.subplots(2, 1, figsize=(12.8, 4.6), sharex=True)
     for ax, side, name in ((axes[0], sup, "Supply"), (axes[1], ref, "Return")):
-        ax.scatter([float(c["x1"]) * MM for c in vias if c["net"] in side],
-                   [float(c["y1"]) * MM for c in vias if c["net"] in side], s=1, color=GRID_MAJOR_COLOR, zorder=1)
+        ax.scatter([float(c["x1"]) * MM for c in vias if c["net"] in side], [float(c["y1"]) * MM for c in vias if c["net"] in side], s=1, color=GRID_MAJOR_COLOR, zorder=1)
         pins = [p for p in ports if p["net"] in side and p["x"]]
         if not pins:
             ax.set_visible(False)
             continue
         v = np.array([float(p["voltage_V"]) for p in pins])
         cmap = DENSITY_COLOR_MAP.reversed() if name == "Supply" else DENSITY_COLOR_MAP  # worst bright
-        sc = ax.scatter([float(p["x"]) * MM for p in pins], [float(p["y"]) * MM for p in pins], c=v * 1e3,
-                        cmap=cmap, s=22, edgecolors=SPINE_COLOR, linewidths=0.3, zorder=2)
+        sc = ax.scatter([float(p["x"]) * MM for p in pins], [float(p["y"]) * MM for p in pins], c=v * 1e3, cmap=cmap, s=22, edgecolors=SPINE_COLOR, linewidths=0.3, zorder=2)
         fig.colorbar(sc, ax=ax, label="Pin voltage (mV)")
         ax.set_aspect("equal")
         ax.set_ylabel("y (mm)")
-        ax.set_title(f"{name} pins ({', '.join(sorted(side))}): {v.min() * 1e3:.1f} to {v.max() * 1e3:.1f} mV, "
-                     f"loss {_loss(ports, side) * 1e3:.0f} mW (grey: vias)", fontsize=10)
+        ax.set_title(f"{name} pins ({', '.join(sorted(side))}): {v.min() * 1e3:.1f} to {v.max() * 1e3:.1f} mV, loss {_loss(ports, side) * 1e3:.0f} mW (grey: vias)", fontsize=10)
     axes[-1].set_xlabel("x (mm)")
     paths += save_figure(fig, out / "dc_pin_voltage")
 
@@ -118,8 +111,7 @@ def plot_dc(run: Path, out: Path, ret: Path | None = None) -> list[Path]:
             if not sel:
                 ax.set_visible(False)
                 continue
-            sc = ax.scatter([float(vias[k]["x1"]) * MM for k in sel], [float(vias[k]["y1"]) * MM for k in sel],
-                            c=cur[sel], cmap=DENSITY_COLOR_MAP, norm=norm, s=5, linewidths=0)
+            sc = ax.scatter([float(vias[k]["x1"]) * MM for k in sel], [float(vias[k]["y1"]) * MM for k in sel], c=cur[sel], cmap=DENSITY_COLOR_MAP, norm=norm, s=5, linewidths=0)
             ax.set_aspect("equal")
             ax.set_ylabel("y (mm)")
             ax.set_title(f"Via current, {name}: {len(sel)} vias, max {cur[sel].max() * 1e3:.0f} mA", fontsize=10)
@@ -148,18 +140,15 @@ def _plot_loss(maps, out: Path) -> list[Path]:
         layers += [n for n, a in g.items() if np.nansum(a) > 1e-3 * tot and n not in layers]
     vmax = max(np.nanmax(a / c) for _, (g, c, _), _ in maps for n, a in g.items() if n in layers)
     norm = LogNorm(vmin=vmax * 1e-4, vmax=vmax)
-    fig, axes = plt.subplots(len(layers), len(maps), figsize=(7.2 * len(maps), 1.25 * len(layers) + 1.0),
-                             sharex=True, sharey=True, squeeze=False)
+    fig, axes = plt.subplots(len(layers), len(maps), figsize=(7.2 * len(maps), 1.25 * len(layers) + 1.0), sharex=True, sharey=True, squeeze=False)
     for j, (side, (g, cell, ext), exact) in enumerate(maps):
         tot = sum(np.nansum(a) for a in g.values())
         empty = [n for n, a in g.items() if n not in layers]
         for i, lay in enumerate(layers):
             ax, a = axes[i, j], g.get(lay)
             if a is not None:
-                im = ax.imshow(np.where(a > 0, a / cell, np.nan), origin="lower", extent=ext, cmap=DENSITY_COLOR_MAP,
-                               norm=norm, aspect="equal", interpolation="nearest", rasterized=True)
-            note = (f" (map total {tot * 1e3:.0f} mW, exact I·ΔV {exact * 1e3:.0f} mW)" if i == 0
-                    else f" (no copper on {', '.join(empty)})" if i == len(layers) - 1 and empty else "")
+                im = ax.imshow(np.where(a > 0, a / cell, np.nan), origin="lower", extent=ext, cmap=DENSITY_COLOR_MAP, norm=norm, aspect="equal", interpolation="nearest", rasterized=True)
+            note = f" (map total {tot * 1e3:.0f} mW, exact I·ΔV {exact * 1e3:.0f} mW)" if i == 0 else f" (no copper on {', '.join(empty)})" if i == len(layers) - 1 and empty else ""
             ax.set_title(f"{side}, {lay}: {np.nansum(a) * 1e3 if a is not None else 0:.0f} mW{note}", fontsize=10)
             ax.set_xlabel("x (mm)" if i == len(layers) - 1 else "")
             ax.set_ylabel("y (mm)" if j == 0 else "")
@@ -168,6 +157,7 @@ def _plot_loss(maps, out: Path) -> list[Path]:
 
 
 # ------------------------------------------------------------------------------------------ SI
+
 
 def _diff_waves(run: Path) -> list[dict]:
     si = json.loads((run / "si.json").read_text())
@@ -188,9 +178,11 @@ def _edge_times(t, v, lo: float, hi: float, rising: bool, max_s: float) -> np.nd
     interpolation; edges that don't make it within ``max_s`` are left out."""
     a, b = (lo, hi) if rising else (hi, lo)
     sgn = 1 if rising else -1
+
     def cross(level):  # times v passes ``level`` in the edge's direction
         i = np.nonzero((sgn * (v[:-1] - level) < 0) & (sgn * (v[1:] - level) >= 0))[0]
         return t[i] + (level - v[i]) / (v[i + 1] - v[i]) * (t[i + 1] - t[i])
+
     ta, tb = cross(a), cross(b)
     if not len(ta) or not len(tb):
         return np.array([])
@@ -259,17 +251,19 @@ def _hexagon(x, up, lo, mid, gap, top, bot) -> list[tuple[float, float]]:
     return best
 
 
-def eye(t, v, ui, skip: int = 4, bins: int = 200) -> dict:
-    """The eye of a waveform, skipping ``skip`` UI, measured on its joined-up trace:
+def eye(t, v, ui, *, skip_ui: float, centre_window: float, edge_levels: tuple[float, float], bins: int = 200) -> dict:
+    """The eye of a waveform, skipping its first ``skip_ui`` UI, measured on its joined-up trace:
     width   the widest gap between the mid-level crossings folded into one UI;
     centre  that gap's middle, as a phase (0..1 UI from the first sample);
-    height  the opening within ±5 % UI of the centre;
+    height  the opening within ±``centre_window`` UI of the centre;
     hexagon the opening as (phase from the centre in UI, V) points, clear of every trace;
-    rise, fall  median 20-80 % edge times, between the levels at the centre.
+    rise, fall  median edge times between ``edge_levels`` (shares of the swing, (0.2, 0.8) for
+            20-80 %), between the levels at the centre.
+    ``bins`` is the phase resolution of the measurement (200 per UI).
     Independent of where the waveform starts, so jittered and ideal runs are measured alike."""
     t, v = np.asarray(t, float), np.asarray(v, float)
     t0 = t[0]
-    keep = t > t0 + skip * ui
+    keep = t > t0 + skip_ui * ui
     t, v = t[keep], v[keep]
     nan = {"height": np.nan, "width": np.nan, "centre": np.nan, "hexagon": [], "rise": np.nan, "fall": np.nan}
     if len(t) < 4:
@@ -284,7 +278,7 @@ def eye(t, v, ui, skip: int = 4, bins: int = 200) -> dict:
     centre, gap = (zc[k] + 0.5 * gaps[k]) % 1, gaps[k]
 
     td, vd = densify(t, v, dv=np.ptp(v) / 400, dt=ui / bins)
-    x = ((td - t0) / ui - centre + 0.5) % 1 - 0.5            # phase from the centre, -0.5..0.5
+    x = ((td - t0) / ui - centre + 0.5) % 1 - 0.5  # phase from the centre, -0.5..0.5
     idx = np.clip(((x + 0.5) * bins).astype(int), 0, bins - 1)
     up, lo = np.full(bins, np.inf), np.full(bins, -np.inf)
     hi_m, lo_m = vd > mid, vd < mid
@@ -292,17 +286,15 @@ def eye(t, v, ui, skip: int = 4, bins: int = 200) -> dict:
     np.maximum.at(lo, idx[lo_m], vd[lo_m])
     up, lo = np.where(np.isinf(up), mid, up), np.where(np.isinf(lo), mid, lo)
     c = bins // 2
-    w = max(1, int(0.05 * bins))
-    top, bot = up[c - w:c + w + 1].min(), lo[c - w:c + w + 1].max()
+    w = max(1, int(centre_window * bins))
+    top, bot = up[c - w : c + w + 1].min(), lo[c - w : c + w + 1].max()
     hexagon = _hexagon((np.arange(bins) + 0.5) / bins - 0.5, up, lo, mid, gap, top, bot)
 
-    cw = np.abs(((t - t0) / ui - centre + 0.5) % 1 - 0.5) < 0.05
+    cw = np.abs(((t - t0) / ui - centre + 0.5) % 1 - 0.5) < centre_window
     one, zero = np.median(v[cw & (v > mid)]), np.median(v[cw & (v < mid)])
-    l20, l80 = zero + 0.2 * (one - zero), zero + 0.8 * (one - zero)
-    rise, fall = (_edge_times(t, v, l20, l80, s, ui) for s in (True, False))
-    return {"height": float(top - bot), "width": float(gap * ui), "centre": float(centre), "hexagon": hexagon,
-            "rise": float(np.median(rise)) if len(rise) else np.nan,
-            "fall": float(np.median(fall)) if len(fall) else np.nan}
+    lo_level, hi_level = zero + edge_levels[0] * (one - zero), zero + edge_levels[1] * (one - zero)
+    rise, fall = (_edge_times(t, v, lo_level, hi_level, s, ui) for s in (True, False))
+    return {"height": float(top - bot), "width": float(gap * ui), "centre": float(centre), "hexagon": hexagon, "rise": float(np.median(rise)) if len(rise) else np.nan, "fall": float(np.median(fall)) if len(fall) else np.nan}
 
 
 def densify(t, v, dv: float, dt: float | None = None) -> tuple[np.ndarray, np.ndarray]:
@@ -341,14 +333,17 @@ def _label(run: Path) -> str:
 
 
 @mpl.rc_context(PLOT_STYLE)
-def plot_si(runs: list[Path], out: Path) -> list[Path]:
+def plot_si(runs: list[Path], out: Path, *, skip_ui: float, centre_window: float, edge_levels: tuple[float, float], settle: float) -> list[Path]:
+    """Waveforms and eyes of SI runs, and crosstalk runs (those with aggressors) on their own.
+    skip_ui, centre_window, edge_levels: as for eye(); settle: share of a crosstalk run's time
+    left out as start-up."""
     paths: list[Path] = []
     # runs with aggressors (a quiet victim, another stimulus) get their own crosstalk plot
     signal = [r for r in runs if not json.loads((r / "si.json").read_text()).get("aggressors")]
     waves = {r: _diff_waves(r) for r in signal}
     names = [w["name"] for w in waves[signal[0]]] if signal else []
     if not names:
-        return paths + [p for r in runs for p in _plot_crosstalk(r, json.loads((r / "si.json").read_text()), out)]
+        return paths + [p for r in runs for p in _plot_crosstalk(r, json.loads((r / "si.json").read_text()), out, settle)]
     fig, axes = plt.subplots(len(names), 1, figsize=(9.6, 2.6 * len(names) + 0.6), sharex=True, squeeze=False)
     for ax, name in zip(axes[:, 0], names):
         for (r, ws), c in zip(waves.items(), CURVE_COLORS):
@@ -368,8 +363,7 @@ def plot_si(runs: list[Path], out: Path) -> list[Path]:
     eyes = [r for r in signal if json.loads((r / "si.json").read_text()).get("mode") == "eye"]
     if eyes:
         first = eyes[0]
-        fig, axes = plt.subplots(len(eyes), len(names), figsize=(4.8 * len(names), 3.2 * len(eyes) + 0.6),
-                                 squeeze=False, sharex=True)
+        fig, axes = plt.subplots(len(eyes), len(names), figsize=(4.8 * len(names), 3.2 * len(eyes) + 0.6), squeeze=False, sharex=True)
         t0, v0 = wave(first / waves[first][0]["file"])
         ui = run_ui(first, t0, v0)
         for i, r in enumerate(eyes):
@@ -380,28 +374,24 @@ def plot_si(runs: list[Path], out: Path) -> list[Path]:
                     ax.set_visible(False)
                     continue
                 t, v = wave(r / w["file"])
-                e = eye(t, v, ui)
+                e = eye(t, v, ui, skip_ui=skip_ui, centre_window=centre_window, edge_levels=edge_levels)
                 span = max(abs(v).max(), 1e-3) * 1.1
                 nx, ny = 400, 240
                 td, vd = densify(t, v, dv=span / ny, dt=ui / (nx / 2))  # a point in every bin it crosses
-                keep = td > td[0] + 4 * ui
+                keep = td > td[0] + skip_ui * ui
                 # each eye centred at 1 UI, its crossings near 0.5 and 1.5
                 x = ((td[keep] - t[0]) / ui - e["centre"] + 1) % 2
                 hist, xe, ye = np.histogram2d(x, vd[keep], bins=(nx, ny), range=((0, 2), (-span, span)))
-                mesh = ax.pcolormesh(xe, ye, np.ma.masked_less_equal(hist.T, 0), cmap=DENSITY_COLOR_MAP,
-                                     norm=LogNorm(), shading="flat", rasterized=True)
+                mesh = ax.pcolormesh(xe, ye, np.ma.masked_less_equal(hist.T, 0), cmap=DENSITY_COLOR_MAP, norm=LogNorm(), shading="flat", rasterized=True)
                 if e["hexagon"]:
                     hx = [1 + p[0] for p in e["hexagon"]] + [1 + e["hexagon"][0][0]]
                     hy = [p[1] for p in e["hexagon"]] + [e["hexagon"][0][1]]
                     ax.fill(hx, hy, color=GRID_MAJOR_COLOR, alpha=0.6, lw=0)
                     ax.plot(hx, hy, color=SPINE_COLOR, lw=1.0)
                     # the values inside the opening, at its middle
-                    cx = float(np.mean(hx[1:3] + hx[4:6]))       # the middle of the flat edges
+                    cx = float(np.mean(hx[1:3] + hx[4:6]))  # the middle of the flat edges
                     cy = 0.5 * (max(hy) + min(hy))
-                    ax.text(cx, cy, f"height {e['height'] * 1e3:.0f} mV\nwidth {e['width'] * 1e9:.2f} ns\n"
-                            f"= {e['width'] / ui:.2f} UI\nrise {e['rise'] * 1e12:.0f} ps\n"
-                            f"fall {e['fall'] * 1e12:.0f} ps", ha="center", va="center",
-                            fontsize=7, color=SPINE_COLOR, linespacing=1.4)
+                    ax.text(cx, cy, f"height {e['height'] * 1e3:.0f} mV\nwidth {e['width'] * 1e9:.2f} ns\n= {e['width'] / ui:.2f} UI\nrise {e['rise'] * 1e12:.0f} ps\nfall {e['fall'] * 1e12:.0f} ps ({edge_levels[0]:.0%}-{edge_levels[1]:.0%})", ha="center", va="center", fontsize=7, color=SPINE_COLOR, linespacing=1.4)
                 ax.set_xlim(0, 2)
                 ax.set_title(f"{name}\n{_label(r)}", fontsize=8)
                 if i == len(eyes) - 1:
@@ -414,12 +404,12 @@ def plot_si(runs: list[Path], out: Path) -> list[Path]:
     for r in runs:
         si = json.loads((r / "si.json").read_text())
         if si.get("aggressors"):
-            paths += _plot_crosstalk(r, si, out)
+            paths += _plot_crosstalk(r, si, out, settle)
     return paths
 
 
 @mpl.rc_context(PLOT_STYLE)
-def _plot_crosstalk(run: Path, si: dict, out: Path) -> list[Path]:
+def _plot_crosstalk(run: Path, si: dict, out: Path, settle: float) -> list[Path]:
     fig, axes = plt.subplots(2, 1, figsize=(9.6, 6.0), sharex=True)
     for g, c in zip(si["aggressors"], CURVE_COLORS[2:]):
         stem = g["driver"].replace(".", "-")
@@ -431,10 +421,9 @@ def _plot_crosstalk(run: Path, si: dict, out: Path) -> list[Path]:
     axes[0].legend(loc="upper right")
     victim = _diff_waves(run)[-1]
     t, v = wave(run / victim["file"])
-    k = t > t[0] + 0.1 * (t[-1] - t[0])
+    k = t > t[0] + settle * (t[-1] - t[0])
     axes[1].plot(t * 1e9, (v - np.median(v[k])) * 1e3, color=CURVE_COLORS[1])
-    axes[1].set_title(f"{victim['name']}" + (" (victim held low)" if si.get("victim_quiet") else "") +
-                      f": {np.ptp(v[k]) * 1e3:.0f} mV p-p, {v[k].std() * 1e3:.0f} mV rms", fontsize=10)
+    axes[1].set_title(f"{victim['name']}" + (f" (drivers {', '.join(f'{p} {s}' for p, s in si['driver_states'].items())})" if si.get("driver_states") else "") + f": {np.ptp(v[k]) * 1e3:.0f} mV p-p, {v[k].std() * 1e3:.0f} mV rms", fontsize=10)
     axes[1].set_ylabel("Victim noise (mV)")
     axes[1].set_xlabel("Time (ns)")
     for ax in axes:
@@ -443,6 +432,7 @@ def _plot_crosstalk(run: Path, si: dict, out: Path) -> list[Path]:
 
 
 # ------------------------------------------------------------------------------------- S-parameters
+
 
 def read_touchstone(path: Path) -> tuple[np.ndarray, np.ndarray]:
     """(f Hz, S[f, n, n]) of an RI/MA/DB Touchstone v1 file."""
@@ -468,13 +458,12 @@ def plot_sparam(run: Path, out: Path) -> list[Path]:
     info = json.loads((run / "sparam.json").read_text())
     f, S = read_touchstone(run / info["file"])
     pins, n = info["pins"], S.shape[1]
-    db = lambda x: 20 * np.log10(np.abs(x) + 1e-30)  # noqa: E731
+    db = lambda x: 20 * np.log10(np.abs(x) + 1e-30)
     fig, ax = plt.subplots()
     if n == 4:  # ports 1,2 at one end, 3,4 at the other, P before N
         M = np.array([[1, -1, 0, 0], [0, 0, 1, -1], [1, 1, 0, 0], [0, 0, 1, 1]]) / np.sqrt(2)
         Smm = M @ S @ M.T
-        curves = [("SDD21, insertion", Smm[:, 1, 0]), ("SDD11, return", Smm[:, 0, 0]),
-                  ("SCD21, diff to common", Smm[:, 3, 0])]
+        curves = [("SDD21, insertion", Smm[:, 1, 0]), ("SDD11, return", Smm[:, 0, 0]), ("SCD21, diff to common", Smm[:, 3, 0])]
     else:
         curves = [(f"S{i + 1}{j + 1} ({pins[i]} <- {pins[j]})", S[:, i, j]) for i in range(n) for j in range(i + 1)]
     for (lab, s), c in zip(curves, CURVE_COLORS):
@@ -489,19 +478,3 @@ def plot_sparam(run: Path, out: Path) -> list[Path]:
 
 
 # ------------------------------------------------------------------------------------------ all
-
-def plot_runs(runs: list[Path], out: Path | None = None) -> list[Path]:
-    runs = [Path(r) for r in runs]
-    out = Path(out) if out else runs[0] / "plots"
-    jobs = {r: _job(r) for r in runs}
-    paths: list[Path] = []
-    returns = {Path(j["return_from"]).parent.resolve(): r for r, j in jobs.items() if j.get("return_from")}
-    for r, j in jobs.items():
-        if j["kind"] == "dc" and not j.get("return_from"):
-            paths += plot_dc(r, out, returns.get(r.resolve()))
-        elif j["kind"] == "sparam":
-            paths += plot_sparam(r, out)
-    si = [r for r, j in jobs.items() if j["kind"] == "si"]
-    if si:
-        paths += plot_si(si, out)
-    return paths

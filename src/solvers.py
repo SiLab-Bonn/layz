@@ -13,13 +13,10 @@ import shutil
 
 # tool -> (environment variable, program name, extra folders searched after PATH, how to get it)
 _SOLVERS = {
-    "fastercap": ("LAYZ_FASTERCAP", "FasterCap", ["~/.local/bin"],
-                  "build it with install/build_solvers.sh (which links it into ~/.local/bin)"),
-    "fastcap2": ("LAYZ_FASTCAP2", "fastcap", ["~/.local/bin"],
-                 "build it with install/build_solvers.sh (which links it into ~/.local/bin)"),
+    "fastercap": ("LAYZ_FASTERCAP", "FasterCap", ["~/.local/bin"], "build it with install/build_solvers.sh (which links it into ~/.local/bin)"),
+    "fastcap2": ("LAYZ_FASTCAP2", "fastcap", ["~/.local/bin"], "build it with install/build_solvers.sh (which links it into ~/.local/bin)"),
     # cargo installs into ~/.cargo/bin, which isn't on PATH when Rust comes from the distribution
-    "gdscheck": ("LAYZ_GDSCHECK", "gdscheck", ["~/.cargo/bin"],
-                 "cargo install --git https://github.com/aesc-silicon/gdscheck gdscheck"),
+    "gdscheck": ("LAYZ_GDSCHECK", "gdscheck", ["~/.cargo/bin"], "cargo install --git https://github.com/aesc-silicon/gdscheck gdscheck"),
 }
 
 
