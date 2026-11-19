@@ -25,7 +25,7 @@ case "$(os_family)" in
             rm -rf "$TOOLS/paraview-unpack"
             mkdir "$TOOLS/paraview-unpack"
             echo "downloading $name.tar.gz (about 870 MB) from paraview.org"
-            curl -fSL "https://www.paraview.org/files/v$SERIES/$name.tar.gz" | tar xz --no-same-owner -C "$TOOLS/paraview-unpack"
+            curl -fsSL "https://www.paraview.org/files/v$SERIES/$name.tar.gz" | tar xz --no-same-owner -C "$TOOLS/paraview-unpack"
             rm -rf "$dest"
             mv "$TOOLS/paraview-unpack/$name" "$dest"
             rmdir "$TOOLS/paraview-unpack"
