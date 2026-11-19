@@ -244,7 +244,9 @@ def _hyperlynx_runs(tmp_path):
     dc.mkdir()
     (dc / "job.json").write_text(json.dumps({"kind": "dc"}))
     (dc / "vrms.json").write_text(json.dumps([{"voltage": 3.0, "power_net": "/V", "power_pins": ["U1.1"], "ref_net": "/G", "ref_pins": ["U1.2"]}]))
-    (dc / "summary.json").write_text(json.dumps({"nets": ["/V"]}))
+    (dc / "summary.json").write_text(json.dumps({"nets": ["/V"], "max_current_density": {"value": 1.0, "layer": "F.Cu", "at": [0, 0]}}))
+    (dc / "board").mkdir()
+    (dc / "board" / "b.hyp").write_text('{STACKUP\n  (SIGNAL T=0.001 P=0 C=1.724e-08 L="F.Cu" M=COPPER)\n}\n')
     (dc / "ports.csv").write_text("pin,net,x,y,type,current_A,voltage_V\nU1.1,/V,0,0,0,-1.0,3.0\nU2.1,/V,0.01,0,1,1.0,2.9\nU1.2,/G,0,0.001,0,1.0,0.0\nU2.2,/G,0.01,0.001,1,-1.0,0.05\n")
     (dc / "vias.csv").write_text("net,type,layer1,layer2,x1,y1,x2,y2,current_A,drop_V\n/V,0,A,B,0.005,0,0.005,0,1.0,1e-6\n/G,0,A,B,0.005,0.001,0.005,0.001,1.0,1e-6\n")
     grid = "\n".join(f"Row {r}:," + ",".join("1e-4" if 1 <= r <= 2 else "" for _ in range(10)) for r in range(4))
@@ -292,6 +294,21 @@ def test_hyperlynx_analysis(tmp_path):
     assert 0 < eye["rise_ps"] <= 50 and 0 < eye["fall_ps"] <= 50  # one 50 ps sample per edge
     assert analysis.crosstalk(si, max_noise=0.1, at=None, settle=0.1, out=None)[0]["pass"] is False  # an eye is no quiet line
     assert analysis.sparams(sp, at_hz=1e9, min_sdd21_db=-3, max_sdd11_db=-10, out=None) == []  # a 2-port: no mixed mode
+
+
+def test_current_density(tmp_path):
+    """J = sqrt(P / (rho t A)) from the loss export: 1e-4 W in a 1.016 x 0.254 mm cell of 25.4 um copper."""
+    import numpy as np
+
+    from layz.hyperlynx import analysis, plots
+
+    dc, _, _ = _hyperlynx_runs(tmp_path)
+    J, rho, _ = plots.current_density(dc)["F.Cu"]
+    expect = (1e-4 / (1.724e-8 * 25.4e-6 * 1.016e-3 * 0.254e-3)) ** 0.5
+    assert rho == 1.724e-8 and abs(np.nanmax(J) / expect - 1) < 1e-9 and np.isnan(J[0, 0])
+    (row,) = analysis.current_density(dc, max_density=1e7, out=None)  # J is 3e7
+    assert row["layer"] == "F.Cu" and row["pass"] is False and row["over_limit_pct"] == 100
+    assert abs(row["max_drop_mV_per_mm"] - rho * expect) < 1e-9
 
 
 def test_eye_densify_and_hexagon():

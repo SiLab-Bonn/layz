@@ -51,8 +51,8 @@ def info():
 
 @target
 def dc():
-    """DC drop of /3V_1../3V_4 and their returns, against 5 % (the constraint set in HyperLynx);
-    pin voltages, via currents, supply and return loss maps."""
+    """DC drop of /3V_1../3V_4 and their returns, against 5 % (the constraint set in HyperLynx),
+    and the current density in their copper; pin voltages, via currents, loss and current maps."""
     board = Path("results/ivtx_rdl/setup/obelix1_ivtx_ladder_with_nets_v3.1.hyp")
     if not board.exists():
         setup()
@@ -68,6 +68,11 @@ def dc():
 
     # supply drop + return rise, at most 5 % of the VRM voltage
     analysis.dc_drop(supply, max_drop=0.05, out=out / "dc_drop.csv")
+
+    # current density in the copper, and the drop per mm it causes, against 15 A/mm² (the limit
+    # set in HyperLynx: a PCB value; thin aluminium takes some 1000 A/mm², to agree on)
+    analysis.current_density(supply, max_density=1.5e7, out=out / "current_density_supply.csv")
+    analysis.current_density(ret, max_density=1.5e7, out=out / "current_density_return.csv")
     plots.plot_dc(supply, out, ret)
 
 

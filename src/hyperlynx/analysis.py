@@ -51,6 +51,20 @@ def dc_drop(run: Path, *, max_drop: float, out: Path | None) -> list[dict]:
     return _table(f"DC drop ({run.name})", rows, out)
 
 
+def current_density(run: Path, *, max_density: float, out: Path | None) -> list[dict]:
+    """Per layer of a DC run: the highest current density (A/mm²) in the copper, where, the drop
+    per length it causes (mV/mm), and the share of the copper above ``max_density`` (A/m²); pass
+    where nothing is above it. HyperLynx's own maximum is in the title, as a cross-check."""
+    rows = []
+    for lay, (J, rho, ext) in plots.current_density(run).items():
+        if not np.isfinite(J).any():
+            continue
+        k = np.unravel_index(np.nanargmax(J), J.shape)
+        rows.append({"layer": lay, "max_A_per_mm2": float(np.nanmax(J)) / 1e6, "x_mm": ext[0] + (k[1] + 0.5) * (ext[1] - ext[0]) / J.shape[1], "y_mm": ext[2] + (k[0] + 0.5) * (ext[3] - ext[2]) / J.shape[0], "max_drop_mV_per_mm": rho * float(np.nanmax(J)), "over_limit_pct": 100 * float(np.nanmean(J[np.isfinite(J)] > max_density)), "limit_A_per_mm2": max_density / 1e6, "pass": bool(np.nanmax(J) <= max_density)})
+    hl = json.loads((run / "summary.json").read_text())["max_current_density"]
+    return _table(f"Current density ({run.name}; HyperLynx's own maximum: {hl['value'] / 1e6:.0f} A/mm² on {hl['layer']} at ({hl['at'][0] * 1e3:.1f}, {hl['at'][1] * 1e3:.1f}) mm)", rows, out)
+
+
 def _at(run: Path, at: str | None) -> list[dict]:
     """The run's (differential) waveforms, only those whose name contains ``at`` if given."""
     return [w for w in plots._diff_waves(run) if at is None or at in w["name"]]

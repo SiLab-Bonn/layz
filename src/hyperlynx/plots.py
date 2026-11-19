@@ -17,7 +17,7 @@ from pathlib import Path
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.colors import LogNorm
+from matplotlib.colors import LogNorm, Normalize
 
 from layz.plotstyle import CURVE_COLORS, DENSITY_COLOR_MAP, GRID_MAJOR_COLOR, PLOT_STYLE, SPINE_COLOR, save_figure, style_grid, style_info_box
 
@@ -61,6 +61,30 @@ def load_thermal(path: Path):
             a = np.array([float(t) if t else np.nan for t in vals.split(",")[1 : nx + 1]])
             grids[cur][int(k), : len(a)] = a
     return grids, dx * dy * IN * IN, [x0 * IN, (x0 + nx * dx) * IN, y0 * IN, (y0 + ny * dy) * IN]
+
+
+def current_density(run: Path) -> dict[str, tuple[np.ndarray, float, list[float]]]:
+    """Per layer of a DC run: (current density in A/m² per grid cell, the layer's resistivity in
+    ohm·m, extent in mm), from HyperLynx's loss export.
+
+    That export holds, per cell, the loss density at the cell's sample point times the cell's
+    copper volume: P = J²·ρ·t·A (its total runs some 20 % above I·ΔV at 180 µm cells, as cells at
+    copper edges count whole). So J = √(P / (ρ·t·A)), which reproduces the maximum current density
+    HyperLynx reports itself; ρ·J is the voltage drop per length along the copper (V/m = mV/mm).
+    t comes from the export's layer table, ρ from the board's STACKUP."""
+    import re
+
+    hyp = next((run / "board").glob("*.hyp"))
+    rho = {m.group(2): float(m.group(1)) for m in re.finditer(r'\(SIGNAL [^)]*?C=([-\d.eE+]+) L="([^"]+)"', hyp.read_text())}
+    out: dict[str, tuple[np.ndarray, float, list[float]]] = {}
+    for f in sorted(run.glob("Thermal__*.txt")):
+        lines = f.read_text().splitlines()
+        thick = {l.split(",")[1].strip().strip('"'): float(l.split(",")[3]) * IN / MM for l in lines if l.startswith("Layer:")}
+        grids, cell, ext = load_thermal(f)
+        for lay, P in grids.items():
+            J = np.sqrt(np.where(P > 0, P, np.nan) / (rho[lay] * thick[lay] * cell / MM**2))
+            out[lay] = (np.fmax(out[lay][0], J) if lay in out else J, rho[lay], ext)
+    return out
 
 
 # ------------------------------------------------------------------------------------------ DC
@@ -129,7 +153,36 @@ def plot_dc(run: Path, out: Path, ret: Path | None = None) -> list[Path]:
         del rports
     if maps:
         paths += _plot_loss(maps, out)
+        paths += _plot_current([("Supply", current_density(run))] + ([("Return", current_density(ret))] if ret is not None else []), out)
     return paths
+
+
+@mpl.rc_context(PLOT_STYLE)
+def _plot_current(maps, out: Path) -> list[Path]:
+    """Current density per layer (supply, return side by side), with the drop per mm it means."""
+    layers = []
+    for _, dens in maps:
+        layers += [n for n, (J, _, _) in dens.items() if np.isfinite(J).any() and np.nanmax(J) > 1e-3 * max(np.nanmax(a) for a, _, _ in dens.values() if np.isfinite(a).any()) and n not in layers]
+    vmax = max(np.nanmax(J) for _, dens in maps for n, (J, _, _) in dens.items() if n in layers) / MM**2
+    norm = Normalize(vmin=0, vmax=vmax)  # linear: where the current crowds
+    fig, axes = plt.subplots(len(layers), len(maps), figsize=(7.2 * len(maps), 1.25 * len(layers) + 1.0), sharex=True, sharey=True, squeeze=False)
+    for j, (side, dens) in enumerate(maps):
+        for i, lay in enumerate(layers):
+            ax = axes[i, j]
+            if lay not in dens or not np.isfinite(dens[lay][0]).any():
+                ax.set_title(f"{side}, {lay}: no copper", fontsize=10)
+                continue
+            J, rho, ext = dens[lay]
+            im = ax.imshow(J / MM**2, origin="lower", extent=ext, cmap=DENSITY_COLOR_MAP, norm=norm, aspect="equal", interpolation="nearest", rasterized=True)
+            k = np.unravel_index(np.nanargmax(J), J.shape)
+            x = ext[0] + (k[1] + 0.5) * (ext[1] - ext[0]) / J.shape[1]
+            y = ext[2] + (k[0] + 0.5) * (ext[3] - ext[2]) / J.shape[0]
+            ax.plot([x], [y], marker="o", markersize=6, markerfacecolor="none", markeredgecolor=SPINE_COLOR)
+            ax.set_title(f"{side}, {lay}: max {np.nanmax(J) / MM**2:.0f} A/mm², {rho * np.nanmax(J):.2f} mV/mm, at ({x:.1f}, {y:.1f}) mm", fontsize=10)
+            ax.set_xlabel("x (mm)" if i == len(layers) - 1 else "")
+            ax.set_ylabel("y (mm)" if j == 0 else "")
+    fig.colorbar(im, ax=axes, label="Current density (A/mm²); × ρ: drop per length")
+    return list(save_figure(fig, out / "dc_current_density"))
 
 
 @mpl.rc_context(PLOT_STYLE)
