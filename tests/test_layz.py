@@ -118,7 +118,7 @@ def test_kicad_board_model(tmp_path):
     assert count([f for f in geo if "net=" in f.name]) == 1888
 
 
-# ------------------------------------------------------------------ pours -> traces (layz.traces)
+# ------------------------------------------------------------------ pours -> traces (layz.gds2hyp.traces)
 
 def _l_route(w=0.04, pad=0.3):
     """An L-shaped 40 µm strip (2 mm then 1 mm) with a square pad at its start (mm)."""
@@ -130,7 +130,7 @@ def _l_route(w=0.04, pad=0.3):
 
 def test_traces_l_route_with_pad():
     from shapely.geometry import Point
-    from layz.traces import split_route
+    from layz.gds2hyp.traces import split_route
     segs, keep = split_route(_l_route(), [Point(0, 0)])
     length = sum(((s.x2 - s.x1) ** 2 + (s.y2 - s.y1) ** 2) ** 0.5 for s in segs)
     assert all(abs(s.width - 0.04) < 0.002 for s in segs)
@@ -142,12 +142,12 @@ def test_traces_l_route_with_pad():
 
 def test_traces_leave_planes_alone():
     from shapely.geometry import box
-    from layz.traces import split_route
+    from layz.gds2hyp.traces import split_route
     assert split_route(box(0, 0, 5, 3)) is None        # a plane is not a route
 
 
 def test_hyp_traces_pass_converts_signal_keeps_supply():
-    from layz.gds2hyp import add_traces
+    from layz.gds2hyp.convert import add_traces
 
     def poly(pid, pts):
         lines = [f'  {{POLYGON T=POUR L="In1.Cu" ID={pid} X={pts[0][0]:.6f} Y={pts[0][1]:.6f}\n']
@@ -175,7 +175,7 @@ def test_hyp_traces_pass_converts_signal_keeps_supply():
 @needs_kicad
 def test_hyp_traces_obelix_signal_nets(tmp_path):
     """Andreas' KiCad export: every signal route converts, supplies stay pours."""
-    from layz.gds2hyp import add_traces
+    from layz.gds2hyp.convert import add_traces
     out, report = add_traces(REF_HYP.read_text(encoding="utf-8"))
     names = {r[0] for r in report}
     assert {"/CLK_P", "/CMD_N", "/D4_N", "/ADC_1", "/rst"} <= names
@@ -188,7 +188,7 @@ def test_hyp_traces_obelix_signal_nets(tmp_path):
 
 def test_lvs_finds_open_short_unknown(tmp_path):
     import klayout.db as kdb
-    from layz import lvs
+    from layz.lvs import compare as lvs
     (tmp_path / "stack.toml").write_text(
         'name = "t"\n[[layer]]\nname = "F.Cu"\ntype = "copper"\nthickness_um = 1\ngds = "6/0"\n'
         '[[layer]]\nname = "D"\ntype = "dielectric"\nthickness_um = 5\n'

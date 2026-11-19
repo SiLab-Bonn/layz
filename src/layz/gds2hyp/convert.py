@@ -23,7 +23,7 @@ Running HyperLynx on the result: `layz hyp` (layz.hyperlynx).
 Signal routes drawn as polygons (every GDS route, and KiCad zones made from them) become pours,
 which HyperLynx BoardSim cannot model as transmission lines (no length, loss or crosstalk). By
 default (--traces auto) strip-shaped pours of signal nets are written as traces instead: their
-centreline as SEG records, as wide as the strip (layz.traces). Supplies and planes stay pours.
+centreline as SEG records, as wide as the strip (layz.gds2hyp.traces). Supplies and planes stay pours.
 """
 
 from __future__ import annotations
@@ -328,7 +328,7 @@ def _parse_nets(lines: list[str]):
 
 def add_traces(text: str, select: str = "auto", max_width_mm: float = TRACE_MAX_WIDTH_MM,
                warn=print) -> tuple[str, list[tuple[str, int, float, float]]]:
-    """Rewrite a .hyp's strip-shaped pours as traces (SEG records), net by net; see layz.traces.
+    """Rewrite a .hyp's strip-shaped pours as traces (SEG records), net by net; see layz.gds2hyp.traces.
 
     ``select``: "auto" (nets with >= 2 pins, >= 95 % of their copper strips, no strip wider than
     ``max_width_mm``), "none", or comma-separated net names (converted whatever their width).
@@ -337,7 +337,7 @@ def add_traces(text: str, select: str = "auto", max_width_mm: float = TRACE_MAX_
     and, per converted net, (name, segments, trace length, width) in mm."""
     from shapely.ops import unary_union
 
-    from layz import traces as tr
+    from layz.gds2hyp import traces as tr
     if select == "none":
         return text, []
     lines = text.splitlines(keepends=True)
@@ -466,7 +466,7 @@ def main(argv: list[str] | None = None) -> int:
     else:
         if not args.stack:
             ap.error("a GDS input needs --stack (its layer mapping and stackup)")
-        from layz import gds2pcb
+        from layz.gds2pcb import convert as gds2pcb
         with tempfile.TemporaryDirectory() as tmp:
             pcb = out.with_suffix(".kicad_pcb") if args.keep_pcb else Path(tmp) / (out.stem + ".kicad_pcb")
             gds2pcb.main(["--lay", str(args.input), "-o", str(pcb), "--stack", str(args.stack)])

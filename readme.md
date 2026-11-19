@@ -69,6 +69,24 @@ Process data lives in the repo: [stacks/](stacks/readme.md) (layer heights, εr,
 process) and [drc/](drc/uni-bonn-rdl/readme.md) (rule decks per kit). Reference designs are in
 `example_files/` (obelix1 ladder GDS, its KiCad schematic, Andreas' KiCad-exported `.hyp`).
 
+The code is one package per command under [src/layz/](src/layz), with the shared stack file
+reader (`stack.py`), plot style (`plotstyle.py`) and solver lookup (`solvers.py`) beside them:
+
+```text
+src/layz/
+├── cli.py, doctor.py     the `layz` command, `layz doctor`
+├── drc/                  layz drc
+├── lvs/                  layz lvs
+├── gds2pcb/              layz gds2pcb, layz nets
+├── gds2hyp/              layz gds2hyp (traces.py: pours -> traces)
+├── hyperlynx/            layz hyp (runner/: scripts in HyperLynx's own Python)
+├── pex/                  layz pex
+├── field/                layz field (paraview/: the layz view scripts)
+└── svg/                  layz svg
+```
+
+Design-specific flows (files, nets, limits) live outside the package, in `designs/<design>/`.
+
 ## layz drc
 
 Design rule check with [gdscheck](https://github.com/aesc-silicon/gdscheck) and a kit's deck.

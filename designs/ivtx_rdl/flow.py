@@ -12,7 +12,7 @@ import os
 import shutil
 from pathlib import Path
 
-from layz import gds2hyp
+from layz.gds2hyp import convert as gds2hyp
 from layz.hyperlynx import analysis, plots, run, setup as hyperlynx, target
 
 ###########################################################################

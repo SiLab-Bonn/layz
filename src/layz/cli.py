@@ -26,15 +26,15 @@ from pathlib import Path
 
 # command -> (module, one-line help); modules load lazily, so `layz svg` doesn't import pcbnew
 COMMANDS = {
-    "drc": ("layz.drc", "design rule check of a GDS"),
-    "lvs": ("layz.lvs", "GDS connectivity vs a KiCad schematic"),
-    "gds2pcb": ("layz.gds2pcb", "GDS -> KiCad .kicad_pcb"),
-    "nets": ("layz.nets", "assign zone/via nets from a seed footprint's pad nets"),
-    "gds2hyp": ("layz.gds2hyp", "GDS / KiCad .kicad_pcb / .hyp -> HyperLynx .hyp"),
+    "drc": ("layz.drc.check", "design rule check of a GDS"),
+    "lvs": ("layz.lvs.compare", "GDS connectivity vs a KiCad schematic"),
+    "gds2pcb": ("layz.gds2pcb.convert", "GDS -> KiCad .kicad_pcb"),
+    "nets": ("layz.gds2pcb.nets", "assign zone/via nets from a seed footprint's pad nets"),
+    "gds2hyp": ("layz.gds2hyp.convert", "GDS / KiCad .kicad_pcb / .hyp -> HyperLynx .hyp"),
     "hyp": ("layz.hyperlynx.cli", "HyperLynx headless on a .hyp: setup, info, dc, si, sparam, plot, run"),
-    "svg": ("layz.svg", "GDS -> SVG preview"),
+    "svg": ("layz.svg.render", "GDS -> SVG preview"),
     "pex": ("layz.pex.cli", "capacitance matrix with FasterCap/FastCap2"),
-    "field": ("layz.field", "electric field and potential from a `layz pex --charges` run"),
+    "field": ("layz.field.compute", "electric field and potential from a `layz pex --charges` run"),
     "view": (None, "ParaView renders of a run: section | geometry | field"),
     "doctor": ("layz.doctor", "which external tools this machine has"),
 }
@@ -68,7 +68,7 @@ def view(argv: list[str]) -> int:
     if not pvpython:
         print("pvpython not found: install ParaView, https://www.paraview.org/download/", file=sys.stderr)
         return 2
-    script = Path(__file__).parent / "paraview" / VIEWS[argv[0]]
+    script = Path(__file__).parent / "field" / "paraview" / VIEWS[argv[0]]
     env = dict(os.environ)
     env.setdefault("HWLOC_COMPONENTS", "-gl")  # Ubuntu's ParaView hangs at start-up without it
     return subprocess.call([pvpython, str(script), *argv[1:]], env=env)

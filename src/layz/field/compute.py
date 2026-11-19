@@ -195,7 +195,7 @@ def write_html(path: Path, title: str, info: str, zs: float, unit: str, scale: f
 
     conductors: [(label, triangles)], dielectrics: [(εr, triangles)], planes: [(label, X, Y, Z, |E|
     scaled, visible)]. Geometry in µm; z is multiplied by zs here. (Field lines: ParaView, on a
-    --plane section; see paraview_section.py.)"""
+    --plane section; see paraview/section.py.)"""
     import plotly.graph_objects as go
 
     bg, fg, grid = "#0d1117", "#c9d1d9", "#30363d"

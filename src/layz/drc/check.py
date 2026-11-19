@@ -16,7 +16,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-DRC_DIR = Path(__file__).resolve().parents[2] / "drc"
+DRC_DIR = Path(__file__).resolve().parents[3] / "drc"
 
 
 def kits() -> list[str]:
