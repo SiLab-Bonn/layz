@@ -115,8 +115,7 @@ system_missing() {
         *) command -v pvpython >/dev/null || echo "ParaView (pvpython)" ;;
     esac
     case "$fam" in
-        rhel) ;;   # no package: https://www.klayout.de/build.html
-        macos) [ -d /Applications/klayout.app ] || [ -d /Applications/KLayout/klayout.app ] || echo "KLayout" ;;
+        macos) ls -d /Applications/klayout*.app /Applications/KLayout/klayout.app >/dev/null 2>&1 || echo "KLayout" ;;
         *) command -v klayout >/dev/null || echo "KLayout" ;;
     esac
 }

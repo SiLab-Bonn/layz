@@ -13,7 +13,8 @@
 #   cargo (Rust)              to build gdscheck
 #   KiCad 10                  where the system has it: KiCad's PPA on Ubuntu, Debian testing, Fedora,
 #                             Arch, Homebrew; not on AlmaLinux/RHEL or Debian 13
-#   ParaView, KLayout         where the system packages them
+#   KLayout                   klayout.org's build (Ubuntu, RHEL, macOS), else the distribution's
+#   ParaView                  where the system packages it
 #
 # Run it again after a system upgrade; it only adds what is missing.
 set -uo pipefail
@@ -27,6 +28,13 @@ if [ "$family" != macos ] && [ "$(id -u)" != 0 ]; then
 fi
 [ "$family" = macos ] && [ "$(id -u)" = 0 ] && die "on macOS run it as yourself (Homebrew refuses root)"
 
+mac_install_dmg() {   # copy the .app of a .dmg into /Applications
+    local mnt
+    mnt="$(mktemp -d)"
+    hdiutil attach -nobrowse -quiet -mountpoint "$mnt" "$1" || return 1
+    cp -R "$mnt"/*.app /Applications/ && hdiutil detach -quiet "$mnt"
+}
+
 done_list=()
 skipped=()
 group() {   # group WHAT PKG...: install a group of packages; a failure skips the group, not the run
@@ -36,6 +44,22 @@ group() {   # group WHAT PKG...: install a group of packages; a failure skips th
     if pkg_install "$@"; then done_list+=("$what"); else skipped+=("$what (install failed: $*)"); fi
 }
 skip() { skipped+=("$1"); echo "=== $1"; }
+
+# KLayout from klayout.org where it builds for this system (newer than the distributions'), the
+# same version as layz's klayout Python module
+KLAYOUT=0.30.13
+klayout_official() {   # klayout_official URL INSTALLER...: download the package, install it with INSTALLER
+    local url="$1" tmp
+    shift
+    tmp="$(mktemp -d)"
+    echo "=== KLayout $KLAYOUT: $url"
+    if curl -fsSL -o "$tmp/$(basename "$url")" "$url" && "$@" "$tmp/$(basename "$url")"; then
+        done_list+=("KLayout $KLAYOUT")
+    else
+        skipped+=("KLayout $KLAYOUT (from $url)")
+    fi
+    rm -rf "$tmp"
+}
 
 newest_python_pkg() {   # the newest python3.X (3.12..3.15) the package manager offers, if python3 is older
     local v
@@ -76,7 +100,12 @@ case "$family" in
             if [ "${k:-0}" -ge 10 ]; then group "KiCad 10" kicad; else skip "KiCad 10: Debian's kicad here is ${k:-missing} (10 is in Debian testing)"; fi
         fi
         group "ParaView" paraview
-        group "KLayout" klayout
+        if [ "$family" = ubuntu ]; then
+            u="$(. /etc/os-release && echo "${VERSION_ID%%.*}")"
+            klayout_official "https://www.klayout.org/downloads/Ubuntu-$u/klayout_${KLAYOUT}-1_amd64.deb" as_root env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends
+        else
+            group "KLayout (Debian's; klayout.org builds none for Debian)" klayout
+        fi
         ;;
     rhel)
         # openblas-devel and other build pieces are in the CodeReady Builder repository (crb)
@@ -100,7 +129,12 @@ case "$family" in
         libs=()
         for l in $PARAVIEW_LIBS; do libs+=("$l()(64bit)"); done
         group "libraries of ParaView's own build" "${libs[@]}"
-        skip "KLayout: no package; get the RHEL 9 rpm from https://www.klayout.de/build.html"
+        el="$(. /etc/os-release && echo "${VERSION_ID%%.*}")"
+        case "$el" in
+            9) klayout_official "https://www.klayout.org/downloads/RockyLinux_9/klayout-${KLAYOUT}-0.x86_64.rpm" as_root dnf install -y ;;
+            8) klayout_official "https://www.klayout.org/downloads/CentOS_8/klayout-${KLAYOUT}-0.x86_64.rpm" as_root dnf install -y ;;
+            *) skip "KLayout: klayout.org builds for RHEL 8 and 9 only" ;;
+        esac
         ;;
     fedora)
         group "Python" python3 python3-pip
@@ -127,7 +161,21 @@ case "$family" in
         group "build tools" cmake libomp wxwidgets googletest
         group "Rust (gdscheck)" rust
         echo "=== KiCad 10, ParaView, KLayout (casks)"
-        for c in kicad paraview klayout; do
+        # KLayout: klayout.org's build for this macOS (the ST builds, on the system's Ruby and Python)
+        mac="$(sw_vers -productVersion | cut -d. -f1)"
+        case "$mac" in
+            14) dmg="MacOS/ST-klayout-$KLAYOUT-macOS-Sonoma-C32-1-qt5MP-RsysPsys.dmg" ;;
+            15) dmg="MacOS/ST-klayout-$KLAYOUT-macOS-Sequoia-C32-1-qt5MP-RsysPsys.dmg" ;;
+            26) dmg="MacOS/ARM64/arm64ST-klayout-$KLAYOUT-macOS-Tahoe-C32-1-qt5MP-RsysPsys.dmg" ;;
+            27) dmg="MacOS/ARM64/arm64ST-klayout-$KLAYOUT-macOS-GoldenGate-C32-1-qt5MP-RsysPsys.dmg" ;;
+            *) dmg= ;;
+        esac
+        if [ -n "$dmg" ]; then
+            klayout_official "https://www.klayout.org/downloads/$dmg" mac_install_dmg
+        else
+            skip "KLayout: klayout.org has no build for macOS $mac; https://www.klayout.de/build.html"
+        fi
+        for c in kicad paraview; do
             if brew install --cask "$c"; then done_list+=("$c"); else skipped+=("$c (brew install --cask $c failed)"); fi
         done
         ;;

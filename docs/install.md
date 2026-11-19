@@ -44,6 +44,8 @@ What comes from where (Debian, Ubuntu, AlmaLinux, macOS):
 - KiCad 10: KiCad's PPA on Ubuntu, the distribution's where it ships 10 (Debian testing, Fedora),
   Homebrew on macOS (layz then runs on KiCad's Python). AlmaLinux and Debian 13 have no KiCad 10
   package: `install.sh` says so, and layz's KiCad steps need another machine.
+- KLayout 0.30.13 from klayout.org (Ubuntu `.deb`, RHEL/AlmaLinux `.rpm`, macOS `.dmg`); the
+  distribution's on Debian, Fedora and Arch, for which klayout.org builds none.
 - ParaView: the distribution's on Debian and Ubuntu, Homebrew on macOS; on AlmaLinux, ParaView's
   own Linux build in `~/.local/share/layz` (EPEL has only 5.11).
 - FastCap2 needs GoogleTest; on AlmaLinux that is only in EPEL, so there only FasterCap (layz's
