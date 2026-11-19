@@ -13,8 +13,9 @@ set -euo pipefail
 VERSION=10.0.8
 TOOLS=${TOOLS:-${XDG_DATA_HOME:-$HOME/.local/share}/layz}
 ENV="$TOOLS/kicad-env"
-# what the KiCad steps import (the rest of layz runs in .layz-env)
-PACKAGES=("klayout>=0.30.12" "shapely>=2.0" numpy "kicad-pycbnew==1.0.1" pyyaml)
+# what the KiCad steps import (the rest of layz runs in .layz-env): KiCad's Python may be old
+# (3.9 in KiCad.app, 3.11 in the AppImage), so nothing here needs a newer one
+PACKAGES=("klayout>=0.30" numpy "tomli; python_version < '3.11'")
 
 case "$(os_family)" in
     macos)

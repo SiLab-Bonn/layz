@@ -2,8 +2,8 @@
 
 install/kicad.sh puts KiCad 10 in ~/.local/share/layz (KiCad's AppImage, unpacked, on Linux;
 KiCad.app on macOS) with a small Python environment on KiCad's own Python (``kicad-env``: KiCad's
-Python is 3.11 in the AppImage, too old for all of layz, so only the steps that need pcbnew run
-there). This module finds them; nothing goes on the user's PATH.
+Python is 3.11 in the AppImage, 3.9 in KiCad.app, too old for all of layz, so only the steps that
+need pcbnew run there: board -> .hyp, and reading a board for pex; they must run on Python 3.9). This module finds them; nothing goes on the user's PATH.
 
     cli()          kicad-cli, layz's own (else one on PATH)
     python()       the KiCad environment's Python, or None

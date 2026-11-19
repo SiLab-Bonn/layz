@@ -92,12 +92,6 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     if cmd == "view":
         return view(rest)
-    if cmd == "gds2hyp":
-        from layz import kicad
-
-        # KiCad's HyperLynx exporter (pcbnew): in layz's own KiCad environment, where installed
-        if kicad.use_env():
-            return kicad.run(argv)
     sys.argv[0] = f"layz {cmd}"  # argparse prog name in each command's usage line
     result = importlib.import_module(COMMANDS[cmd][0]).main(rest)
     return result if isinstance(result, int) else 0

@@ -46,7 +46,11 @@ This module also reads the stackup out of a .kicad_pcb (the reverse direction), 
 from __future__ import annotations
 
 import re
-import tomllib
+
+try:
+    import tomllib
+except ImportError:  # Python < 3.11: layz's KiCad environment runs on KiCad's own Python
+    import tomli as tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 

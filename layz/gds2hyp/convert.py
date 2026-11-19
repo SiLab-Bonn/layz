@@ -402,6 +402,19 @@ def board_process(pcb_path: Path, board):
     return process
 
 
+def board_to_hyp(pcb_path: Path, hyp_path: Path, refill: bool) -> None:
+    """write_hyp where KiCad's pcbnew is: in layz's own KiCad environment when installed (only
+    this step: the board from a GDS and the traces pass stay here), else in this Python."""
+    from layz import kicad
+
+    if kicad.use_env():
+        argv = ["gds2hyp", str(Path(pcb_path).resolve()), "-o", str(Path(hyp_path).resolve()), "--traces", "none"] + (["--refill"] if refill else [])
+        if kicad.run(argv):
+            raise SystemExit("writing the .hyp in layz's KiCad environment failed")
+    else:
+        write_hyp(pcb_path, hyp_path, refill=refill)
+
+
 def write_hyp(pcb_path: Path, hyp_path: Path, refill: bool = False) -> None:
     _kicad()
     board = pcbnew.LoadBoard(str(pcb_path))
@@ -442,7 +455,7 @@ def main(argv: list[str] | None = None) -> int:
             ap.error("a .hyp input needs -o (a different file): the input is not overwritten")
         out.write_text(args.input.read_text(encoding="utf-8"), encoding="utf-8")
     elif suffix == ".kicad_pcb":
-        write_hyp(args.input, out, refill=args.refill)
+        board_to_hyp(args.input, out, refill=args.refill)
     else:
         if not args.stack:
             ap.error("a GDS input needs --stack (its layer mapping and stackup)")
@@ -451,7 +464,7 @@ def main(argv: list[str] | None = None) -> int:
         with tempfile.TemporaryDirectory() as tmp:
             pcb = out.with_suffix(".kicad_pcb") if args.keep_pcb else Path(tmp) / (out.stem + ".kicad_pcb")
             gds2pcb.main(["--lay", str(args.input), "-o", str(pcb), "--stack", str(args.stack)])
-            write_hyp(pcb, out, refill=args.refill)
+            board_to_hyp(pcb, out, refill=args.refill)
     traces_pass(out, args.traces, args.trace_max_width)
     print(f"wrote {out}")
     return 0
