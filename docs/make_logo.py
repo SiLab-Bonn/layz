@@ -1,7 +1,7 @@
 """Draw the layz logo: "layz" as four keycaps, the y and z keys highlighted (the two swap places
 between English and German keyboards).
 
-    .venv/bin/python docs/make_logo.py        # -> docs/logo.svg
+    .layz-env/bin/python docs/make_logo.py        # -> docs/logo.svg
 
 Letters are DejaVu Sans Mono (it ships with matplotlib) converted to outlines, so the SVG looks the
 same wherever it is shown. Colours: the Nord palette of the plot style.

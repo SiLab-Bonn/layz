@@ -51,6 +51,80 @@ def dc_drop(run: Path, *, max_drop: float, out: Path | None) -> list[dict]:
     return _table(f"DC drop ({run.name})", rows, out)
 
 
+def net_density(run: Path, nets: set[str]) -> dict[str, np.ndarray]:
+    """The current density (A/m²) of each cell of a DC run's loss map, per net: every cell goes to
+    the net whose copper (the board's .hyp) is nearest on that layer."""
+    from layz.hyperlynx import copper
+
+    cu = copper.read(next((run / "board").glob("*.hyp")), nets)
+    names = sorted(cu)
+    out: dict[str, list] = {n: [] for n in names}
+    for lay, (J, _, ext) in plots.current_density(run).items():
+        k = np.isfinite(J)
+        if not k.any():
+            continue
+        ny, nx = J.shape
+        iy, ix = np.nonzero(k)
+        x = (ext[0] + (ix + 0.5) * (ext[1] - ext[0]) / nx) / plots.IN  # mm -> inches, as the .hyp
+        y = (ext[2] + (iy + 0.5) * (ext[3] - ext[2]) / ny) / plots.IN
+        owner = copper.assign(cu, lay, x, y)
+        for j, n in enumerate(names):
+            out[n].append(J[k][owner == j])
+    return {n: np.concatenate(v) if v else np.array([]) for n, v in out.items()}
+
+
+def connectivity(hyp: Path, *, tolerance_m: float, nets: list[str] | None, out: Path | None) -> list[dict]:
+    """Pins their net's copper doesn't reach (farther than ``tolerance_m`` from it on every layer),
+    per net with copper (``nets``: only these), and the copper that belongs to no net (KiCad's
+    EmptyNet...). Needs no HyperLynx: it reads the board's .hyp."""
+    import shapely
+
+    from layz.hyperlynx import copper
+
+    cu = copper.read(hyp)
+    rows = []
+    for net, ps in sorted(copper.pins(hyp).items()):
+        if (nets is not None and net not in nets) or net not in cu:
+            continue
+        g = shapely.union_all([x for x in cu[net].values() if not x.is_empty])
+        far = [(r, g.distance(shapely.Point(x, y)) * 25.4e-3) for r, x, y in ps]
+        far = [(r, d) for r, d in far if d > tolerance_m]
+        if far:
+            rows.append({"net": net, "pins": len(ps), "unconnected": len(far), "which": " ".join(f"{r}({d * 1e3:.1f}mm)" for r, d in far)})
+    unassigned = [n for n in cu if n.startswith("EmptyNet")]
+    area = sum(g.area for n in unassigned for g in cu[n].values()) * 645.16
+    return _table(f"Connectivity ({Path(hyp).name}): pins farther than {tolerance_m * 1e6:.0f} um from their net's copper; {len(unassigned)} pieces of copper ({area:.1f} mm²) on no net", rows, out)
+
+
+def dc_table(supply: Path, ret: Path | None, *, out: Path | None) -> list[dict]:
+    """Per net of a DC run, as in a design review: resistance from the VRM to the net's sink pins
+    (min, max; HyperLynx's resistance matrix), voltage drop over those pins (min, max: the VRM
+    voltage less the pin's on a supply net, the rise on a return net), and current density (the
+    median of the net's copper, and its maximum). Supply nets and nets without a return come from
+    ``supply``, return nets' current density from ``ret`` (the return run)."""
+    ports = plots._rows(supply / "ports.csv")
+    vrms = json.loads((supply / "vrms.json").read_text())
+    solved = set(json.loads((supply / "summary.json").read_text())["nets"])
+    volts = {v["power_net"]: v["voltage"] for v in vrms}
+    refs = {v["ref_net"] for v in vrms if v["power_net"] in solved and v["ref_net"]}
+    vrm_pins = {p for v in vrms for p in v["power_pins"] + v["ref_pins"]}
+    res = plots._rows(supply / "resistance.csv") if (supply / "resistance.csv").exists() else []
+    pin_net = {p["pin"]: p["net"] for p in ports} | {p: v["power_net"] for v in vrms for p in v["power_pins"]} | {p: v["ref_net"] for v in vrms for p in v["ref_pins"]}
+    res = [dict(x, net=pin_net.get(x["sink"], x["net"])) for x in res if pin_net.get(x["source"]) == pin_net.get(x["sink"])]  # same-net pairs
+    dens = net_density(supply, solved)
+    if ret is not None:
+        dens.update({n: j for n, j in net_density(ret, refs).items() if n in refs})
+    rows = []
+    for net in [n for n in sorted(solved)] + sorted(refs):
+        pins = [p for p in ports if p["net"] == net and p["pin"] not in vrm_pins and abs(float(p["current_A"])) > 0]
+        v = np.array([float(p["voltage_V"]) for p in pins])
+        drop = (volts[net] - v) if net in volts else v  # a return: its rise
+        r = np.array([float(x["resistance_ohm"]) for x in res if x["net"] == net])
+        j = dens.get(net, np.array([]))
+        rows.append({"net": net, "kind": "return" if net in refs else "supply", "sink_pins": len(pins), "current_A": float(sum(abs(float(p["current_A"])) for p in pins)), "R_min_mohm": float(r.min()) * 1e3 if r.size else np.nan, "R_max_mohm": float(r.max()) * 1e3 if r.size else np.nan, "drop_min_V": float(drop.min()) if drop.size else np.nan, "drop_max_V": float(drop.max()) if drop.size else np.nan, "J_median_A_mm2": float(np.median(j)) / 1e6 if j.size else np.nan, "J_max_A_mm2": float(j.max()) / 1e6 if j.size else np.nan})
+    return _table(f"DC per net ({supply.name}{' + ' + ret.name if ret is not None else ''})", rows, out)
+
+
 def current_density(run: Path, *, max_density: float, out: Path | None) -> list[dict]:
     """Per layer of a DC run: the highest current density (A/mm²) in the copper, where, the drop
     per length it causes (mV/mm), and the share of the copper above ``max_density`` (A/m²); pass

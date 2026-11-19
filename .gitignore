@@ -1,6 +1,7 @@
 __pycache__/
 *.py[cod]
 .venv/
+.layz-env/
 venv/
 .env
 *.kicad_prl

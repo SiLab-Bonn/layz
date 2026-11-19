@@ -1,61 +1,38 @@
 #!/usr/bin/env bash
-# Install KiCad 10: kicad-cli and the pcbnew Python module that layz uses. No arguments.
-#
-#   Ubuntu        KiCad's PPA kicad-10.0-releases (22.04, 24.04, 26.04)
-#   Debian        Debian's kicad where it is 10 (testing, unstable; Debian 13 has 9)
-#   Fedora        Fedora's kicad where it is 10
-#   macOS         Homebrew's kicad cask; layz then runs on KiCad's own Python: ./install.sh again
-#   AlmaLinux, RHEL, Rocky, Debian 13 and older: no KiCad 10 package; see the message below
-#
-# Run again to update.
+# Check that KiCad 10 is there for layz: kicad-cli, and the pcbnew Python module. No arguments, no
+# sudo: KiCad itself is a system package (install/system.sh: KiCad's PPA on Ubuntu, Debian
+# testing, Fedora, Arch, Homebrew on macOS). On macOS it also links kicad-cli onto your PATH.
 set -euo pipefail
-. "$(cd "$(dirname "$0")" && pwd)/lib.sh"
+here="$(cd "$(dirname "$0")" && pwd)"
+. "$here/lib.sh"
 
 major() { "$1" --version 2>/dev/null | sed -n 's/^\([0-9]*\)\..*/\1/p' | head -1; }
 
-no_package() {
-    die "no KiCad 10 package for this system ($1). KiCad offers an AppImage and a Flatpak for it
-(https://www.kicad.org/download/linux/), but neither gives the system's Python the pcbnew
-module layz needs, so this script doesn't install them yet. Until then, run layz's KiCad steps
+case "$(os_family)" in
+    rhel)
+        die "KiCad 10 has no package for AlmaLinux/RHEL (KiCad offers only an AppImage and a Flatpak,
+neither of which gives the system's Python the pcbnew module layz needs). Run layz's KiCad steps
 (gds2pcb, gds2hyp from a GDS, pex on boards, lvs) on a machine with KiCad 10; the rest of layz
 works without it."
-}
-
-case "$(os_family)" in
-    ubuntu)
-        command -v add-apt-repository >/dev/null || pkg_install software-properties-common
-        as_root add-apt-repository -y ppa:kicad/kicad-10.0-releases
-        PKG_UPDATED=
-        pkg_install kicad
-        ;;
-    debian)
-        as_root apt-get update -q
-        PKG_UPDATED=1
-        candidate="$(apt-cache policy kicad | sed -n 's/^ *Candidate: \([0-9]*\)\..*/\1/p')"
-        [ "${candidate:-0}" -ge 10 ] || no_package "Debian's kicad is ${candidate:-missing} here"
-        pkg_install kicad
-        ;;
-    fedora)
-        candidate="$(dnf info -q kicad 2>/dev/null | sed -n 's/^Version *: \([0-9]*\)\..*/\1/p' | sort -n | tail -1)"
-        [ "${candidate:-0}" -ge 10 ] || no_package "Fedora's kicad is ${candidate:-missing} here"
-        pkg_install kicad
         ;;
     macos)
-        command -v brew >/dev/null || die "install Homebrew first (https://brew.sh), or KiCad from https://www.kicad.org/download/macos/"
-        brew install --cask kicad
-        onpath_link /Applications/KiCad/KiCad.app/Contents/MacOS/kicad-cli kicad-cli
-        echo "layz uses KiCad's own Python on macOS: run ./install.sh again"
-        ;;
-    rhel)
-        no_package "AlmaLinux, Rocky, RHEL"
+        app=/Applications/KiCad/KiCad.app
+        [ -d "$app" ] || need_system "KiCad 10 (Homebrew's kicad cask)"
+        onpath_link "$app/Contents/MacOS/kicad-cli" kicad-cli
+        onpath_done
+        python="$app/Contents/Frameworks/Python.framework/Versions/Current/bin/python3"
         ;;
     *)
-        no_package "unknown system"
+        command -v kicad-cli >/dev/null || need_system "KiCad 10"
+        python=python3
         ;;
 esac
-onpath_done
 
 cli="$(command -v kicad-cli || echo "$(onpath_dir)/kicad-cli")"
-[ "$(major "$cli")" = 10 ] || die "kicad-cli is not KiCad 10: $("$cli" --version 2>&1 | head -1)"
-echo "kicad-cli $("$cli" --version)"
+[ "$(major "$cli")" = 10 ] || need_system "KiCad 10 (this kicad-cli is $("$cli" --version 2>&1 | head -1))"
+"$python" -c "import pcbnew" 2>/dev/null || need_system "KiCad's pcbnew Python module (for $python)"
+echo "KiCad $("$cli" --version): kicad-cli and pcbnew are there"
+if ! "$LAYZ_ENV/bin/python" -c "import pcbnew" 2>/dev/null; then
+    echo "layz's environment can't import pcbnew yet: run ./install.sh again (it then uses KiCad's Python)"
+fi
 echo "check with: layz doctor"

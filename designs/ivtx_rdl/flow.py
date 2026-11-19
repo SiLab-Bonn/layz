@@ -42,29 +42,38 @@ def setup():
 
 @target
 def info():
-    """Stackup, nets with their lengths, VRMs and modelled pins (info/info.json)."""
+    """Stackup, nets with their lengths, VRMs and modelled pins (info/info.json); pins their
+    net's copper doesn't reach, and copper on no net."""
     board = Path("results/ivtx_rdl/setup/obelix1_ivtx_ladder_with_nets_v3.1.hyp")
     if not board.exists():
         setup()
     run.info(board, Path("results/ivtx_rdl/info"), license="HyperLynx SI/PI")
 
+    # pins their net's copper doesn't reach (more than 25 um away), and copper on no net
+    analysis.connectivity(board, tolerance_m=25e-6, nets=None, out=Path("results/ivtx_rdl/info/connectivity.csv"))
+
 
 @target
 def dc():
-    """DC drop of /3V_1../3V_4 and their returns, against 5 % (the constraint set in HyperLynx),
-    and the current density in their copper; pin voltages, via currents, loss and current maps."""
+    """DC of the four chips' 3 V rails at 3 A each and their returns: per net the resistance to
+    each pin, drop, current density; drop against 5 % (the constraint set in HyperLynx); pin
+    voltages, via currents, loss and current maps. (PSUB and PWell: their VRMs have no reference
+    pin, and HyperLynx wants one shared with every chip they feed; how to set that up is open.)"""
     board = Path("results/ivtx_rdl/setup/obelix1_ivtx_ladder_with_nets_v3.1.hyp")
     if not board.exists():
         setup()
     out = Path("results/ivtx_rdl/dc")
 
-    # the four 3 V rails (PSUB and PWell have VRMs without reference pins), with their returns;
-    # HyperLynx's report flags more than 5 % drop, 1.5e7 A/m^2 and 1 A per via
-    supply = run.dc(board, out / "supply", license="HyperLynx SI/PI", nets=["/3V_1", "/3V_2", "/3V_3", "/3V_4"], include_ref=True, max_voltage_drop=5.0, max_current_density=1.5e7, max_via_current=1.0, return_from=None, return_vrm_type="simple", return_sink_resistance=1e6)
+    # the four 3 V rails, one per chip, at 3 A each, with their returns; HyperLynx's report flags
+    # more than 5 % drop, 1.5e7 A/m^2 and 1 A per via
+    supply = run.dc(board, out / "supply", license="HyperLynx SI/PI", nets=["/3V_1", "/3V_2", "/3V_3", "/3V_4"], include_ref=True, vrm_references={}, sink_currents={"/3V_1": 3.0, "/3V_2": 3.0, "/3V_3": 3.0, "/3V_4": 3.0}, max_voltage_drop=5.0, max_current_density=1.5e7, max_via_current=1.0, return_from=None, return_vrm_type="simple", return_sink_resistance=1e6)
 
     # HyperLynx maps the loss of supply nets only: the returns, re-solved as the supply with the
     # currents the first run measured as sinks (1 Mohm across each), give theirs
-    ret = run.dc(board, out / "return", license="HyperLynx SI/PI", nets=["/3V_1", "/3V_2", "/3V_3", "/3V_4"], include_ref=True, max_voltage_drop=5.0, max_current_density=1.5e7, max_via_current=1.0, return_from=supply / "ports.csv", return_vrm_type="simple", return_sink_resistance=1e6)
+    ret = run.dc(board, out / "return", license="HyperLynx SI/PI", nets=["/3V_1", "/3V_2", "/3V_3", "/3V_4"], include_ref=True, vrm_references={}, sink_currents={}, max_voltage_drop=5.0, max_current_density=1.5e7, max_via_current=1.0, return_from=supply / "ports.csv", return_vrm_type="simple", return_sink_resistance=1e6)
+
+    # per chip and net: resistance VRM -> sink pins, drop over them, current density (median, max)
+    analysis.dc_table(supply, ret, out=out / "dc_table.csv")
 
     # supply drop + return rise, at most 5 % of the VRM voltage
     analysis.dc_drop(supply, max_drop=0.05, out=out / "dc_drop.csv")

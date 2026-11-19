@@ -83,8 +83,9 @@ layz/
 ├── designs/              real designs and their flows (ivtx_rdl: the obelix1 ladder)
 ├── test/                 layz's tests and their small test designs (run by layz doctor)
 ├── docs/                 install, stack file format, images
-├── install.sh            install layz
-└── install/              installers for the solvers and gdscheck
+├── install.sh            install layz and its tools, per user, no sudo
+└── install/              system.sh (the system packages, once per machine, by an admin) and
+                          the steps install.sh runs: layz, fastercap, gdscheck, paraview, kicad
 ```
 
 A process is given by name (`--stack uni-bonn-rdl`, `--kit uni-bonn-rdl`) or as a stack file;

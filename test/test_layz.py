@@ -311,6 +311,19 @@ def test_current_density(tmp_path):
     assert abs(row["max_drop_mV_per_mm"] - rho * expect) < 1e-9
 
 
+def test_copper_and_connectivity(tmp_path):
+    """A pour with a void, a trace, two pins on the copper and one 2.4 mm from the trace end; EmptyNet copper."""
+    from layz.hyperlynx import analysis, copper
+
+    hyp = tmp_path / "b.hyp"
+    hyp.write_text('{NET="/V"\n  {POLYGON T=POUR L="In1.Cu" ID=1 X=0 Y=0\n    (LINE X=0 Y=0)\n    (LINE X=0.4 Y=0)\n    (LINE X=0.4 Y=0.1)\n    (LINE X=0 Y=0.1)\n  }\n  {POLYVOID ID=1 X=0.1 Y=0.02\n    (LINE X=0.1 Y=0.02)\n    (LINE X=0.2 Y=0.02)\n    (LINE X=0.2 Y=0.08)\n    (LINE X=0.1 Y=0.08)\n  }\n  (SEG X1=0.4 Y1=0.05 X2=0.6 Y2=0.05 W=0.01 L="In2.Cu")\n  (PIN X=0.05 Y=0.05 R="U1.1" P=0)\n  (PIN X=0.6 Y=0.05 R="U2.1" P=0)\n  (PIN X=0.7 Y=0.05 R="U3.1" P=0)\n}\n{NET="EmptyNet1"\n  {POLYGON T=POUR L="In1.Cu" ID=2 X=1 Y=1\n    (LINE X=1 Y=1)\n    (LINE X=1.1 Y=1)\n    (LINE X=1.1 Y=1.1)\n  }\n}\n')
+    cu = copper.read(hyp)
+    assert abs(cu["/V"]["In1.Cu"].area - (0.04 - 0.006)) < 1e-9  # the void is cut out
+    assert abs(cu["/V"]["In2.Cu"].area - (0.2 * 0.01 + 3.14159 * 0.005**2)) < 1e-6
+    (row,) = analysis.connectivity(hyp, tolerance_m=25e-6, nets=None, out=None)
+    assert row["net"] == "/V" and row["unconnected"] == 1 and row["which"] == "U3.1(2.4mm)"  # 0.1 in less the trace end's round cap
+
+
 def test_eye_densify_and_hexagon():
     import numpy as np
 

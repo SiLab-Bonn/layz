@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Install ParaView with pvpython, for `layz view` of field results. No arguments.
+# ParaView with pvpython, for `layz view` of field results. No arguments, no sudo.
 #
-#   Debian, Ubuntu, Fedora, Arch   the distribution's paraview package
-#   AlmaLinux, Rocky, RHEL         ParaView's own Linux build (EPEL's is 5.11), unpacked into
-#                                  ~/.local/share/layz/paraview-<version>
-#   macOS                          Homebrew's paraview cask
+#   Debian, Ubuntu, Fedora, Arch, macOS   a system package (install/system.sh); this checks it
+#                                         and, on macOS, links pvpython onto your PATH
+#   AlmaLinux, Rocky, RHEL                ParaView's own Linux build (EPEL has only 5.11),
+#                                         unpacked into ~/.local/share/layz/paraview-<version>
 #
-# pvpython ends up where this terminal finds it (install/lib.sh). Run again to update.
+# Run again to update.
 set -euo pipefail
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 
@@ -15,15 +15,12 @@ SERIES=6.2
 TOOLS=${TOOLS:-${XDG_DATA_HOME:-$HOME/.local/share}/layz}
 
 case "$(os_family)" in
-    ubuntu | debian | fedora | arch)
-        pkg_install paraview
-        ;;
     rhel)
         [ "$(uname -m)" = x86_64 ] || die "ParaView's Linux build is for x86_64; this is $(uname -m)"
+        command -v curl >/dev/null || need_system curl
         name="ParaView-$VERSION-MPI-Linux-Python3.12-x86_64"
         dest="$TOOLS/paraview-$VERSION"
         if [ ! -x "$dest/bin/pvpython" ]; then
-            command -v curl >/dev/null || pkg_install curl
             mkdir -p "$TOOLS"
             rm -rf "$TOOLS/paraview-unpack"
             mkdir "$TOOLS/paraview-unpack"
@@ -35,18 +32,18 @@ case "$(os_family)" in
         fi
         onpath_link "$dest/bin/pvpython" pvpython
         onpath_link "$dest/bin/paraview" paraview
+        onpath_done
         ;;
     macos)
-        command -v brew >/dev/null || die "install Homebrew first (https://brew.sh), or ParaView from https://www.paraview.org/download/"
-        brew install --cask paraview
-        app="$(ls -d /Applications/ParaView*.app | sort -V | tail -1)"
+        app="$(ls -d /Applications/ParaView*.app 2>/dev/null | sort -V | tail -1)"
+        [ -n "$app" ] || need_system "ParaView (Homebrew's paraview cask)"
         onpath_link "$app/Contents/bin/pvpython" pvpython
+        onpath_done
         ;;
     *)
-        die "not a system this script knows; get ParaView from https://www.paraview.org/download/"
+        command -v pvpython >/dev/null || need_system "ParaView (pvpython)"
         ;;
 esac
-onpath_done
 
 pv="$(command -v pvpython || echo "$(onpath_dir)/pvpython")"
 "$pv" --version 2>/dev/null | head -1 || die "pvpython does not run: $pv"

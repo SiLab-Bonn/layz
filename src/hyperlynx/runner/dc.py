@@ -6,7 +6,8 @@ return nets are solved as the supply instead (the thermal export covers supply n
 linear, so with the VRM moved to the return pins and the measured return currents as sinks, this
 is the return path's map: its pin voltages are the VRM voltage minus the ground rise).
 
-Outputs: ports.csv, vias.csv, report.csv, powerscope.tps, Thermal__<net>.txt, vrms.json
+Outputs: ports.csv, vias.csv, resistance.csv (VRM to each sink pin, supply runs), report.csv,
+powerscope.tps, Thermal__<net>.txt, vrms.json, summary.json
 """
 
 import csv
@@ -81,6 +82,27 @@ if job["return_from"] is not None:
 else:
     nets = supply_nets()
     include_ref = bool(job["include_ref"])
+    # VRMs without a reference: the pin given (HyperLynx needs one even without return nets)
+    for vnet, ref in job["vrm_references"].items():
+        pin = d.FindPin(ref)
+        if pin is None:
+            raise SystemExit(f"vrm_references: no pin {ref!r}")
+        phases = [ph for v in d.VRMs for ph in v.VRMPhases if ph.PowerNet == vnet]
+        if not phases:
+            raise SystemExit(f"vrm_references: no VRM on {vnet}")
+        for ph in phases:
+            ph.SetRefNet(pin.Net.Name)
+            ph.AddRefPin(ref)
+        say(f"{vnet}: VRM referenced to {ref} ({pin.Net.Name})")
+    # the load: a net's total current spread evenly over its sink pins (those with a DC sink in
+    # the board's project), each keeping its sink resistance; nets not named keep the project's
+    for net, total in job["sink_currents"].items():
+        pins = [p for p in d.FindNet(net).Pins if p.DCSink is not None]
+        if not pins:
+            raise SystemExit(f"sink_currents: {net} has no pin with a DC sink to spread {total} A over")
+        for p in pins:
+            p.AssignDCSink(float(total) / len(pins), p.DCSink.Resistance)
+        say(f"{net}: {total} A over {len(pins)} sink pins")
 
 dc.OutputFolder = out
 dc.WritePowerMap = True  # the loss map layz plots
@@ -108,6 +130,25 @@ write_csv(os.path.join(out, "ports.csv"), ["pin", "net", "x", "y", "type", "curr
 write_csv(os.path.join(out, "vias.csv"), ["net", "type", "layer1", "layer2", "x1", "y1", "x2", "y2", "current_A", "drop_V"], ([c.Net, c.Type, c.Layer1, c.Layer2, *xy(c.Location1), *xy(c.Location2), c.Current, c.VoltageDrop] for c in r.Connectors))
 dc.GenerateReport(h.hlReportFormatCSV, os.path.join(out, "report.csv"))
 dc.SaveGraph(os.path.join(out, "powerscope.tps"))
+
+# the resistance from each source (VRM) pin to each sink pin of the same net (supply runs: with
+# their reference nets); the return run's swapped VRMs would give the same paths again. HyperLynx
+# returns one matrix per side, all supply nets in one (labelled with the first); pairs across
+# nets come out at ~1e5 ohm, unconnected, and are left out
+res = []
+if job["return_from"] is None:
+    pin_net = {}
+    for mat in dc.CalcResMatrices():
+        srcs, sinks = [str(x) for x in mat.Sources], [str(x) for x in mat.Sinks]
+        for p in srcs + sinks:
+            pin_net.setdefault(p, d.FindPin(p).Net.Name)
+        for i, a in enumerate(srcs, 1):
+            for j, b in enumerate(sinks, 1):
+                if pin_net[a] == pin_net[b]:
+                    res.append([pin_net[b], a, b, mat.GetResistance(i, j)])  # HyperLynx counts from 1
+    write_csv(os.path.join(out, "resistance.csv"), ["net", "source", "sink", "resistance_ohm"], res)
+    say(f"resistance: {len(res)} source-sink paths")
+
 m = r.MaxCurrentDensity
-write_json(os.path.join(out, "summary.json"), {"nets": nets, "include_ref": include_ref, "return_run": job["return_from"] is not None, "constraint": {"max_voltage_drop": dc.Constraint.MaxVoltageDrop, "max_current_density": dc.Constraint.MaxCurrentDensity, "max_via_current": dc.Constraint.MaxViaCurrent}, "max_current_density": {"value": m.Density, "layer": m.Layer, "at": list(xy(m.Location))}})
+write_json(os.path.join(out, "summary.json"), {"nets": nets, "include_ref": include_ref, "return_run": job["return_from"] is not None, "sink_currents": job["sink_currents"], "constraint": {"max_voltage_drop": dc.Constraint.MaxVoltageDrop, "max_current_density": dc.Constraint.MaxCurrentDensity, "max_via_current": dc.Constraint.MaxViaCurrent}, "max_current_density": {"value": m.Density, "layer": m.Layer, "at": list(xy(m.Location))}})
 say(f"{r.Ports.Count} pins, {r.Connectors.Count} vias; max current density {m.Density:.3g} on {m.Layer}")

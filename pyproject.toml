@@ -22,7 +22,7 @@ dependencies = [
     "pyyaml",              # layz drc --benchmark
     "klayout-pex>=0.7.0",  # layz pex: 3-D model builder for FasterCap
     "numpy",
-    "matplotlib",
+    "matplotlib>=3.11",    # rc legend.linewidth (plotstyle.py); a system 3.10 would otherwise do
     "plotly",
     "pytest",              # layz doctor runs the test suite
 ]
@@ -32,12 +32,16 @@ dependencies = [
 [project.scripts]
 layz = "layz.cli:main"
 
-# src/ is the layz package itself (imported as `layz`)
+# src/ is the layz package itself (imported as `layz`); the link layz -> src at the repo root lets
+# editors' checkers (ty, pyright), which don't follow the editable install's import hook, find it
 [tool.setuptools]
 package-dir = {"layz" = "src"}
 packages = ["layz", "layz.drc", "layz.lvs", "layz.gds2pcb", "layz.gds2hyp", "layz.hyperlynx",
             "layz.hyperlynx.runner", "layz.pex", "layz.field", "layz.field.paraview", "layz.svg"]
 
+
+[tool.ty.environment]
+python = ".layz-env"        # layz's environment (install/layz.sh), for numpy, matplotlib, ...
 
 [tool.ruff]
 line-length = 1000          # one line per statement: no wrapping

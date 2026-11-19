@@ -6,76 +6,27 @@
 #   tools/src/FastCap2/build/fastcap       martinjankoehler/FastCap2           (MIT license)
 #   tools/wx                               wxWidgets 3.2.6 "base" (non-GUI) library, for FasterCap
 #
-# Installs its build tools first with the system's package manager (apt, dnf, pacman; asks for
-# sudo), or with Homebrew on macOS. wxWidgets is built here (Ubuntu ships no wx headers without the
-# GTK dev stack). macOS also needs: export OpenMP_ROOT=$(brew --prefix)/opt/libomp
+# For yourself, without sudo; no arguments. Its build tools are system packages (install/system.sh):
+# it checks for them and stops naming what is missing. wxWidgets is built here (Ubuntu ships no wx
+# headers without the GTK dev stack). Run again to update.
 set -euo pipefail
 REPO=$(cd "$(dirname "$0")/.." && pwd)
-. "$REPO/install/lib.sh"   # as_root, onpath_link
+. "$REPO/install/lib.sh"   # need_system, onpath_link
 
-# --- prerequisites: installed if missing (otherwise they surface as CMake errors deep in the build);
-# only what is missing, so e.g. AlmaLinux's curl-minimal stays
-check() {
-  missing=()
-  for tool in cmake git curl make; do
-    command -v "$tool" >/dev/null || missing+=("$tool")
-  done
-  command -v c++ >/dev/null || command -v g++ >/dev/null || command -v clang++ >/dev/null || missing+=("c++")
-  if [[ "$(uname)" == Linux ]]; then
-    command -v bzip2 >/dev/null || missing+=("bzip2")   # the wxWidgets source is a .tar.bz2
-    # BLAS with its C header (cblas.h), which FasterCap's LinAlgebra needs; its folder goes to
-    # LinAlgebra's build as CBLAS_INCLUDE_DIR (it looks in the standard path and openblas/ only,
-    # so e.g. FlexiBLAS's /usr/include/flexiblas, the BLAS of AlmaLinux 9, needs naming)
-    local d
-    CBLAS_DIR=
-    for d in /usr/include /usr/include/openblas /usr/include/flexiblas /usr/include/x86_64-linux-gnu \
-             /usr/include/aarch64-linux-gnu /usr/include/blis /usr/local/include /usr/local/include/openblas; do
-      [[ -e "$d/cblas.h" ]] && { CBLAS_DIR="$d"; break; }
-    done
-    [[ -n "$CBLAS_DIR" ]] || missing+=("cblas")
-  fi
-}
-# the package of each missing piece: package(manager, piece)
-package() {
-  case "$1:$2" in
-    apt:c++) echo g++ ;; apt:cblas) echo libopenblas-dev ;;
-    dnf:c++) echo gcc-c++ ;; dnf:cblas) echo openblas-devel ;;
-    pacman:c++) echo gcc ;; pacman:cblas) echo openblas ;;
-    *) echo "$2" ;;
-  esac
-}
-check
-if (( ${#missing[@]} )); then
-  echo "fastercap.sh: missing ${missing[*]}; installing" >&2
-  if command -v apt-get >/dev/null; then pm=apt
-  elif command -v dnf >/dev/null; then pm=dnf
-  elif command -v pacman >/dev/null; then pm=pacman
-  elif [[ "$(uname)" == Darwin ]] && command -v brew >/dev/null; then pm=brew
-  else
-    echo "fastercap.sh: no known package manager; install ${missing[*]} yourself" >&2
-    exit 1
-  fi
-  pkgs=()
-  for m in "${missing[@]}"; do pkgs+=("$(package $pm "$m")"); done
-  case $pm in
-    apt) cmd=(as_root apt-get install -y "${pkgs[@]}") ;;
-    dnf)
-      # RHEL, AlmaLinux, Rocky: openblas-devel is in the CodeReady Builder repository (crb), off by default
-      if [[ " ${pkgs[*]} " == *" openblas-devel "* ]] && ! dnf list -q openblas-devel >/dev/null 2>&1 && dnf repolist --all -q 2>/dev/null | grep -q "^crb "; then
-        echo "+ as_root dnf config-manager --set-enabled crb" >&2
-        as_root dnf install -y dnf-plugins-core >/dev/null && as_root dnf config-manager --set-enabled crb
-      fi
-      cmd=(as_root dnf install -y "${pkgs[@]}") ;;
-    pacman) cmd=(as_root pacman -S --needed --noconfirm "${pkgs[@]}") ;;
-    brew)
-      xcode-select -p >/dev/null 2>&1 || xcode-select --install
-      cmd=(brew install cmake libomp wxwidgets) ;;
-  esac
-  echo "+ ${cmd[*]}" >&2
-  "${cmd[@]}" || { echo "fastercap.sh: that failed; run it yourself (or ask an admin), then again" >&2; exit 1; }
-  check
-  (( ${#missing[@]} == 0 )) || { echo "fastercap.sh: still missing ${missing[*]}" >&2; exit 1; }
+# --- prerequisites: system packages (install/system.sh); a missing one would surface as a CMake
+# error deep in the build
+missing=()
+for tool in cmake git curl make; do
+  command -v "$tool" >/dev/null || missing+=("$tool")
+done
+command -v c++ >/dev/null || command -v g++ >/dev/null || command -v clang++ >/dev/null || missing+=("a C++ compiler")
+CBLAS_DIR=
+if [[ "$(uname)" == Linux ]]; then
+  command -v bzip2 >/dev/null || missing+=("bzip2")   # the wxWidgets source is a .tar.bz2
+  CBLAS_DIR="$(find_cblas)" || missing+=("BLAS headers (cblas.h)")   # its folder goes to FasterCap's build
 fi
+(( ${#missing[@]} == 0 )) || need_system "${missing[*]}"
+[[ "$(uname)" == Darwin ]] && export OpenMP_ROOT="${OpenMP_ROOT:-$(brew --prefix)/opt/libomp}"
 
 TOOLS=${TOOLS:-${XDG_DATA_HOME:-$HOME/.local/share}/layz}
 JOBS=${JOBS:-$(nproc 2>/dev/null || sysctl -n hw.ncpu)}
@@ -107,20 +58,13 @@ cmake -S FasterCap -B build -DCMAKE_BUILD_TYPE=Release -DFASTFIELDSOLVERS_HEADLE
 cmake --build build -j"$JOBS"
 popd
 
-# --- FastCap2 (optional, `layz pex --solver fastcap2`): its CMake needs GoogleTest, installed if
-# the system's own repositories have it (RHEL and AlmaLinux keep it in EPEL: then FastCap2 is left out)
-have_gtest() { compgen -G "/usr/include/gtest/gtest.h" >/dev/null || compgen -G "/usr/local/include/gtest/gtest.h" >/dev/null || compgen -G "/opt/homebrew/include/gtest/gtest.h" >/dev/null; }
-if ! have_gtest; then
-  case "${pm:-}" in
-    "") if command -v apt-get >/dev/null; then pm=apt; elif command -v dnf >/dev/null; then pm=dnf; elif command -v pacman >/dev/null; then pm=pacman; elif command -v brew >/dev/null; then pm=brew; fi ;;
-  esac
-  case "${pm:-}" in
-    apt) as_root apt-get install -y libgtest-dev || true ;;
-    dnf) dnf list -q gtest-devel >/dev/null 2>&1 && as_root dnf install -y gtest-devel || true ;;
-    pacman) as_root pacman -S --needed --noconfirm gtest || true ;;
-    brew) brew install googletest || true ;;
-  esac
-fi
+# --- FastCap2 (optional, `layz pex --solver fastcap2`): its CMake needs GoogleTest and the Python
+# headers, system packages where the system has them (install/system.sh; on RHEL and AlmaLinux
+# GoogleTest is only in EPEL)
+have_gtest() {
+  { compgen -G "/usr/include/gtest/gtest.h" || compgen -G "/usr/local/include/gtest/gtest.h" || compgen -G "/opt/homebrew/include/gtest/gtest.h"; } >/dev/null &&
+    { [[ "$(uname)" == Darwin ]] || compgen -G "/usr/include/python3*/Python.h" >/dev/null; }
+}
 fastcap2=
 if have_gtest; then
   [[ -d FastCap2 ]] || git clone -q https://github.com/martinjankoehler/FastCap2
@@ -128,7 +72,7 @@ if have_gtest; then
   cmake --build FastCap2/build -j"$JOBS"
   fastcap2=1
 else
-  echo "fastercap.sh: FastCap2 left out: it needs GoogleTest (gtest-devel), which this system's repositories don't have (on RHEL/AlmaLinux it is in EPEL); FasterCap, layz's default solver, is built" >&2
+  echo "fastercap.sh: FastCap2 left out: it needs GoogleTest and the Python headers, not both installed here (install/system.sh adds them where the system packages them); FasterCap, layz's default solver, is built" >&2
 fi
 
 onpath_link "$TOOLS/src/FastFieldSolvers/build/FasterCap" FasterCap
