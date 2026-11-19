@@ -8,6 +8,11 @@
 # first writable one under $HOME. Only if there is none, ~/.local/bin is used and added to PATH
 # in ~/.bashrc / ~/.zshrc for new terminals.
 
+# run a command as root: directly when we are root, else through sudo (which asks for a password)
+as_root() {
+    if [ "$(id -u)" = 0 ]; then "$@"; else sudo "$@"; fi
+}
+
 onpath_dir() {
     local d
     for d in "$HOME/.local/bin" "$HOME/bin"; do
@@ -25,8 +30,12 @@ onpath_link() {
     local dir
     dir="$(onpath_dir)"
     mkdir -p "$dir"
-    ln -sf "$1" "$dir/$2"
-    echo "linked $dir/$2 -> $1"
+    if [ "$(readlink -f "$1")" = "$(readlink -f "$dir/$2" 2>/dev/null)" ] && [ "$(cd "$(dirname "$1")" && pwd -P)" = "$(cd "$dir" && pwd -P)" ]; then
+        echo "$2 is in $dir already"   # the command lives in a folder on PATH itself
+    else
+        ln -sf "$1" "$dir/$2"
+        echo "linked $dir/$2 -> $1"
+    fi
     case ":$PATH:" in
         *":$dir:"*) ;;
         *)

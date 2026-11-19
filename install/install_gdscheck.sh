@@ -3,16 +3,19 @@
 # Rust's cargo first if it's missing (apt, dnf, pacman with sudo; Homebrew on macOS), then
 # `cargo install`, linked where this terminal finds it (install/onpath.sh). Run again to update.
 set -euo pipefail
+. "$(cd "$(dirname "$0")" && pwd)/onpath.sh"   # as_root, onpath_link
 
-export PATH="$HOME/.cargo/bin:$PATH"
-if ! command -v cargo >/dev/null; then
+bin="${CARGO_HOME:-$HOME/.cargo}/bin"   # where cargo install puts it (and rustup's cargo)
+cargo="$(command -v cargo || true)"
+[ -z "$cargo" ] && [ -x "$bin/cargo" ] && cargo="$bin/cargo"
+if [ -z "$cargo" ]; then
   echo "install_gdscheck.sh: no cargo; installing Rust" >&2
   if command -v apt-get >/dev/null; then
-    cmd=(sudo apt-get install -y cargo git)
+    cmd=(as_root apt-get install -y cargo git)
   elif command -v dnf >/dev/null; then
-    cmd=(sudo dnf install -y cargo git)
+    cmd=(as_root dnf install -y cargo git)
   elif command -v pacman >/dev/null; then
-    cmd=(sudo pacman -S --needed --noconfirm rust git)
+    cmd=(as_root pacman -S --needed --noconfirm rust git)
   elif command -v brew >/dev/null; then
     cmd=(brew install rust)
   else
@@ -21,10 +24,10 @@ if ! command -v cargo >/dev/null; then
   fi
   echo "+ ${cmd[*]}" >&2
   "${cmd[@]}" || { echo "install_gdscheck.sh: that failed; run it yourself (or ask an admin), then again" >&2; exit 1; }
+  cargo="$(command -v cargo)"
 fi
 
-cargo install --git https://github.com/aesc-silicon/gdscheck gdscheck
-. "$(cd "$(dirname "$0")" && pwd)/onpath.sh"
-onpath_link "$(command -v gdscheck)" gdscheck
+"$cargo" install --git https://github.com/aesc-silicon/gdscheck gdscheck
+onpath_link "$bin/gdscheck" gdscheck
 onpath_done
 echo "check with: layz doctor"
