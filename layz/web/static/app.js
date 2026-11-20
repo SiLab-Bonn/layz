@@ -269,7 +269,7 @@ async function plotPane(design, p) {
   const draw = () => {
     const axesShown = select ? [{ ...fig.axes[pick], box: [0, 0, 1, 1], title: "" }] : fig.axes;
     const ink = css("--ink-1"), grid = css("--line-2"), dim = css("--ink-4");
-    const traces = [], layout = { paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: { color: ink, family: css("--font-mono"), size: 11 }, margin: { l: 60, r: 20, t: fig.title ? 36 : 14, b: 46 }, showlegend: true, legend: { bgcolor: "rgba(0,0,0,0)", font: { size: 10 } }, title: fig.title ? { text: fig.title, font: { size: 12 } } : undefined, annotations: [] };
+    const traces = [], layout = { paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: { color: ink, family: css("--font-mono"), size: 11 }, margin: { l: 60, r: 20, t: fig.title ? 36 : 14, b: 46 }, showlegend: true, legend: { orientation: "h", x: 0, xanchor: "left", y: -0.16, yanchor: "top", bgcolor: "rgba(0,0,0,0)", font: { size: 10 } }, title: fig.title ? { text: fig.title, font: { size: 12 } } : undefined, annotations: [] };
     axesShown.forEach((ax, k) => {
       const n = k ? k + 1 : "";
       const axis = (label, log, lim, dom) => ({ title: { text: label, font: { size: 11 } }, type: log ? "log" : "linear", range: log ? lim.map((v) => Math.log10(Math.max(v, 1e-300))) : lim, domain: dom, gridcolor: grid, zerolinecolor: grid, linecolor: dim, mirror: true, ticks: "inside" });
