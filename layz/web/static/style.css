@@ -190,3 +190,12 @@ button.fit.on { border-color: var(--accent); color: var(--ink-0); }
 .stacked h4:first-child { margin-top: 2px; }
 .stacked .tablewrap { max-height: 300px; }
 .tabbody > .pane > .lazy > .stacked { max-height: 640px; overflow: auto; }
+/* the left of a stage scrolls as one, as tall as the pictures beside it, with a visible bar */
+.split > .tabbox:first-child .tabbody { max-height: 580px; overflow: auto; }
+.split > .tabbox:first-child .tabbody .tablewrap, .split > .tabbox:first-child .tabbody pre.log, .stacked .tablewrap, .tabbody > .pane > .lazy > .stacked { max-height: none; overflow: visible; }
+.split > .tabbox:first-child .tabbody pre.log { overflow-x: auto; }
+* { scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 5px; border: 2px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background-color: var(--ink-4); }
+::-webkit-scrollbar-track { background: transparent; }
