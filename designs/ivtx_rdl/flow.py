@@ -19,32 +19,32 @@ from layz.hyperlynx import setup as hyperlynx
 from layz.lvs import analysis as lvs_analysis
 from layz.lvs import run as lvs_run
 
-HERE = Path(__file__).parent
 RESULTS = Path("results/ivtx_rdl")
 
 
 @target
 def setup():
-    """The inputs: Andreas' latest layout and schematic (copied from /users/aulm/ivtx), the RDL's
+    """The inputs: Andreas' latest layout and schematic (copied from /users/aulm/ivtx/RDL), the RDL's
     stack, the board HyperLynx simulates, his HyperLynx project and models; HyperLynx's writable
     overlay."""
     global LAYOUT, STACK, SCHEMATIC, BOARD_SOURCE, BOARD
     # Andreas' latest layout and schematic, copied in from his folder on every run
-    andreas = Path("/users/aulm/ivtx")
+    andreas = Path("/users/aulm/ivtx/RDL")
     inputs = RESULTS / "setup" / "inputs"
     inputs.mkdir(parents=True, exist_ok=True)
     LAYOUT = Path(shutil.copy2(andreas / "obelix1_ivtx_ladder_v2.gds", inputs))
     SCHEMATIC = Path(shutil.copy2(andreas / "obelix1_ivtx_ladder_v2.kicad_sch", inputs))
     STACK = "uni-bonn-rdl"  # tech/uni-bonn-rdl/stack.toml
-    # the board HyperLynx simulates: Andreas' KiCad export, until the GDS has a net label on
-    # every net (its labels are on 80/7, the notes layer, today; then: BOARD_SOURCE = LAYOUT)
-    BOARD_SOURCE = HERE / "obelix1_ivtx_ladder_with_nets_v3.1.hyp"
+    # the board HyperLynx simulates: Andreas' KiCad export (in his HyperLynx project), until the
+    # GDS has a net label on every net (its labels are on 80/7, the notes layer, today; then:
+    # BOARD_SOURCE = LAYOUT)
+    project = Path("/users/aulm/HyperLynx/simulations/VTX_Obelix_1/v3.1")
+    BOARD_SOURCE = project / "obelix1_ivtx_ladder_with_nets_v3.1.hyp"
     BOARD = RESULTS / "board" / "obelix1_ivtx_ladder_with_nets_v3.1.hyp"  # the name his project goes with
 
     # Andreas' HyperLynx project next to the board: VRMs, DC sinks and pin models set in the GUI;
     # the SPICE driver and receiver of the data links
     BOARD.parent.mkdir(parents=True, exist_ok=True)
-    project = Path("/users/aulm/HyperLynx/simulations/VTX_Obelix_1/v3.1")
     for suffix in (".bud", ".bbd", ".pjh"):
         shutil.copy2(project / f"obelix1_ivtx_ladder_with_nets_v3.1{suffix}", BOARD.parent)
     shutil.copy2("/users/aulm/iVTX_transmisstion_line/fast_drv.sp", BOARD.parent / "fast_drv.sp")

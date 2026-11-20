@@ -28,14 +28,14 @@ Each target names its inputs and limits itself, runs, checks and plots into its 
 
 The limits other than the DC drop are first guesses, to be agreed on.
 
-Files:
+Inputs: only the flow lives here; `setup` copies the design's files from where Andreas keeps
+them, on every run:
 
-| File | What |
+| File | From |
 | --- | --- |
-| `obelix1_ivtx_ladder_v2.gds` | the layout |
-| `obelix1_ivtx_ladder_f.kicad_sch` | its schematic (the `lvs` target's) |
-| `obelix1_ivtx_ladder_with_nets_v3.1.hyp` | Andreas' KiCad export, the input of `setup` |
-| `kicad_stack.toml` | the stackup typed into KiCad for that export (FR4 placeholders); `layz.gds2hyp.convert.hyp` of the GDS with it writes the same STACKUP |
+| `obelix1_ivtx_ladder_v2.gds`, the layout | `/users/aulm/ivtx/RDL` |
+| `obelix1_ivtx_ladder_v2.kicad_sch`, its schematic (the `lvs` target's) | `/users/aulm/ivtx/RDL` |
+| `obelix1_ivtx_ladder_with_nets_v3.1.hyp`, his KiCad export (the board for HyperLynx, for now), with its project (`.bud`, `.bbd`, `.pjh`) | `/users/aulm/HyperLynx/simulations/VTX_Obelix_1/v3.1` |
 
 Notes from the first runs (November 2026): the export draws every route as pours, which
 BoardSim cannot simulate as lines, so the `board` target writes the 17 signal nets as traces first; the

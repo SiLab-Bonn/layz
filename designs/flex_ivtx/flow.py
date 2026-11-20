@@ -3,60 +3,49 @@
 #
 #   layz run designs/flex_ivtx         (the HyperLynx targets: on juno or jupiter)
 #
-# The targets run in this file's order; setup names the inputs, and copies Andreas' KiCad project
-# of the flex in from wherever it is in his home on juno.
+# The targets run in this file's order; setup names the inputs: Andreas' KiCad board and schematic,
+# copied from /users/aulm/ivtx/Flex on every run.
 
-import os
 import shutil
 from pathlib import Path
 
 from layz.drc import analysis as drc_analysis
 from layz.drc import run as drc_run
-from layz.flow import Skip, target
+from layz.flow import target
 from layz.gds2hyp import convert as gds2hyp
 from layz.hyperlynx import analysis, plots, run
 from layz.hyperlynx import setup as hyperlynx
 from layz.lvs import analysis as lvs_analysis
 from layz.lvs import run as lvs_run
 
-HERE = Path(__file__).parent
 RESULTS = Path("results/flex_ivtx")
 
 
 @target
 def setup():
-    """The inputs: the KiCad board (its stackup inside) with its schematic, and Andreas'
-    HyperLynx project and models; HyperLynx's writable overlay."""
-    global LAYOUT, BOARD
+    """The inputs: Andreas' latest KiCad board (its stackup inside) and schematic, copied from
+    /users/aulm/ivtx/Flex, and his HyperLynx project and models; HyperLynx's writable overlay."""
+    global LAYOUT, SCHEMATIC, BOARD
     project = Path("/users/aulm/HyperLynx/simulations/Flex")
 
-    # Andreas' KiCad project of the flex (flexv2.2: flex.kicad_pcb, flex.kicad_sch), wherever it
-    # is in his home: the newest flex*.kicad_pcb, copied in with every KiCad file beside it
-    # (schematic sheets, project); none there yet: his HyperLynx export of it, and DRC and LVS
-    # wait for the board
-    found = []
-    for folder, dirs, files in os.walk("/users/aulm"):
-        dirs[:] = [d for d in dirs if not d.startswith(".") and d not in ("layz", "VirtualBox VMs", "TCAD")]
-        found += [Path(folder) / f for f in files if f.startswith("flex") and f.endswith(".kicad_pcb")]
-    if found:
-        source = max(found, key=lambda f: f.stat().st_mtime)
-        kicad = RESULTS / "setup" / "kicad"
-        kicad.mkdir(parents=True, exist_ok=True)
-        for f in source.parent.glob("*.kicad_*"):
-            shutil.copy2(f, kicad)
-        LAYOUT = kicad / source.name
-        print(f"the flex's KiCad project: {source.parent} (copied to {kicad})")
-    else:
-        LAYOUT = project / "flex_45cm_v2.2.hyp"
-        print(f"no flex*.kicad_pcb in /users/aulm: the board is his HyperLynx export, {LAYOUT}")
-    BOARD = RESULTS / "board" / "flex_45cm_v2.2.hyp"  # the name his HyperLynx project goes with
+    # his KiCad board and schematic, copied in on every run; the schematic under the board's
+    # name, as KiCad's schematic parity looks for it beside the board
+    andreas = Path("/users/aulm/ivtx/Flex")
+    kicad = RESULTS / "setup" / "kicad"
+    kicad.mkdir(parents=True, exist_ok=True)
+    pcb = max(andreas.glob("*.kicad_pcb"), key=lambda f: f.stat().st_mtime)
+    LAYOUT = Path(shutil.copy2(pcb, kicad))
+    SCHEMATIC = Path(shutil.copy2(max(andreas.glob("*.kicad_sch"), key=lambda f: f.stat().st_mtime), kicad / f"{pcb.stem}.kicad_sch"))
+    for f in andreas.glob(f"{pcb.stem}.kicad_pro"):
+        shutil.copy2(f, kicad)
+    BOARD = RESULTS / "board" / f"{pcb.stem}.hyp"  # his HyperLynx project goes with the board's name
 
     # his HyperLynx project next to the board: VRMs, DC sinks, pin models set in the GUI; the
     # SPICE driver and receiver of the data links (the ladder's)
     BOARD.parent.mkdir(parents=True, exist_ok=True)
     for suffix in (".bud", ".bbd", ".pjh"):
-        if (project / f"flex_45cm_v2.2{suffix}").exists():
-            shutil.copy2(project / f"flex_45cm_v2.2{suffix}", BOARD.parent)
+        if (project / f"{pcb.stem}{suffix}").exists():
+            shutil.copy2(project / f"{pcb.stem}{suffix}", BOARD.parent)
     shutil.copy2("/users/aulm/iVTX_transmisstion_line/fast_drv.sp", BOARD.parent / "fast_drv.sp")
     shutil.copy2("/users/aulm/iVTX_transmisstion_line/fast_rcv.sp.txt", BOARD.parent / "fast_rcv.sp")
     hyperlynx.prepare()
@@ -65,8 +54,6 @@ def setup():
 @target
 def drc():
     """KiCad's DRC of the flex, with the rules in its board."""
-    if LAYOUT.suffix != ".kicad_pcb":
-        raise Skip(f"needs the KiCad board (a flex*.kicad_pcb in /users/aulm); the layout is {LAYOUT.name}")
     checked = drc_run.board(LAYOUT, RESULTS / "drc", refill_zones=True, all_track_errors=False)
     drc_analysis.violations(checked, max_violations=0, out=checked / "violations.csv")
 
@@ -75,8 +62,6 @@ def drc():
 def lvs():
     """KiCad's schematic parity of the flex: footprints and nets against flex.kicad_sch, and
     unconnected copper."""
-    if LAYOUT.suffix != ".kicad_pcb":
-        raise Skip("needs the KiCad board and schematic (a flex*.kicad_pcb and its .kicad_sch in /users/aulm)")
     checked = lvs_run.board(LAYOUT, RESULTS / "lvs", refill_zones=True)
     lvs_analysis.parity(checked, out=checked / "summary.csv")
 
@@ -86,7 +71,7 @@ def board():
     """The board for HyperLynx (KiCad's exporter), its signal nets (up to 0.3 mm wide) as traces;
     GND and +3V0 stay pours. Then what HyperLynx sees in it (stackup, nets and
     lengths, VRMs, modelled pins), and the pins their net's copper doesn't reach."""
-    gds2hyp.hyp(LAYOUT, BOARD, stack=None, refill=True, traces="auto", trace_max_width=0.3)  # a .hyp: copied, then the traces
+    gds2hyp.hyp(LAYOUT, BOARD, stack=None, refill=True, traces="auto", trace_max_width=0.3)
 
     # what HyperLynx sees in it: stackup, nets with their lengths, VRMs, modelled pins
     # (info/info.json); pins their net's copper doesn't reach (more than 25 um away), and copper
