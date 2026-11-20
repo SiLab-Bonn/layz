@@ -213,6 +213,7 @@ function stage(d, t, i) {
     isBoard ? h("div", { class: "facts" }, layoutFacts(await board())) : null,
     tables.map((tb) => table(tb, t.markers ? mark : null)),
     hasMarks ? violations(t.markers.boxes, pickViolation) : null)]);
+  const filesLine = () => (t.folder && t.files && t.files.length ? h("div", { class: "files" }, pathRow(`${t.name}/`, t.folder + "/", true), t.files.map((f) => pathRow(f, `${t.folder}/${f}`))) : null);
   // what the step wrote, its log among them
   if (t.files && t.files.length) left.push(["files", () => filesLine()]);
 
