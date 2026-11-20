@@ -233,3 +233,4 @@ button.fit.on { border-color: var(--accent); color: var(--ink-0); }
 .tools.row { position: static; margin: 0 0 6px; }
 .tools.row select.panelpick { margin: 0; }
 a.fit { text-decoration: none; display: inline-block; line-height: 1.5; }
+.tools.row .pages { margin: 0 6px 0 0; display: inline-flex; gap: 12px; } .tools.row .pages a { padding: 2px 0; border-bottom: 2px solid transparent; } .tools.row .pages a.on { border-bottom-color: var(--accent); }

@@ -160,7 +160,7 @@ function stage(d, t, i) {
     }]);
   }
   if (t.markers && t.markers.boxes.length) {
-    right.push([`layout · ${t.markers.boxes.length} marked`, async () => {
+    right.push(["layout", async () => {
       const b = t.markers.on === "board" ? await board() : (await inputs()).layout;
       if (!b) return h("div", { class: "caption" }, "no layout to mark");
       viewer = layoutViewer(b);
@@ -172,7 +172,7 @@ function stage(d, t, i) {
   for (const o of t.overlays || []) for (const mode of ["current density", "pin voltage", "via current"]) right.push([mode, async () => layoutViewer(await board(), await once(fileUrl(d.name, o)), false, mode).el]);
   let sheet = null; // the schematic this stage marks its findings on
   const unchecked = (t.summary && t.summary["unchecked nets"]) || [];
-  if (t.name.includes("lvs") && t.markers && (t.markers.boxes.some((m) => m.names) || unchecked.length)) right.push([`schematic · marked`, async () => {
+  if (t.name.includes("lvs") && t.markers && (t.markers.boxes.some((m) => m.names) || unchecked.length)) right.push(["schematic", async () => {
     const inp = await inputs();
     if (!inp.schematic_svgs || !inp.schematic_index) return h("div", { class: "caption" }, "no KiCad schematic to mark");
     sheet = await svgViewer(inp.schematic_svgs, inp.schematic_index, true);  // grey: the marks carry the colour
@@ -190,7 +190,7 @@ function stage(d, t, i) {
     if (!t.markers) return;
     const boxes = t.markers.boxes.filter((m) => !rule || m.rule === rule);
     if (!boxes.length) return;
-    rightTabs.show(`layout · ${t.markers.boxes.length} marked`);
+    rightTabs.show("layout");
     setTimeout(() => viewer && viewer.setMarkers(boxes, boxes[0]), 50);
   };
   const left = [];
@@ -204,8 +204,8 @@ function stage(d, t, i) {
   const covers = (big, small) => big !== small && small.rows.length === big.rows.length && small.rows[0].every((c) => big.rows[0].includes(c));
   const tables = t.tables.filter((tb) => !t.tables.some((other) => covers(other, tb)));
   const pickViolation = (m) => {
-    if (sheet && m.names && rightTabs.current() === "schematic · marked") { sheet.mark(t.markers.boxes.flatMap((x) => x.names || []), m.names, unchecked, t.markers.boxes); return; }
-    rightTabs.show(`layout · ${t.markers.boxes.length} marked`);
+    if (sheet && m.names && rightTabs.current() === "schematic") { sheet.mark(t.markers.boxes.flatMap((x) => x.names || []), m.names, unchecked, t.markers.boxes); return; }
+    rightTabs.show("layout");
     setTimeout(() => viewer && viewer.setMarkers(t.markers.boxes, m), 50);
   };
   const hasMarks = t.markers && t.markers.boxes.length;
@@ -294,7 +294,10 @@ async function plotPane(design, p) {
   const ys = fig.axes.map((ax) => ax.ylabel);
   const byY = new Set(ys).size === ys.length && ys.every(Boolean);
   const label = (ax, k) => (byY ? ax.ylabel : (ax.title || "").replace(/\s*\(.*$/, "")) || `panel ${k + 1}`;
-  const select = fig.axes.length > 1 ? h("select", { class: "panelpick", onchange: (e) => { pick = Number(e.target.value); draw(); } }, fig.axes.map((ax, k) => h("option", { value: k, selected: k === pick ? "" : null }, label(ax, k)))) : null;
+  // panels of one kind (the same y axis: an eye per node or run) in a list; of different kinds as tabs
+  const select = fig.axes.length < 2 ? null : !byY
+    ? h("select", { class: "panelpick", onchange: (e) => { pick = Number(e.target.value); draw(); } }, fig.axes.map((ax, k) => h("option", { value: k, selected: k === pick ? "" : null }, label(ax, k))))
+    : h("span", { class: "pages" }, fig.axes.map((ax, k) => h("a", { class: k === pick ? "on" : null, onclick: (e) => { pick = k; e.target.parentNode.querySelectorAll("a").forEach((x, j) => x.classList.toggle("on", j === k)); draw(); } }, label(ax, k))));
   const draw = () => {
     // one panel at a time, always over the whole area (not where the PNG's layout put it), so every
     // plot has one width
