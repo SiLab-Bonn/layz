@@ -132,15 +132,13 @@ function stage(d, t, i) {
   if (t.name === "setup") {
     right.push(["layout", async () => {
       const inp = await inputs();
-      if (inp.layout) return layoutViewer(inp.layout).el;
-      if (inp.kicad_board) return kicanvas(inp.kicad_board);
-      if (inp.layout_svgs) return h("div", { class: "svgs" }, inp.layout_svgs.map((u) => h("img", { src: u, class: "svg board" })));
+      if (inp.layout) return layoutViewer(inp.layout, null, true).el;
+      if (inp.layout_svgs) return svgViewer(inp.layout_svgs);
       return h("div", { class: "caption" }, "no layout");
     }]);
     right.push(["schematic", async () => {
       const inp = await inputs();
-      if (inp.kicad_schematic) return kicanvas(inp.kicad_schematic);
-      if (inp.schematic_svgs) return schematicViewer(inp.schematic_svgs);
+      if (inp.schematic_svgs) return svgViewer(inp.schematic_svgs);
       if (inp.netlist) return table({ path: "", rows: [["net", "pins"], ...inp.netlist.map((n) => [n.net, n.pins.join(" ")])] });
       return h("div", { class: "caption" }, "no schematic");
     }]);
@@ -164,12 +162,12 @@ function stage(d, t, i) {
     const boxes = t.markers.boxes.filter((m) => !rule || m.rule === rule);
     if (!boxes.length) return;
     rightTabs.show(`layout · ${t.markers.boxes.length} marked`);
-    setTimeout(() => viewer && viewer.setMarkers(boxes, boxes[0].box), 50);
+    setTimeout(() => viewer && viewer.setMarkers(boxes, boxes[0]), 50);
   };
   const left = [];
   if (t.name === "setup") left.push(["inputs", () => h("table", { class: "kvtable" }, h("tr", {}, h("td", {}, "flow"), h("td", {}, d.flow)), Object.entries(d.inputs).map(([k, v]) => h("tr", {}, h("td", {}, k), h("td", {}, v))))]);
   for (const tb of t.tables) left.push([base(tb.path).replace(/\.csv$/, ""), () => table(tb, t.markers ? mark : null)]);
-  if (t.markers && t.markers.boxes.length) left.push(["violations", () => violations(t.markers.boxes, (m) => { rightTabs.show(`layout · ${t.markers.boxes.length} marked`); setTimeout(() => viewer && viewer.setMarkers(t.markers.boxes, m.box), 50); })]);
+  if (t.markers && t.markers.boxes.length) left.push(["each violation", () => violations(t.markers.boxes, (m) => { rightTabs.show(`layout · ${t.markers.boxes.length} marked`); setTimeout(() => viewer && viewer.setMarkers(t.markers.boxes, m), 50); })]);
   if (t.lines.length) left.push([`log${countLevels(t.lines)}`, () => h("pre", { class: "log" }, t.lines.map(logLine))]);
 
   const rightTabs = tabs(right);
@@ -267,31 +265,24 @@ async function plotPane(design, p) {
   return h("div", {}, el, h("div", { class: "caption" }, h("a", { href: png, target: "_blank" }, "PNG"), " · ", h("a", { href: png.replace(/\.png$/, ".pdf"), target: "_blank" }, "PDF")));
 }
 
-// ---------------------------------------------------------------- KiCad files, with KiCanvas
+// ---------------------------------------------------------------- KiCad drawings, inline
 
-let kicanvasLoaded = null;
-async function kicanvas(urls) {
-  // https://kicanvas.org: KiCad schematics and boards drawn in the page (loaded the first time)
-  kicanvasLoaded ||= new Promise((ok, fail) => document.head.append(h("script", { type: "module", src: "https://kicanvas.org/kicanvas/kicanvas.js", onload: ok, onerror: () => fail(new Error("KiCanvas didn't load (kicanvas.org)")) })));
-  await kicanvasLoaded;
-  const embed = h("kicanvas-embed", { controls: "none", theme: document.documentElement.dataset.theme === "light" ? "kicad" : "witchhazel" }, urls.map((u) => h("kicanvas-source", { src: u })));
-  return h("div", { class: "kicanvas" }, embed, h("div", { class: "caption" }, urls.map((u, k) => [k ? " · " : "", h("a", { href: u, download: "" }, base(u))])));
-}
-
-// ---------------------------------------------------------------- schematic, inline (SVG)
-
-async function schematicViewer(urls) {
-  const pages = await Promise.all(urls.map(async (u) => [u, await (await fetch(u)).text()]));
+// a schematic's sheets or a board, as KiCad drew them in the page's colours (Nord themes when
+// dark), inline: pan, zoom, sheets as tabs; redrawn when the system's theme changes
+async function svgViewer(themes) {
   const holder = h("div", { class: "schematic" });
-  const bar = pages.length > 1 ? h("div", { class: "pages" }) : null;
-  const show = (k) => {
-    bar && bar.querySelectorAll("a").forEach((a, j) => a.classList.toggle("on", j === k));
-    const svg = new DOMParser().parseFromString(pages[k][1], "image/svg+xml").documentElement;
+  const bar = h("div", { class: "pages" });
+  const cache = new Map();
+  let k = 0, vb = null;
+  const fetchSvg = async (u) => { if (!cache.has(u)) cache.set(u, (await fetch(u)).text()); return cache.get(u); };
+  const show = async () => {
+    const urls = themes[document.documentElement.dataset.theme] || themes.dark;
+    bar.replaceChildren(...(urls.length > 1 ? urls.map((u, j) => h("a", { class: j === k ? "on" : null, onclick: () => { k = j; vb = null; show(); } }, base(u).replace(/\.svg$/, ""))) : []));
+    const svg = new DOMParser().parseFromString(await fetchSvg(urls[k]), "image/svg+xml").documentElement;
     svg.removeAttribute("width"); svg.removeAttribute("height");
     holder.replaceChildren(svg);
     requestAnimationFrame(() => {
-      const b = svg.getBBox();  // crop to the drawing
-      let vb = [b.x - 2, b.y - 2, b.width + 4, b.height + 4];
+      if (!vb) { const b = svg.getBBox(); vb = [b.x - 2, b.y - 2, b.width + 4, b.height + 4]; }
       const set = () => svg.setAttribute("viewBox", vb.join(" "));
       set();
       let drag = null;
@@ -299,8 +290,8 @@ async function schematicViewer(urls) {
       window.addEventListener("mouseup", () => { drag = null; });
       svg.addEventListener("mousemove", (e) => {
         if (!drag) return;
-        const k2 = vb[2] / svg.clientWidth;
-        vb = [drag[2] - (e.clientX - drag[0]) * k2, drag[3] - (e.clientY - drag[1]) * k2, vb[2], vb[3]]; set();
+        const s = vb[2] / svg.clientWidth;
+        vb = [drag[2] - (e.clientX - drag[0]) * s, drag[3] - (e.clientY - drag[1]) * s, vb[2], vb[3]]; set();
       });
       svg.addEventListener("wheel", (e) => {
         e.preventDefault();
@@ -310,9 +301,9 @@ async function schematicViewer(urls) {
       }, { passive: false });
     });
   };
-  pages.forEach((p, k) => bar && bar.append(h("a", { onclick: () => show(k) }, base(p[0]).replace(/\.svg$/, ""))));
-  show(0);
-  return h("div", {}, bar, holder, h("div", { class: "caption" }, "drag to pan · wheel to zoom · ", h("a", { href: pages[0][0], target: "_blank" }, "SVG")));
+  themeListeners.add(show);
+  await show();
+  return h("div", {}, bar, holder, h("div", { class: "caption" }, "drag to pan · wheel to zoom"));
 }
 
 // ---------------------------------------------------------------- layout viewer (GDS or .hyp board)
@@ -338,7 +329,7 @@ function overlayImage(layer, lo, hi) {
   return c;
 }
 
-function layoutViewer(b, overlay = null) {
+function layoutViewer(b, overlay = null, full = false) {
   const color = Object.fromEntries(b.copper.map((l, i) => [l, i === b.copper.length - 1 && i > 0 ? BOTTOM : NORD_LAYERS[i % NORD_LAYERS.length]]));
   const shown = new Set(b.copper);
   let picked = null, markers = [], focus = null;
@@ -437,7 +428,7 @@ function layoutViewer(b, overlay = null) {
         ctx.fillStyle = `rgb(${0xbf + t * (0xa3 - 0xbf)},${0x61 + t * (0xbe - 0x61)},${0x6a + t * (0x8c - 0x6a)})`;
         ctx.beginPath(); ctx.arc(sx, sy, 3, 0, 2 * Math.PI); ctx.fill();
       }
-      const w = 160, x = canvas.clientWidth - w - 14, y = 12;
+      const w = 160, x = canvas.clientWidth - w - 14, y = canvas.clientHeight - 52;
       const grad = ctx.createLinearGradient(x, 0, x + w, 0);
       grad.addColorStop(0, "#5e81ac"); grad.addColorStop(1, "#bf616a");
       ctx.fillStyle = grad; ctx.fillRect(x, y, w, 8);
@@ -479,7 +470,14 @@ function layoutViewer(b, overlay = null) {
     view.ty = e.offsetY - k * (e.offsetY - view.ty);
     view.s *= k; draw();
   }, { passive: false });
+  const say = (m) => { pickedBox.style.display = ""; pickedBox.replaceChildren(h("strong", {}, m.rule), m.what ? h("div", {}, m.what) : null, h("div", { class: "caption" }, `at ${((m.box[0] + m.box[2]) / 2).toFixed(3)}, ${((m.box[1] + m.box[3]) / 2).toFixed(3)} mm`)); };
   const pick = (sx, sy) => {
+    const near = markers.find((m) => {  // a marked violation under the click (its box, at least 8 px)
+      const ax = view.tx + view.s * m.box[0], bx = view.tx + view.s * m.box[2], ay = view.ty - view.s * m.box[3], by = view.ty - view.s * m.box[1];
+      const w = Math.max(bx - ax, 8) / 2 + 2, hh = Math.max(by - ay, 8) / 2 + 2;
+      return Math.abs(sx - (ax + bx) / 2) <= w && Math.abs(sy - (ay + by) / 2) <= hh;
+    });
+    if (near) { say(near); return; }
     const x = (sx - view.tx) / view.s, y = (view.ty - sy) / view.s;
     const ctx = canvas.getContext("2d");
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -495,8 +493,14 @@ function layoutViewer(b, overlay = null) {
   };
   new ResizeObserver(() => { view = null; draw(); }).observe(wrap);
   themeListeners.add(draw);
-  const el = h("div", { class: "layout" }, wrap, h("aside", {}, sidePanel(b, color, shown, draw)));
-  return { el, setMarkers: (boxes, at = null) => { markers = boxes; focus = at; view = null; draw(); } };
+  // the full panel (stackup, counts) once, with the inputs; elsewhere the layers as toggles
+  const toggles = h("div", { class: "layers" }, b.copper.map((l) => {
+    const a = h("a", { style: `--c:${color[l]}`, onclick: () => { shown.has(l) ? shown.delete(l) : shown.add(l); a.classList.toggle("off"); draw(); } }, l);
+    return a;
+  }));
+  if (!full) wrap.append(toggles);
+  const el = h("div", { class: "layout" + (full ? "" : " bare") }, wrap, full ? h("aside", {}, sidePanel(b, color, shown, draw)) : null);
+  return { el, setMarkers: (boxes, at = null) => { markers = boxes; focus = at ? at.box || at : null; view = null; draw(); if (at && at.rule) say(at); } };
 }
 
 function segDist(s, x, y) {

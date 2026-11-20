@@ -37,7 +37,7 @@ include = ["layz*"]
 
 [tool.setuptools.package-data]
 # scripts run by other interpreters: HyperLynx's own Python, ParaView's pvpython
-layz = ["hyperlynx/runner/*.py", "field/paraview/*.py", "web/static/*"]
+layz = ["hyperlynx/runner/*.py", "field/paraview/*.py", "web/static/*", "web/kicad/colors/*.json"]
 
 
 [tool.ty.environment]

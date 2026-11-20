@@ -140,8 +140,12 @@ table.data.clickable tr:not(:first-child):hover td { background: var(--surface-h
 img.plotpng { width: 100%; background: #fff; border-radius: 4px; }
 .schematic { height: 460px; border: 1px solid var(--line-1); border-radius: 4px; background: var(--layout-bg); overflow: hidden; }
 .schematic svg { width: 100%; height: 100%; cursor: grab; }
-html[data-theme="dark"] .schematic svg { filter: invert(0.88) hue-rotate(180deg); }
 .pages { display: flex; gap: 10px; margin-bottom: 6px; font: 11px var(--font-mono); }
 .pages a { color: var(--ink-4); cursor: pointer; } .pages a.on { color: var(--ink-0); }
 section.target > .error { margin: 8px 14px 0; }
-.kicanvas kicanvas-embed { display: block; height: 520px; border: 1px solid var(--line-1); border-radius: 4px; overflow: hidden; }
+.layout.bare .canvas { border-radius: 4px; }
+.layers { position: absolute; right: 10px; top: 8px; display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; max-width: 60%; }
+.layers a { font: 10px var(--font-mono); padding: 1px 6px 1px 4px; border-radius: 3px; background: var(--surface-raised); color: var(--ink-1); cursor: pointer; border-left: 4px solid var(--c); }
+.layers a.off { opacity: 0.4; }
+.canvas .picked { max-width: 60%; white-space: normal; }
+.canvas .picked strong { color: var(--sem-error); font-weight: 600; }

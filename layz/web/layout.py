@@ -64,21 +64,36 @@ def gds(path: Path, stack: str | Path) -> dict:
     return {"name": Path(path).name, "kind": "gds", "bbox": [box.left * MM, box.bottom * MM, box.right * MM, box.top * MM], "outline": outline, "stackup": stackup, "copper": copper, "polys": polys, "segs": [], "vias": [], "pins": [], "cuts": cuts, "labels": labels, "stats": {"thickness_mm": sum(l["thickness_mm"] for l in stackup), "size_mm": [box.width() * MM, box.height() * MM], "copper_layers": len(copper), "shapes per layer": {n: count(n) for n in copper}, "via cuts": len(cuts), "labels": len(labels)}}
 
 
-def kicad_svg(path: Path, out: Path) -> list[Path]:
-    """A KiCad board or schematic as SVG pages in ``out`` (kicad-cli)."""
+THEMES = Path(__file__).parent / "kicad"  # KiCad colour themes (colors/*.json) for the drawings
+DARK = {".kicad_sch": "wDark_2", ".kicad_pcb": "nord2_dark"}  # light: KiCad's own colours
+
+
+def kicad_svg(path: Path, out: Path, dark: bool) -> list[Path]:
+    """A KiCad schematic (every sheet) or board as SVG in ``out`` (kicad-cli), without drawing
+    sheet or background, in the page's colours: Nord themes for dark, KiCad's for light. The
+    themes come from layz's own KiCad config folder, so the user's KiCad settings are left alone."""
+    import os
+
     from layz import kicad, log
 
     cli = kicad.cli()
     if not cli:
         raise FileNotFoundError("kicad-cli not found (install/kicad.sh)")
     out.mkdir(parents=True, exist_ok=True)
-    if Path(path).suffix == ".kicad_sch":
-        for old in out.glob("*.svg"):
-            old.unlink()
-        cmd = [cli, "sch", "export", "svg", "--exclude-drawing-sheet", "--no-background-color", "-o", str(out), str(path)]  # no frame, no background: drawn inline
+    for old in out.glob("*.svg"):
+        old.unlink()
+    path = Path(path)
+    theme = ["-t", DARK[path.suffix]] if dark else []
+    if path.suffix == ".kicad_sch":
+        cmd = [cli, "sch", "export", "svg", "--exclude-drawing-sheet", "--no-background-color", *theme, "-o", str(out), str(path)]
     else:
-        cmd = [cli, "pcb", "export", "svg", "--mode-single", "--fit-page-to-board", "--exclude-drawing-sheet", "-l", "F.Cu,In1.Cu,In2.Cu,B.Cu,Edge.Cuts,F.Silkscreen", "-o", str(out / "board.svg"), str(path)]
-    if log.run("kicad-cli", cmd):
+        cmd = [cli, "pcb", "export", "svg", "--mode-single", "--fit-page-to-board", "--exclude-drawing-sheet", *theme, "-l", "F.Cu,In1.Cu,In2.Cu,B.Cu,Edge.Cuts,F.Silkscreen", "-o", str(out / "board.svg"), str(path)]
+    config = out.parent / "kicad-config"  # KICAD_CONFIG_HOME: <it>/<version>/colors/<theme>.json
+    for version in ("10.0", "9.0"):
+        (config / version / "colors").mkdir(parents=True, exist_ok=True)
+        for f in (THEMES / "colors").glob("*.json"):
+            (config / version / "colors" / f.name).write_bytes(f.read_bytes())
+    if log.run("kicad-cli", cmd, env={**os.environ, "KICAD_CONFIG_HOME": str(config)}):
         raise FileNotFoundError(f"kicad-cli could not draw {path}")
     return sorted(out.glob("*.svg"))
 

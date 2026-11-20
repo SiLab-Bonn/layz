@@ -20,7 +20,6 @@ import csv
 import json
 import mimetypes
 import os
-import shutil
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
@@ -81,6 +80,21 @@ def board(name: str) -> dict:
     return json.loads(cache.read_text())
 
 
+def drawings(src: Path, folder: Path) -> dict[str, list[str]]:
+    """KiCad's drawings of a schematic or board, dark and light, made once (again when the file
+    is newer)."""
+    from layz.web import layout as draw
+
+    out = {}
+    for theme in ("dark", "light"):
+        where = folder.with_name(f"{folder.name}-{theme}")
+        pages = sorted(where.glob("*.svg"))
+        if not pages or pages[0].stat().st_mtime < src.stat().st_mtime:
+            pages = draw.kicad_svg(src, where, dark=theme == "dark")
+        out[theme] = ["/results/" + str(f.resolve().relative_to(RESULTS.resolve())) for f in pages]
+    return out
+
+
 def inputs(name: str) -> dict:
     """What a run's setup named, drawn: the layout (a GDS on its stack, or a board as SVG) and the
     schematic (SVG pages, or a netlist's nets); made once, kept in results/NAME/web/."""
@@ -90,7 +104,6 @@ def inputs(name: str) -> dict:
     i = run.get("inputs", {})
     web = RESULTS / name / "web"
     web.mkdir(parents=True, exist_ok=True)
-    url = lambda f: "/results/" + str(Path(f).resolve().relative_to(RESULTS.resolve()))
     fresh = lambda cache, src: cache.exists() and cache.stat().st_mtime >= Path(src).stat().st_mtime
     out: dict = {"inputs": i}
     lay = Path(i.get("layout", ""))
@@ -100,25 +113,10 @@ def inputs(name: str) -> dict:
             cache.write_text(json.dumps(draw.gds(lay, i["stack"])))
         out["layout"] = json.loads(cache.read_text())
     elif lay.is_file() and lay.suffix == ".kicad_pcb":
-        pages = sorted((web / "board").glob("*.svg")) if fresh(web / "board" / "board.svg", lay) else draw.kicad_svg(lay, web / "board")
-        out["layout_svgs"] = [url(f) for f in pages]
+        out["layout_svgs"] = drawings(lay, web / "board")
     sch = Path(i.get("schematic", "")) if i.get("schematic") else (lay.with_suffix(".kicad_sch") if lay.suffix == ".kicad_pcb" else Path())
-    # the KiCad files themselves, for KiCanvas in the page: the schematic with every sheet beside
-    # it, the board with its project
-    kicad = web / "kicad"
-    for src in [f for f in (sch, lay) if f.is_file() and f.suffix in (".kicad_sch", ".kicad_pcb")]:
-        kicad.mkdir(exist_ok=True)
-        for f in src.parent.glob("*.kicad_sch" if src.suffix == ".kicad_sch" else src.stem + ".kicad_p*"):
-            if not (kicad / f.name).exists() or (kicad / f.name).stat().st_mtime < f.stat().st_mtime:
-                shutil.copy2(f, kicad / f.name)
-        key = "kicad_schematic" if src.suffix == ".kicad_sch" else "kicad_board"
-        out[key] = [url(kicad / src.name)] + ([url(f) for f in sorted(kicad.glob("*.kicad_sch")) if f.name != src.name] if key == "kicad_schematic" else [])
     if sch.is_file() and sch.suffix == ".kicad_sch":
-        folder = web / "schematic-inline"  # without the drawing sheet and background
-        pages = sorted(folder.glob("*.svg"))
-        if not pages or pages[0].stat().st_mtime < sch.stat().st_mtime:
-            pages = draw.kicad_svg(sch, folder)
-        out["schematic_svgs"] = [url(f) for f in pages]
+        out["schematic_svgs"] = drawings(sch, web / "schematic")
     elif sch.is_file():
         out["netlist"] = draw.netlist(sch)
     return out
