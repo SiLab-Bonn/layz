@@ -208,10 +208,19 @@ function stage(d, t, i) {
     setTimeout(() => viewer && viewer.setMarkers(t.markers.boxes, m), 50);
   };
   const hasMarks = t.markers && t.markers.boxes.length;
+  // the step's files on the machine that ran it, as sftp:// links (a folder mounted in the file
+  // manager over SFTP opens them)
+  const sftp = (path) => `sftp://${location.hostname}${path}`;
+  const filesLine = () => t.folder && t.files && t.files.length ? h("div", { class: "files" },
+    h("a", { href: sftp(t.folder + "/") }, `${t.name}/`),
+    t.files.map((f) => [" ", h("a", { href: sftp(`${t.folder}/${f}`) }, f)])) : null;
   if (tables.length && tables.length <= 3) left.push(["results", () => h("div", { class: "stacked" },
     tables.map((tb, k) => [tables.length > 1 ? h("h4", {}, names[k]) : null, table(tb, t.markers ? mark : null)]),
-    hasMarks ? [h("h4", {}, "each violation"), violations(t.markers.boxes, pickViolation)] : null)]);
+    hasMarks ? [h("h4", {}, "each violation"), violations(t.markers.boxes, pickViolation)] : null,
+    filesLine())]);
+  else if (!tables.length && t.files && t.files.length) left.push(["results", () => filesLine()]);
   else {
+    if (t.files && t.files.length) left.push(["files", () => filesLine()]);
     tables.forEach((tb, k) => left.push([names[k], () => table(tb, t.markers ? mark : null)]));
     if (hasMarks) left.push(["each violation", () => violations(t.markers.boxes, pickViolation)]);
   }
