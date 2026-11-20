@@ -222,7 +222,7 @@ def figure_data(fig: plt.Figure) -> dict:
     left out (the viewer draws its own)."""
     from matplotlib.colors import to_hex
 
-    axes = []
+    axes, kept = [], []
     for ax in fig.axes:
         if ax.get_label() == "<colorbar>" or not ax.get_visible():
             continue
@@ -275,6 +275,10 @@ def figure_data(fig: plt.Figure) -> dict:
                 texts.append({"x": float(x), "y": float(y), "text": t.get_text(), "data": t.get_transform() == ax.transData})
         if not (lines or images or points or meshes or fills):
             continue
+        kept.append(ax)
         axes.append({"box": [box.x0, box.y0, box.x1, box.y1], "title": ax.get_title(), "xlabel": ax.get_xlabel(), "ylabel": ax.get_ylabel(), "xlog": ax.get_xscale() == "log", "ylog": ax.get_yscale() == "log", "xlim": list(ax.get_xlim()), "ylim": list(ax.get_ylim()), "equal": ax.get_aspect() == 1.0, "lines": lines, "images": images, "points": points, "meshes": meshes, "fills": fills, "texts": texts})
     title = fig._suptitle.get_text() if getattr(fig, "_suptitle", None) else ""
-    return {"title": title, "size": list(fig.get_size_inches()), "axes": axes}
+    # panels over one x axis, one above the other (a time axis: aggressors above, victim below):
+    # the viewer stacks them as the PNG does
+    stacked = len(kept) > 1 and all(kept[0].get_shared_x_axes().joined(kept[0], a) for a in kept[1:]) and len({round(a["box"][0], 3) for a in axes}) == 1 and not any(a["equal"] for a in axes)
+    return {"title": title, "size": list(fig.get_size_inches()), "axes": axes, "stacked": stacked}

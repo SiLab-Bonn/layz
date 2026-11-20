@@ -295,19 +295,25 @@ async function plotPane(design, p) {
   const byY = new Set(ys).size === ys.length && ys.every(Boolean);
   const label = (ax, k) => (byY ? ax.ylabel : (ax.title || "").replace(/\s*\(.*$/, "")) || `panel ${k + 1}`;
   // panels of one kind (the same y axis: an eye per node or run) in a list; of different kinds as tabs
-  const select = fig.axes.length < 2 ? null : !byY
+  // panels over one x axis of different kinds (aggressors and the victim's noise) one above the other
+  const stack = fig.stacked && byY;
+  const select = fig.axes.length < 2 || stack ? null : !byY
     ? h("select", { class: "panelpick", onchange: (e) => { pick = Number(e.target.value); draw(); } }, fig.axes.map((ax, k) => h("option", { value: k, selected: k === pick ? "" : null }, label(ax, k))))
     : h("span", { class: "pages" }, fig.axes.map((ax, k) => h("a", { class: k === pick ? "on" : null, onclick: (e) => { pick = k; e.target.parentNode.querySelectorAll("a").forEach((x, j) => x.classList.toggle("on", j === k)); draw(); } }, label(ax, k))));
   const draw = () => {
     // one panel at a time, always over the whole area (not where the PNG's layout put it), so every
     // plot has one width
-    const axesShown = [{ ...fig.axes[select ? pick : 0], box: [0, 0, 1, 1], title: select ? "" : fig.axes[0].title }];
+    const gap = 0.09, hk = (1 - gap * (fig.axes.length - 1)) / fig.axes.length;
+    const axesShown = stack
+      ? fig.axes.map((ax, k) => ({ ...ax, box: [0, 1 - (k + 1) * hk - k * gap, 1, 1 - k * (hk + gap)], xlabel: k === fig.axes.length - 1 ? ax.xlabel : "" }))
+      : [{ ...fig.axes[select ? pick : 0], box: [0, 0, 1, 1], title: select ? "" : fig.axes[0].title }];
     const ink = css("--ink-1"), grid = css("--line-2"), dim = css("--ink-4");
     const traces = [], layout = { paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: { color: ink, family: css("--font-mono"), size: 11 }, margin: { l: 60, r: 20, t: fig.title ? 36 : 14, b: 84 }, showlegend: true, legend: { orientation: "h", x: 0.5, xanchor: "center", yref: "container", y: 0.01, yanchor: "bottom", bgcolor: "rgba(0,0,0,0)", font: { size: 10 } }, title: fig.title ? { text: fig.title, font: { size: 12 } } : undefined, annotations: [] };
+    const seen = new Map();  // the PNG's colours, one palette colour each (across stacked panels too)
     axesShown.forEach((ax, k) => {
       const n = k ? k + 1 : "";
       const axis = (label, log, lim, dom) => ({ title: { text: label, font: { size: 11 } }, type: log ? "log" : "linear", range: log ? lim.map((v) => Math.log10(Math.max(v, 1e-300))) : lim, domain: dom, gridcolor: grid, zerolinecolor: grid, linecolor: dim, mirror: true, ticks: "inside" });
-      layout[`xaxis${n}`] = { ...axis(ax.xlabel, ax.xlog, ax.xlim, [ax.box[0], ax.box[2]]), anchor: `y${n}` };
+      layout[`xaxis${n}`] = { ...axis(ax.xlabel, ax.xlog, ax.xlim, [ax.box[0], ax.box[2]]), anchor: `y${n}`, ...(stack && k ? { matches: "x" } : {}), ...(stack && k < axesShown.length - 1 ? { showticklabels: false } : {}) };
       layout[`yaxis${n}`] = { ...axis(ax.ylabel, ax.ylog, ax.ylim, [ax.box[1], ax.box[3]]), anchor: `x${n}` };
       if (ax.title) layout.annotations.push({ text: ax.title, xref: "paper", yref: "paper", x: (ax.box[0] + ax.box[2]) / 2, y: ax.box[3], yanchor: "bottom", showarrow: false, font: { size: 11 } });
       for (const im of ax.images) {
@@ -328,7 +334,6 @@ async function plotPane(design, p) {
       if (ax.equal) layout[`yaxis${n}`].scaleanchor = `x${n}`;
       // lines in the theme's palette (the PNG's is for white paper), in the order drawn
       const palette = document.documentElement.dataset.theme === "light" ? ["#5e81ac", "#d08770", "#a3be8c", "#b48ead", "#bf616a", "#8fbcbb"] : ["#88c0d0", "#ebcb8b", "#a3be8c", "#b48ead", "#d08770", "#8fbcbb"];
-      const seen = new Map();  // the PNG's colours, one palette colour each
       for (const l of ax.lines) {
         if (!seen.has(l.color)) seen.set(l.color, palette[seen.size % palette.length]);
         const c = seen.get(l.color);
