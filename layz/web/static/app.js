@@ -869,8 +869,8 @@ function bars(rows, colour, label) {
 function stackPanel(b, color, shown, draw) {
   const total = b.stackup.reduce((a, l) => a + l.thickness_mm, 0) || 1;
   const um = (mm) => `${(mm * 1000).toFixed(mm < 0.01 ? 1 : 0)} µm`;
-  return [h("h4", {}, "stackup"), h("div", { class: "stack" }, b.stackup.map((l) => {
-    const el = h("div", { class: l.type, style: `height:${Math.max(16, Math.min(64, (300 * l.thickness_mm) / total))}px` + (l.type === "copper" ? `;box-shadow: inset 5px 0 0 ${color[l.name]}` : ""), title: `${l.name}: ${l.material || l.type}, ${um(l.thickness_mm)}` + (l.er ? `, εr ${l.er}` : "") },
+  return [h("div", { class: "stack" }, b.stackup.map((l) => {
+    const el = h("div", { class: l.type, style: `height:${Math.max(12, Math.min(30, (160 * l.thickness_mm) / total))}px` + (l.type === "copper" ? `;box-shadow: inset 4px 0 0 ${color[l.name]}` : ""), title: `${l.name}: ${l.material || l.type}, ${um(l.thickness_mm)}` + (l.er ? `, εr ${l.er}` : "") },
       l.name, h("span", { class: "t" }, um(l.thickness_mm)));
     if (l.type === "copper") el.onclick = () => { shown.has(l.name) ? shown.delete(l.name) : shown.add(l.name); el.classList.toggle("off"); draw(); };
     return el;
