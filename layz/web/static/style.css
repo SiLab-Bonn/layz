@@ -159,3 +159,4 @@ aside { width: 220px; }
 .modes a { font: 11px var(--font-mono); padding: 2px 8px; border-radius: 3px; background: var(--surface-raised); color: var(--ink-3); cursor: pointer; border: 1px solid var(--line-2); }
 .modes a.on { color: var(--ink-0); border-color: var(--accent); }
 .canvas .picked { top: 36px; }
+select.panelpick { font: 12px var(--font-mono); background: var(--surface-raised); color: var(--ink-1); border: 1px solid var(--line-2); border-radius: 4px; padding: 3px 6px; margin-bottom: 6px; max-width: 100%; }

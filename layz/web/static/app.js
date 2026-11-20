@@ -255,10 +255,15 @@ async function plotPane(design, p) {
   if (!p.data || !window.Plotly) return h("img", { src: png, class: "plotpng" });
   const fig = await once(fileUrl(design, p.data));
   const el = h("div", { class: "plotly" });
+  // a figure of several panels: one at a time, full size, picked from a list (nets, runs)
+  let pick = 0;
+  const label = (ax, k) => ax.title || [ax.ylabel, ax.xlabel].filter(Boolean).join(" vs ") || `panel ${k + 1}`;
+  const select = fig.axes.length > 1 ? h("select", { class: "panelpick", onchange: (e) => { pick = Number(e.target.value); draw(); } }, fig.axes.map((ax, k) => h("option", { value: k }, label(ax, k)))) : null;
   const draw = () => {
+    const axesShown = select ? [{ ...fig.axes[pick], box: [0, 0, 1, 1], title: "" }] : fig.axes;
     const ink = css("--ink-1"), grid = css("--line-2"), dim = css("--ink-4");
     const traces = [], layout = { paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: { color: ink, family: css("--font-mono"), size: 11 }, margin: { l: 60, r: 20, t: fig.title ? 36 : 14, b: 46 }, showlegend: true, legend: { bgcolor: "rgba(0,0,0,0)", font: { size: 10 } }, title: fig.title ? { text: fig.title, font: { size: 12 } } : undefined, annotations: [] };
-    fig.axes.forEach((ax, k) => {
+    axesShown.forEach((ax, k) => {
       const n = k ? k + 1 : "";
       const axis = (label, log, lim, dom) => ({ title: { text: label, font: { size: 11 } }, type: log ? "log" : "linear", range: log ? lim.map((v) => Math.log10(Math.max(v, 1e-300))) : lim, domain: dom, gridcolor: grid, zerolinecolor: grid, linecolor: dim, mirror: true, ticks: "inside" });
       layout[`xaxis${n}`] = { ...axis(ax.xlabel, ax.xlog, ax.xlim, [ax.box[0], ax.box[2]]), anchor: `y${n}` };
@@ -286,7 +291,7 @@ async function plotPane(design, p) {
   };
   themeListeners.add(draw);
   requestAnimationFrame(draw);
-  return h("div", {}, el, h("div", { class: "caption" }, h("a", { href: png, target: "_blank" }, "PNG"), " · ", h("a", { href: png.replace(/\.png$/, ".pdf"), target: "_blank" }, "PDF")));
+  return h("div", {}, select, el, h("div", { class: "caption" }, h("a", { href: png, target: "_blank" }, "PNG"), " · ", h("a", { href: png.replace(/\.png$/, ".pdf"), target: "_blank" }, "PDF")));
 }
 
 // ---------------------------------------------------------------- KiCad drawings, inline
