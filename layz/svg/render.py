@@ -8,7 +8,6 @@ writes those polygons as SVG paths grouped by GDS layer/datatype.
 
 from __future__ import annotations
 
-import argparse
 from collections import defaultdict
 from pathlib import Path
 
@@ -88,19 +87,3 @@ def render_gds_to_svg(gds_path: Path, svg_path: Path, scale_mm_per_um: float, wi
     print(f"wrote {svg_path}")
     print(f"top cell: {top.name}")
     print(f"layers: {len(paths_by_layer)}")
-
-
-def main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("gds", nargs="?", default="example.gds", type=Path)
-    parser.add_argument("svg", nargs="?", default="example_gds.svg", type=Path)
-    parser.add_argument("--scale-mm-per-um", type=float, default=0.001)
-    parser.add_argument("--width-px", type=int, default=504)
-    parser.add_argument("--flip-y", action="store_true")
-    args = parser.parse_args(argv)
-
-    render_gds_to_svg(args.gds, args.svg, args.scale_mm_per_um, args.width_px, args.flip_y)
-
-
-if __name__ == "__main__":
-    main()

@@ -26,10 +26,8 @@ Exit status 0 when there are no opens, shorts or unknown labels, 1 otherwise.
 
 from __future__ import annotations
 
-import argparse
 import re
 import subprocess
-import sys
 import tempfile
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -38,7 +36,6 @@ from pathlib import Path
 import klayout.db as kdb
 import klayout.rdb as krdb
 
-from layz import stack as stackfile
 from layz.connectivity import Connectivity, Label
 
 # ------------------------------------------------------------------------------- schematic side
@@ -151,48 +148,3 @@ def write_report(path: Path, top: str, findings: list[Finding]) -> None:
             item.add_value(f"{f.what} ({text})")
             item.add_value(kdb.DBox(x - 2, y - 2, x + 2, y + 2))  # µm
     rdb.save(str(path))
-
-
-def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("--lay", type=Path, required=True, help="layout (GDS/OASIS)")
-    ap.add_argument("--stack", type=Path, required=True, help="layz stack (.toml): copper, vias, label layers")
-    ap.add_argument("--sch", type=Path, required=True, help="KiCad schematic (.kicad_sch, via kicad-cli) or its netlist (.net, kicadsexpr)")
-    ap.add_argument("--report", type=Path, help="write a KLayout marker database (.lyrdb) of the findings")
-    a = ap.parse_args(argv)
-
-    process = stackfile.load(a.stack)
-    sch = schematic_netlist(a.sch)
-    nets, labels, _ = extract(a.lay, process)
-    findings, stats = compare(sch, labels)
-
-    print(f"layout: {len(nets)} nets, {stats['labels']} labels; schematic: {stats['schematic nets']} nets")
-    print(f"checked: {stats['checked nets']} of {stats['schematic nets']} schematic nets, {stats['pins checked']} pins")
-    count = defaultdict(int)
-    for f in findings:
-        count[f.kind] += 1
-    for kind in ("open", "short", "unknown", "floating"):
-        items = [f for f in findings if f.kind == kind]
-        if not items:
-            continue
-        print(f"\n{kind}: {len(items)}")
-        for f in items[:25]:
-            x, y, _ = f.where[0]
-            print(f"  {f.what}  (at {x:.1f}, {y:.1f} µm)")
-        if len(items) > 25:
-            print(f"  ... {len(items) - 25} more")
-    if stats["unchecked nets"]:
-        u = stats["unchecked nets"]
-        print(f"\nunlabelled: {len(u)} schematic nets have no label: {', '.join(u[:15])}{' ...' if len(u) > 15 else ''}")
-    if a.report:
-        ly = kdb.Layout()
-        ly.read(str(a.lay))
-        write_report(a.report, ly.top_cell().name, findings)
-        print(f"\nwrote {a.report} (layz view {a.report} --lay {a.lay})")
-    bad = count["open"] + count["short"] + count["unknown"]
-    print("\nLVS " + ("clean" if not bad and stats["checked nets"] else "incomplete: no label matched a schematic net" if not bad else "FAILED"))
-    return 1 if bad or not stats["checked nets"] else 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())

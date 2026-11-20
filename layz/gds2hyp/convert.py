@@ -29,7 +29,6 @@ centreline as SEG records, as wide as the strip (layz.gds2hyp.traces). Supplies 
 
 from __future__ import annotations
 
-import argparse
 import re
 import sys
 from dataclasses import dataclass
@@ -408,8 +407,8 @@ def board_to_hyp(pcb_path: Path, hyp_path: Path, refill: bool) -> None:
     from layz import kicad
 
     if kicad.use_env():
-        argv = ["gds2hyp", str(Path(pcb_path).resolve()), "-o", str(Path(hyp_path).resolve()), "--traces", "none"] + (["--refill"] if refill else [])
-        if kicad.run(argv):
+        argv = [str(Path(pcb_path).resolve()), str(Path(hyp_path).resolve())] + (["refill"] if refill else [])
+        if kicad.run("layz.gds2hyp.convert", argv):
             raise SystemExit("writing the .hyp in layz's KiCad environment failed")
     else:
         write_hyp(pcb_path, hyp_path, refill=refill)
@@ -439,34 +438,35 @@ def traces_pass(hyp_path: Path, select: str, max_width_mm: float) -> None:
         print("pours -> traces: no net qualified (see --traces)")
 
 
-def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0], epilog="Running HyperLynx on the .hyp: a flow's targets, layz run -h")
-    ap.add_argument("input", type=Path, help="a GDS (with --stack), a .kicad_pcb board, or a .hyp to rewrite")
-    ap.add_argument("-o", "--out", type=Path, help="output .hyp (default: next to the input)")
-    ap.add_argument("--stack", type=Path, help="GDS input: layz process stack (.toml)")
-    ap.add_argument("--refill", action="store_true", help="refill zones with KiCad's zone filler first (default: use the fills as saved)")
-    ap.add_argument("--traces", default="auto", metavar="auto|none|NET,...", help="write strip-shaped pours as traces (centreline + width), so HyperLynx models their transmission lines, loss and crosstalk: 'auto' (default) every net that is >= 95 %% strips no wider than --trace-max-width, 'none' (KiCad's own output), or the nets named")
-    ap.add_argument("--trace-max-width", type=float, default=TRACE_MAX_WIDTH_MM, metavar="MM", help=f"auto: widest strip of a net made traces (default {TRACE_MAX_WIDTH_MM} mm)")
-    args = ap.parse_args(argv)
-    suffix = args.input.suffix.lower()
-    out = args.out or args.input.with_suffix(".hyp")
+def hyp(source: Path, out: Path, *, stack: str | Path | None, refill: bool, traces: str, trace_max_width: float) -> Path:
+    """A HyperLynx .hyp at ``out`` from ``source``: a GDS (with its ``stack``: layers, stackup,
+    net labels; layz.gds2hyp.gds, no KiCad), a .kicad_pcb (with stack=None: the board carries
+    its own; KiCad's exporter, in layz's KiCad environment), or a .hyp exported elsewhere.
 
+    refill           .kicad_pcb: fill the zones first (else the fills as saved)
+    traces           strip-shaped pours written as traces (centreline + width), so HyperLynx
+                     models their lines, loss and crosstalk: "auto" every net that is >= 95 %
+                     strips no wider than trace_max_width (mm), "none", or "NET,NET,..."
+    """
+    source, out = Path(source), Path(out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    suffix = source.suffix.lower()
     if suffix == ".hyp":
-        if out.resolve() == args.input.resolve():
-            ap.error("a .hyp input needs -o (a different file): the input is not overwritten")
-        out.write_text(args.input.read_text(encoding="utf-8"), encoding="utf-8")
+        if out.resolve() == source.resolve():
+            raise ValueError("a .hyp source needs another output: the source is not overwritten")
+        out.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
     elif suffix == ".kicad_pcb":
-        board_to_hyp(args.input, out, refill=args.refill)
+        board_to_hyp(source, out, refill=refill)
     else:
-        if not args.stack:
-            ap.error("a GDS input needs --stack (its layers, stackup and net labels)")
+        if stack is None:
+            raise ValueError("a GDS needs its stack (layers, stackup and net labels)")
         from layz.gds2hyp import gds
 
-        gds.write_hyp(args.input, stackfile.load(args.stack), out)
-    traces_pass(out, args.traces, args.trace_max_width)
+        gds.write_hyp(source, stackfile.load(stack), out)
+    traces_pass(out, traces, trace_max_width)
     print(f"wrote {out}")
-    return 0
+    return out
 
 
-if __name__ == "__main__":
-    sys.exit(main())
+if __name__ == "__main__":  # the step layz's KiCad environment runs: BOARD HYP [refill]
+    write_hyp(Path(sys.argv[1]), Path(sys.argv[2]), refill=sys.argv[3:] == ["refill"])

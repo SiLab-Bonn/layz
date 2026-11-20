@@ -1,92 +1,79 @@
 # iVTX RDL ladder (obelix1 chips on the Uni Bonn RDL, Andreas Ulm): the full flow, from the
 # GDS's design rules and connectivity to SI and power.
 #
-# Run from the repo (the HyperLynx targets on a machine with HyperLynx: juno, jupiter):
-#   layz run --design designs/ivtx_rdl              every target, in this file's order
-#   layz run --design ivtx_rdl drc lvs              some, by name
-#   layz run --design ivtx_rdl --list               the targets
-#   layz run --design ivtx_rdl -k                   on past a failing target
-# Each target names its own inputs and every setting it uses (layz.drc.run, layz.lvs.run,
-# layz.hyperlynx.run document them), runs, checks the results against its limits and plots
-# them, all in results/ivtx_rdl/<target>/.
+#   layz run designs/ivtx_rdl          (the HyperLynx targets: on juno or jupiter)
+#
+# The targets run in this file's order. setup names the inputs; each target after it names
+# every setting it uses (layz.drc.run, layz.lvs.run, layz.hyperlynx.run document them), runs,
+# checks the results against its limits and plots them, all in results/ivtx_rdl/<target>/.
 
 import shutil
 from pathlib import Path
 
-from layz import stack
 from layz.drc import analysis as drc_analysis
 from layz.drc import run as drc_run
 from layz.flow import target
 from layz.gds2hyp import convert as gds2hyp
-from layz.gds2hyp import gds as gds_hyp
 from layz.hyperlynx import analysis, plots, run
 from layz.hyperlynx import setup as hyperlynx
 from layz.lvs import analysis as lvs_analysis
 from layz.lvs import run as lvs_run
 
 HERE = Path(__file__).parent
-GDS = HERE / "obelix1_ivtx_ladder_v2.gds"
-SCHEMATIC = HERE / "obelix1_ivtx_ladder_f.kicad_sch"
+RESULTS = Path("results/ivtx_rdl")
+
+
+@target
+def setup():
+    """The inputs: the layout, its stack and schematic, the board HyperLynx simulates, and
+    Andreas' HyperLynx project and models; HyperLynx's writable overlay."""
+    global LAYOUT, STACK, SCHEMATIC, BOARD_SOURCE, BOARD
+    LAYOUT = HERE / "obelix1_ivtx_ladder_v2.gds"
+    STACK = "uni-bonn-rdl"  # tech/uni-bonn-rdl/stack.toml
+    SCHEMATIC = HERE / "obelix1_ivtx_ladder_f.kicad_sch"
+    # the board HyperLynx simulates: Andreas' KiCad export, until the GDS has a net label on
+    # every net (its labels are on 80/7, the notes layer, today; then: BOARD_SOURCE = LAYOUT)
+    BOARD_SOURCE = HERE / "obelix1_ivtx_ladder_with_nets_v3.1.hyp"
+    BOARD = RESULTS / "board" / "obelix1_ivtx_ladder_with_nets_v3.1.hyp"  # the name his project goes with
+
+    # Andreas' HyperLynx project next to the board: VRMs, DC sinks and pin models set in the GUI;
+    # the SPICE driver and receiver of the data links
+    BOARD.parent.mkdir(parents=True, exist_ok=True)
+    project = Path("/users/aulm/HyperLynx/simulations/VTX_Obelix_1/v3.1")
+    for suffix in (".bud", ".bbd", ".pjh"):
+        shutil.copy2(project / f"obelix1_ivtx_ladder_with_nets_v3.1{suffix}", BOARD.parent)
+    shutil.copy2("/users/aulm/iVTX_transmisstion_line/fast_drv.sp", BOARD.parent / "fast_drv.sp")
+    shutil.copy2("/users/aulm/iVTX_transmisstion_line/fast_rcv.sp.txt", BOARD.parent / "fast_rcv.sp")
+    hyperlynx.prepare()
 
 
 @target
 def drc():
-    """The GDS against the Uni Bonn RDL's design rules (gdscheck, tech/uni-bonn-rdl)."""
-    checked = drc_run.drc(GDS, Path("results/ivtx_rdl/drc"), kit="uni-bonn-rdl", suite="main", topcell=None, tile=20000.0)
+    """The layout against the Uni Bonn RDL's design rules (gdscheck, tech/uni-bonn-rdl)."""
+    checked = drc_run.drc(LAYOUT, RESULTS / "drc", kit="uni-bonn-rdl", suite="main", topcell=None, tile=20000.0)
     drc_analysis.violations(checked, max_violations=0, out=checked / "violations.csv")
 
 
 @target
 def lvs():
-    """The GDS's nets, named by its labels on the pin layers (6/1, 3/1, 8/1, 68/1), against the
-    schematic."""
-    checked = lvs_run.lvs(GDS, Path("results/ivtx_rdl/lvs"), stack="uni-bonn-rdl", schematic=SCHEMATIC)
+    """The layout's nets, named by its labels on the pin layers (6/1, 3/1, 8/1, 68/1), against
+    the schematic."""
+    checked = lvs_run.lvs(LAYOUT, RESULTS / "lvs", stack=STACK, schematic=SCHEMATIC)
     lvs_analysis.findings(checked, out=checked / "summary.csv")
 
 
 @target
 def board():
-    """The HyperLynx board straight from the GDS (no KiCad), its nets and pins from the GDS's
-    labels. Stops until the GDS has a net label on every net: its labels are on 80/7 (notes)
-    today, not on the pin layers. The targets below still use Andreas' KiCad export."""
-    out = Path("results/ivtx_rdl/board")
-    out.mkdir(parents=True, exist_ok=True)
-    hyp = out / "obelix1_ivtx_ladder_v2.hyp"
-    gds_hyp.write_hyp(GDS, stack.load("uni-bonn-rdl"), hyp, drill_shrink_um=10.0)
-    gds2hyp.traces_pass(hyp, "auto", 0.08)
-
-
-@target
-def setup():
-    """HyperLynx's overlay, and the board: Andreas' KiCad export with its 17 signal nets as
-    traces, plus his HyperLynx project and models."""
-    hyperlynx.prepare()
-
-    # The export draws every route as a pour, which BoardSim cannot simulate as a line;
-    # gds2hyp writes the signal nets (40 um wide) as traces, supplies stay pours.
-    out = Path("results/ivtx_rdl/setup")
-    out.mkdir(parents=True, exist_ok=True)
-    export = Path(__file__).parent / "obelix1_ivtx_ladder_with_nets_v3.1.hyp"
-    gds2hyp.main([str(export), "-o", str(out / "obelix1_ivtx_ladder_with_nets_v3.1.hyp"), "--traces", "auto", "--trace-max-width", "0.08"])
-
-    # Andreas' HyperLynx project: VRMs, DC sinks and pin models he set up in the GUI
-    project = Path("/users/aulm/HyperLynx/simulations/VTX_Obelix_1/v3.1")
-    shutil.copy2(project / "obelix1_ivtx_ladder_with_nets_v3.1.bud", out)
-    shutil.copy2(project / "obelix1_ivtx_ladder_with_nets_v3.1.bbd", out)
-    shutil.copy2(project / "obelix1_ivtx_ladder_with_nets_v3.1.pjh", out)
-
-    # the SPICE driver and receiver of the data links
-    shutil.copy2("/users/aulm/iVTX_transmisstion_line/fast_drv.sp", out / "fast_drv.sp")
-    shutil.copy2("/users/aulm/iVTX_transmisstion_line/fast_rcv.sp.txt", out / "fast_rcv.sp")
+    """The board for HyperLynx, its signal nets (40 um wide) as traces: BoardSim simulates
+    pours as no line; supplies stay pours."""
+    gds2hyp.hyp(BOARD_SOURCE, BOARD, stack=STACK, refill=False, traces="auto", trace_max_width=0.08)
 
 
 @target
 def info():
     """Stackup, nets with their lengths, VRMs and modelled pins (info/info.json); pins their
     net's copper doesn't reach, and copper on no net."""
-    board = Path("results/ivtx_rdl/setup/obelix1_ivtx_ladder_with_nets_v3.1.hyp")
-    if not board.exists():
-        setup()
+    board = BOARD
     run.info(board, Path("results/ivtx_rdl/info"), license="HyperLynx SI/PI")
 
     # pins their net's copper doesn't reach (more than 25 um away), and copper on no net
@@ -99,9 +86,7 @@ def dc():
     each pin, drop, current density; drop against 5 % (the constraint set in HyperLynx); pin
     voltages, via currents, loss and current maps. (PSUB and PWell: their VRMs have no reference
     pin, and HyperLynx wants one shared with every chip they feed; how to set that up is open.)"""
-    board = Path("results/ivtx_rdl/setup/obelix1_ivtx_ladder_with_nets_v3.1.hyp")
-    if not board.exists():
-        setup()
+    board = BOARD
     out = Path("results/ivtx_rdl/dc")
 
     # the four 3 V rails, one per chip, at 3 A each, with their returns; HyperLynx's report flags
@@ -129,9 +114,7 @@ def dc():
 def si():
     """The longest data pair, D4 (108 mm), at 160 Mb/s PRBS7: eye with ideal lines, eye with
     loss, crosstalk and jitter, and the crosstalk from ADC_4 and rst onto D4 held low."""
-    board = Path("results/ivtx_rdl/setup/obelix1_ivtx_ladder_with_nets_v3.1.hyp")
-    if not board.exists():
-        setup()
+    board = BOARD
     out = Path("results/ivtx_rdl/si")
 
     # eye with ideal lines: lossless, smooth, no jitter, no coupling
@@ -244,9 +227,7 @@ def si():
 def sparams():
     """4-port S-parameters of D4 (P, N at the driver, then at the receiver); insertion and
     return loss at its Nyquist frequency, 80 MHz."""
-    board = Path("results/ivtx_rdl/setup/obelix1_ivtx_ladder_with_nets_v3.1.hyp")
-    if not board.exists():
-        setup()
+    board = BOARD
     out = Path("results/ivtx_rdl/sparams")
 
     # 1 MHz to 5 GHz, adaptive sweep at medium tolerance, 50 ohm ports, real line models

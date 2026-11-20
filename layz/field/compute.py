@@ -23,9 +23,7 @@ Run from the layz command (docs/install.md):
 
 from __future__ import annotations
 
-import argparse
 import math
-import os
 import re
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -564,25 +562,3 @@ def field(run: Path, *, voltages: dict[str, float], plane: str | None, window: t
     print(f"wrote {run / 'field.vtk'}, {run / 'panels.vtk'}{html}")
 
     return run
-
-
-def main(argv: list[str] | None = None) -> None:
-    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("run", type=Path, help="fieldsolve.py run directory (made with --charges)")
-    ap.add_argument("--voltage", action="append", default=[], metavar="NAME=VOLTS", help="conductor voltage; unlisted conductors are at 0 V (default: the first conductor at 1 V)")
-    ap.add_argument("--box", help="field region x0,y0,z0,x1,y1,z1 in µm (default: conductor bounding box + 10 %%)")
-    ap.add_argument("--points", type=float, default=60000, help="approximate grid size (points)")
-    ap.add_argument("--z-stretch", type=float, default=None, help="HTML only: exaggerate z by this factor (default: auto for flat boards)")
-    ap.add_argument("--seeds", type=int, default=60, help="--plane: field-line seeds written next to each section (for ParaView)")
-    ap.add_argument("--threads", type=int, default=min(8, os.cpu_count() or 1))
-    ap.add_argument("--plane", metavar="x=V|y=V", help="2-D cross-section instead of the 3-D grid: plot potential and |E| with arrows on the plane x=V or y=V (µm) as PNGs (full cut and an edge zoom)")
-    ap.add_argument("--window", metavar="U0,U1,Z0,Z1", help="--plane: plot only this window (µm, U = the in-plane horizontal axis)")
-    ap.add_argument("--res", type=int, default=320, help="--plane: points across the window")
-    ap.add_argument("--probe", action="append", default=[], metavar="X,Y,Z", help="print phi and E at this point (µm); repeatable")
-    args = ap.parse_args(argv)
-
-    field(args.run, voltages={k: float(v) for k, v in (x.split("=") for x in args.voltage)}, plane=args.plane, window=tuple(float(v) for v in args.window.split(",")) if args.window else None, res=args.res, seeds=args.seeds, points=args.points, box=tuple(float(v) for v in args.box.split(",")) if args.box else None, z_stretch=args.z_stretch, threads=args.threads, probes=[tuple(float(v) for v in p.split(",")) for p in args.probe])
-
-
-if __name__ == "__main__":
-    main()

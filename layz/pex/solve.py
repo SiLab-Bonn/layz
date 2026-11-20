@@ -18,7 +18,6 @@ Run from the layz command (docs/install.md):
 
 from __future__ import annotations
 
-import argparse
 import re
 import sys
 from dataclasses import dataclass, field
@@ -484,32 +483,6 @@ def report(cm, bodies: list[Body], out: Path) -> None:
 # --------------------------------------------------------------------------- CLI
 
 
-def parse_port(text: str) -> tuple[str, str, float, float]:
-    m = re.fullmatch(r"([^=]+)=([^@]+)@(-?[\d.eE+-]+),(-?[\d.eE+-]+)", text)
-    if not m:
-        raise argparse.ArgumentTypeError("expected NAME=CONDUCTOR@X,Y (µm)")
-    return m[1], m[2], float(m[3]), float(m[4])
-
-
-def add_flow_args(ap: argparse.ArgumentParser) -> None:
-    """Options shared by fieldsolve.py (GDS) and kicad2fastercap.py (KiCad)."""
-    ap.add_argument("--split-nets", action="store_true", help="keep disconnected bodies of the same name as separate conductors")
-    ap.add_argument("--nets", help="comma-separated body names to keep (default: all)")
-    ap.add_argument("--solver", choices=["fastercap", "fastcap2"], default="fastercap")
-    ap.add_argument("--out", type=Path, help="run directory (default: run_<input stem>)")
-    ap.add_argument("--amax", type=float, default=None, help="max triangle area µm² (default: 0 = FasterCap refines itself; for fastcap2 bbox/2000)")
-    ap.add_argument("--delaunay-b", type=float, default=0.5)
-    ap.add_argument("--tolerance", type=float, default=0.01, help="relative tolerance (keep <= 0.01 with dielectrics)")
-    ap.add_argument("--mesh", type=float, default=0.5, help="FasterCap -m refinement")
-    ap.add_argument("--d-coeff", type=float, default=0.5, help="FasterCap -d coefficient")
-    ap.add_argument("--galerkin", action="store_true", help="FasterCap Galerkin scheme")
-    ap.add_argument("--charges", action="store_true", help="FasterCap: also dump panel charges, for fieldview.py (E-field, potential)")
-    ap.add_argument("--stl", action="store_true", help="also dump STL of each body/dielectric")
-    ap.add_argument("--list", action="store_true", help="only list the conductor bodies")
-    ap.add_argument("--dry-run", action="store_true", help="write solver input, don't solve")
-    ap.add_argument("-v", "--verbose", action="store_true")
-
-
 def setup_logging(verbose: bool) -> None:
     """Quiet KLayout-PEX's model builder unless -v (its logging API is internal: best effort)."""
     try:
@@ -573,24 +546,3 @@ def run_flow(args, layout: db.Layout, top: db.Cell, stack: Stack, out: Path, por
         if passes < 2:
             print(f"WARNING: FasterCap stopped after {passes} refinement pass(es); with dielectrics the first pass can be far off (e.g. 35 % low). Lower --tolerance (now {args.tolerance}) and compare.", file=sys.stderr)
     report(cm, bodies, out)
-
-
-def main(argv: list[str] | None = None) -> None:
-    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("input", type=Path, help="GDS or OASIS file")
-    ap.add_argument("--stack", type=Path, required=True, help="layz process stack (.toml, a file, or a process in tech/: uni-bonn-rdl, multicb/4L-01, ...)")
-    ap.add_argument("--cell", help="top cell (default: the top cell)")
-    ap.add_argument("--name", dest="ports", action="append", default=[], type=parse_port, metavar="NAME=CONDUCTOR@X,Y", help="name the body on CONDUCTOR touching point X,Y (µm); repeatable")
-    add_flow_args(ap)
-    args = ap.parse_args(argv)
-    setup_logging(args.verbose)
-
-    layout, top = load_gds(args.input, args.cell)
-    from layz import stack as stackfile
-
-    stack = stack_from_process(stackfile.load(args.stack), gds=True)
-    run_flow(args, layout, top, stack, args.out or Path(f"run_{args.input.stem}"), args.ports)
-
-
-if __name__ == "__main__":
-    main()

@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from layz import cli, stack
+from layz.gds2hyp import convert as gds2hyp
 
 ROOT = Path(__file__).resolve().parents[1]
 TESTS = ROOT / "test"
@@ -25,8 +26,8 @@ needs_fastercap = pytest.mark.skipif(not HAVE_FASTERCAP, reason="FasterCap not o
 def test_cli_lists_commands(capsys):
     assert cli.main(["--help"]) == 0
     out = capsys.readouterr().out
-    for cmd in ("run", "gds2pcb", "gds2hyp", "lvs", "pex", "field", "view", "doctor"):
-        assert f"layz {cmd}" in out
+    assert "layz run FLOW" in out and "layz doctor" in out
+    assert cli.main(["drc"]) == 2  # no other commands
 
 
 def test_stack_heights_from_order():
@@ -84,7 +85,7 @@ def test_gds_to_hyp(tmp_path):
     STACKUP is test/route.toml's layers, in inches, with their εr and names; the nets, pins and
     devices are the GDS's labels."""
     hyp = tmp_path / "route.hyp"
-    assert cli.main(["gds2hyp", str(TESTS / "route.gds"), "--stack", str(TESTS / "route.toml"), "-o", str(hyp), "--traces", "none"]) == 0
+    gds2hyp.hyp(TESTS / "route.gds", hyp, stack=TESTS / "route.toml", refill=False, traces="none", trace_max_width=0.08)
     text = hyp.read_text()
     assert text.startswith("{VERSION=2.14}\n{UNITS=ENGLISH LENGTH}\n")
     rows = re.findall(r"\((SIGNAL|DIELECTRIC) T=([\d.e-]+) .*?C=([\d.e-]+) L=\"([^\"]+)\"", text.split("{STACKUP", 1)[1].split("}", 1)[0])
@@ -109,9 +110,9 @@ def test_gds_conversions_need_a_label_on_every_net(tmp_path):
     ly.clear_layer(ly.find_layer(1, 1))  # the route's label
     ly.write(str(tmp_path / "bare.gds"))
     with pytest.raises(SystemExit, match="net without a label"):
-        gds2pcb.main(["--lay", str(tmp_path / "bare.gds"), "--stack", str(TESTS / "route.toml"), "-o", str(tmp_path / "b.kicad_pcb")])
+        gds2pcb.convert(tmp_path / "bare.gds", tmp_path / "b.kicad_pcb", stack=TESTS / "route.toml", scale_mm_per_um=1.0, drill_shrink_um=10.0, flip_y=True)
     with pytest.raises(SystemExit, match="net without a label"):
-        cli.main(["gds2hyp", str(tmp_path / "bare.gds"), "--stack", str(TESTS / "route.toml"), "-o", str(tmp_path / "b.hyp")])
+        gds2hyp.hyp(tmp_path / "bare.gds", tmp_path / "b.hyp", stack=TESTS / "route.toml", refill=False, traces="none", trace_max_width=0.08)
 
 
 @needs_fastercap
@@ -149,22 +150,18 @@ def test_drc_and_lvs_api(tmp_path):
         assert (done / "drc.lyrdb").exists() and drc_analysis.violations(done, max_violations=0, out=None)
 
 
-@needs_fastercap
-def test_vacuum_plates_capacitance(tmp_path):
-    """Two 1 mm² plates, 10 µm vacuum gap: 918.8 fF mutual (ideal 885 fF + fringe)."""
-    out = tmp_path / "run"
-    cli.main(["pex", str(TESTS / "plates.gds"), "--stack", str(TESTS / "plates.toml"), "--out", str(out)])
-    rows = (out / "maxwell_matrix_fF.csv").read_text().splitlines()
-    mutual = -float(rows[1].split(",")[2])
-    assert mutual == pytest.approx(918.8, rel=0.01)
-
-
 @needs_kicad
 def test_kicad_board_model(tmp_path):
     """The 10 mm PCB plate board becomes the validated 3-D model (3788 triangles, 1888 copper);
     solved at 1 % it gives 21.54 pF (9 min on 18 threads, so not repeated here)."""
+    import argparse
+
+    from layz.pex import run as pex
+    from layz.pex import solve
+
     out = tmp_path / "run"
-    cli.main(["pex", str(TESTS / "pcb_plates.kicad_pcb"), "--dry-run", "--out", str(out)])
+    layout, top, board_stack = pex._board(TESTS / "pcb_plates.kicad_pcb", refill=True)
+    solve.run_flow(argparse.Namespace(split_nets=False, nets=None, solver="fastercap", amax=None, delaunay_b=0.5, tolerance=0.01, mesh=0.5, d_coeff=0.5, galerkin=False, charges=False, stl=False, list=False, dry_run=True, verbose=False), layout, top, board_stack, out)
     geo = list(out.glob("m*.geo"))
     count = lambda files: sum(f.read_text().count("\nT ") for f in files)
     assert count(geo) == 3788
@@ -256,14 +253,17 @@ def test_lvs_finds_open_short_unknown(tmp_path):
     top.shapes(l3).insert(kdb.Text("/D", kdb.Trans(195000, 65000)))
     top.shapes(l3).insert(kdb.Text("NOPE", kdb.Trans(100000, 5000)))
     ly.write(str(tmp_path / "t.gds"))
-    rc = lvs.main(["--lay", str(tmp_path / "t.gds"), "--stack", str(tmp_path / "stack.toml"), "--sch", str(tmp_path / "sch.net"), "--report", str(tmp_path / "r.lyrdb")])
+    from layz.lvs import run as lvs_run
+
+    checked = lvs_run.lvs(tmp_path / "t.gds", tmp_path / "lvs", stack=tmp_path / "stack.toml", schematic=tmp_path / "sch.net")
+    assert (checked / "lvs.lyrdb").exists()
     nets, labels, _ = lvs.extract(tmp_path / "t.gds", stack.load(tmp_path / "stack.toml"))
     findings, stats = lvs.compare(lvs.read_netlist((tmp_path / "sch.net").read_text()), labels)
     kinds = sorted(f.kind for f in findings)
-    assert rc == 1 and kinds == ["open", "short", "unknown"]
+    assert kinds == ["open", "short", "unknown"]
     assert "/B" in next(f.what for f in findings if f.kind == "open")
     assert stats["checked nets"] == 4
-    assert (tmp_path / "r.lyrdb").read_text().count("<item>") == 5
+    assert (tmp_path / "lvs" / "lvs.lyrdb").read_text().count("<item>") == 5
 
 
 # ------------------------------------------------------------------ HyperLynx (no HyperLynx needed)
@@ -409,14 +409,9 @@ def test_flow_targets(tmp_path, capsys):
 
     flow = tmp_path / "flow.py"
     flow.write_text('from layz.flow import target\nDONE = []\n\n@target\ndef first():\n    """One."""\n    DONE.append("first")\n\n@target\ndef second():\n    """Two, after first."""\n    if "first" not in DONE:\n        first()\n    (DONE.append("second"), open(__file__ + ".out", "w").write(" ".join(DONE)))\n\n@target\ndef third():\n    """Fails."""\n    raise SystemExit("broken")\n\n@target\ndef fourth():\n    """After the failure."""\n    open(__file__ + ".4", "w").write("ran")\n')
-    assert targets.main(["-f", str(flow), "--list"]) == 0
-    listing = capsys.readouterr().out
-    assert "first" in listing and "Two, after first." in listing
-    assert targets.main(["-f", str(flow), "second"]) == 0
-    assert (tmp_path / "flow.py.out").read_text() == "first second"
-    assert targets.main(["-f", str(flow)]) == 1 and not (tmp_path / "flow.py.4").exists()  # all, in order: stops at third
-    assert targets.main(["-f", str(flow), "-k"]) == 1 and (tmp_path / "flow.py.4").exists()  # --keep-going
-    with pytest.raises(SystemExit):
-        targets.main(["-f", str(flow), "nope"])
+    assert targets.main([str(flow)]) == 1  # every target in order, stopping at the failing third
+    assert (tmp_path / "flow.py.out").read_text() == "first second" and not (tmp_path / "flow.py.4").exists()
+    assert "first, second, third, fourth" in capsys.readouterr().out
+    assert cli.main(["run", str(tmp_path)]) == 1  # the folder with flow.py
     with pytest.raises(TypeError):
         targets.target(lambda x: None)

@@ -1,20 +1,19 @@
-"""`layz run`: a design's flow, its @target functions run in order.
+"""`layz run FLOW`: a design's flow, its @target functions run in order.
 
-    layz run --design designs/ivtx_rdl            every target, in the file's order
-    layz run --design ivtx_rdl drc lvs            some, by name (a name: designs/NAME)
-    layz run --design ivtx_rdl --list             the targets, with their docstrings
-    layz run --flow path/to/flow.py               a flow file elsewhere (default: ./flow.py)
+    layz run designs/ivtx_rdl                     the flow.py in that folder
+    layz run designs/ivtx_rdl/flow.py             the same
 
 A design's flow.py defines each step as a function without arguments or return value,
-decorated with ``@target``; the function names its own inputs and outputs and does its work by
-calling layz's Python API, one module per tool, each the same way: ``run`` runs the tool into
-a folder with every option given, ``analysis`` checks the results against limits (a table,
-printed and written as CSV), ``plots`` plots them in layz.plotstyle:
+decorated with ``@target``; the function names its own inputs (layout, stack, schematic) and
+outputs, and does its work by calling layz's Python API, one module per tool, each the same way:
+``run`` runs the tool into a folder with every option given, ``analysis`` checks the results
+against limits (a table, printed and written as CSV), ``plots`` plots them in layz.plotstyle:
 
-    layz.drc.run, layz.lvs.run                    design rules, connectivity vs the schematic
+    layz.drc.run / analysis                       design rules (gdscheck; KiCad's for boards)
+    layz.lvs.run / analysis                       connectivity vs the schematic
     layz.gds2hyp                                  the board for HyperLynx
     layz.pex.run / analysis / plots               capacitance matrix (FasterCap)
-    layz.field.run / plots                        E-field and potential of a pex run
+    layz.field.run                                E-field and potential of a pex run
     layz.hyperlynx.run / analysis / plots         DC drop, SI, crosstalk, S-parameters
 
     from layz.flow import target
@@ -25,8 +24,7 @@ printed and written as CSV), ``plots`` plots them in layz.plotstyle:
         \"\"\"DC drop of the 3 V rails.\"\"\"
         run.dc(BOARD, RESULTS / "dc", nets=["/3V_1", "/3V_2"], ...)
 
-The targets run in order, and the run stops at the first that fails (--keep-going: run the rest
-anyway, and fail at the end).
+The targets run in file order; the run stops at the first that fails.
 """
 
 from __future__ import annotations
@@ -73,62 +71,28 @@ def describe(targets: dict[str, Callable[[], None]]) -> str:
     return "\n".join(lines)
 
 
-def run_targets(targets: dict[str, Callable[[], None]], names: list[str], keep_going: bool = False) -> list[str]:
-    """Run ``names`` (all when empty) in order; the names of those that failed."""
-    names = names or list(targets)
-    unknown = [n for n in names if n not in targets]
-    if unknown:
-        raise SystemExit(f"unknown target(s) {', '.join(unknown)}; targets:\n{describe(targets)}")
-    failed = []
-    for name in names:
+def run_targets(targets: dict[str, Callable[[], None]]) -> str | None:
+    """Run every target in order; the name of the one that failed, if one did."""
+    for name, function in targets.items():
         start = time.monotonic()
         print(f"== {name}", flush=True)
         try:
-            targets[name]()
+            function()
         except (Exception, SystemExit) as e:  # a target stops with SystemExit or any error
-            failed.append(name)
             print(f"== {name} FAILED after {time.monotonic() - start:.0f} s: {e}", flush=True)
-            if not keep_going:
-                break
-            continue
+            return name
         print(f"== {name} done in {time.monotonic() - start:.0f} s", flush=True)
-    return failed
+    return None
 
 
-REPO = Path(__file__).resolve().parents[1]  # the repo layz runs from (editable install)
-
-
-def find_flow(design: str | None, flow: Path | None) -> Path:
-    """--flow FILE, --design DIR (a folder with flow.py, or a name in designs/), else ./flow.py."""
-    if flow:
-        return flow
-    if design:
-        for p in (Path(design) / "flow.py", Path.cwd() / "designs" / design / "flow.py", REPO / "designs" / design / "flow.py"):
-            if p.exists():
-                return p
-        raise SystemExit(f"no flow.py in {design} (nor designs/{design} here or in {REPO})")
-    if Path("flow.py").exists():
-        return Path("flow.py")
-    known = sorted(p.parent.name for p in REPO.glob("designs/*/flow.py"))
-    raise SystemExit("no ./flow.py: give --design DIR" + (f" ({', '.join(known)})" if known else "") + " or --flow FILE")
-
-
-def main(argv: list[str] | None = None) -> int:
-    import argparse
-
-    ap = argparse.ArgumentParser(prog="layz run", description=__doc__.split("\n\n")[0], formatter_class=argparse.RawDescriptionHelpFormatter, epilog=__doc__.split("\n\n", 1)[1])
-    ap.add_argument("targets", nargs="*", help="target names (default: all, in order)")
-    ap.add_argument("-d", "--design", help="the design's folder (with flow.py), or its name in designs/")
-    ap.add_argument("-f", "--flow", type=Path, help="a flow file")
-    ap.add_argument("-l", "--list", action="store_true", help="list the targets")
-    ap.add_argument("-k", "--keep-going", action="store_true", help="run the other targets after one fails")
-    a = ap.parse_args(argv)
-    flow = find_flow(a.design, a.flow)
+def main(argv: list[str]) -> int:
+    """`layz run FLOW`: FLOW is a flow.py, or the folder with it."""
+    flow = Path(argv[0])
+    if flow.is_dir():
+        flow = flow / "flow.py"
+    if not flow.is_file():
+        raise SystemExit(f"no flow file {flow}")
     found = load(flow)
-    if a.list:
-        print(f"targets of {flow}:\n{describe(found)}")
-        return 0
-    failed = run_targets(found, a.targets, a.keep_going)
-    if failed:
-        print(f"failed: {', '.join(failed)}")
+    print(f"{flow}: {', '.join(found)}", flush=True)
+    failed = run_targets(found)
     return 1 if failed else 0

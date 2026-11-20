@@ -1,12 +1,9 @@
 # iVTX flex (Andreas Ulm): the 45 cm flex cable from the RDL ladder (iVTX1) to the DAQ's
 # connector (J1). The full flow, from KiCad's DRC and schematic parity to SI and power.
 #
-#   layz run --design designs/flex_ivtx             every target, in this file's order
-#   layz run --design flex_ivtx --list              the targets
+#   layz run designs/flex_ivtx         (the HyperLynx targets: on juno or jupiter)
 #
-# The board: flex.kicad_pcb and flex.kicad_sch next to this file (Andreas' KiCad project,
-# flexv2.2). Until they are here, drc and lvs stop and `board` takes his KiCad export of it
-# instead (flex_45cm_v2.2.hyp, in his HyperLynx folder on juno).
+# The targets run in this file's order; setup names the inputs.
 
 import shutil
 from pathlib import Path
@@ -21,22 +18,36 @@ from layz.lvs import analysis as lvs_analysis
 from layz.lvs import run as lvs_run
 
 HERE = Path(__file__).parent
-PCB = HERE / "flex.kicad_pcb"
 RESULTS = Path("results/flex_ivtx")
-BOARD = RESULTS / "setup" / "flex_45cm_v2.2.hyp"  # the name his HyperLynx project goes with
-PROJECT = Path("/users/aulm/HyperLynx/simulations/Flex")  # Andreas' HyperLynx project (juno)
 
 
-def need_pcb() -> None:
-    if not PCB.exists():
-        raise SystemExit(f"no {PCB}: put Andreas' flex KiCad project (flex.kicad_pcb, flex.kicad_sch) there")
+@target
+def setup():
+    """The inputs: the KiCad board (its stackup inside) with its schematic, and Andreas'
+    HyperLynx project and models; HyperLynx's writable overlay."""
+    global LAYOUT, BOARD
+    # Andreas' KiCad project, flexv2.2: flex.kicad_pcb, with flex.kicad_sch next to it
+    LAYOUT = HERE / "flex.kicad_pcb"
+    if not LAYOUT.exists():
+        raise SystemExit(f"no {LAYOUT}: put Andreas' flex KiCad project (flex.kicad_pcb, flex.kicad_sch) there")
+    BOARD = RESULTS / "board" / "flex_45cm_v2.2.hyp"  # the name his HyperLynx project goes with
+
+    # his HyperLynx project next to the board: VRMs, DC sinks, pin models set in the GUI; the
+    # SPICE driver and receiver of the data links (the ladder's)
+    BOARD.parent.mkdir(parents=True, exist_ok=True)
+    project = Path("/users/aulm/HyperLynx/simulations/Flex")
+    for suffix in (".bud", ".bbd", ".pjh"):
+        if (project / f"flex_45cm_v2.2{suffix}").exists():
+            shutil.copy2(project / f"flex_45cm_v2.2{suffix}", BOARD.parent)
+    shutil.copy2("/users/aulm/iVTX_transmisstion_line/fast_drv.sp", BOARD.parent / "fast_drv.sp")
+    shutil.copy2("/users/aulm/iVTX_transmisstion_line/fast_rcv.sp.txt", BOARD.parent / "fast_rcv.sp")
+    hyperlynx.prepare()
 
 
 @target
 def drc():
     """KiCad's DRC of the flex, with the rules in its board."""
-    need_pcb()
-    checked = drc_run.board(PCB, RESULTS / "drc", refill_zones=True, all_track_errors=False)
+    checked = drc_run.board(LAYOUT, RESULTS / "drc", refill_zones=True, all_track_errors=False)
     drc_analysis.violations(checked, max_violations=0, out=checked / "violations.csv")
 
 
@@ -44,36 +55,21 @@ def drc():
 def lvs():
     """KiCad's schematic parity of the flex: footprints and nets against flex.kicad_sch, and
     unconnected copper."""
-    need_pcb()
-    checked = lvs_run.board(PCB, RESULTS / "lvs", refill_zones=True)
+    checked = lvs_run.board(LAYOUT, RESULTS / "lvs", refill_zones=True)
     lvs_analysis.parity(checked, out=checked / "summary.csv")
 
 
 @target
-def setup():
-    """HyperLynx's overlay, and the board: the KiCad board as a .hyp (Andreas' export while the
-    board isn't here) with its signal nets as traces, plus his HyperLynx project."""
-    hyperlynx.prepare()
-    out = BOARD.parent
-    out.mkdir(parents=True, exist_ok=True)
-    source = PCB if PCB.exists() else PROJECT / "flex_45cm_v2.2.hyp"
-    # strip-shaped pours of the signal nets (up to 0.3 mm wide) as traces; GND and +3V0 stay pours
-    gds2hyp.main([str(source), "-o", str(BOARD), "--traces", "auto", "--trace-max-width", "0.3"])
-    # his HyperLynx project for this board: VRMs, DC sinks, pin models set in the GUI
-    for suffix in (".bud", ".bbd", ".pjh"):
-        if (PROJECT / f"flex_45cm_v2.2{suffix}").exists():
-            shutil.copy2(PROJECT / f"flex_45cm_v2.2{suffix}", out)
-    # the SPICE driver and receiver of the data links (the ladder's)
-    shutil.copy2("/users/aulm/iVTX_transmisstion_line/fast_drv.sp", out / "fast_drv.sp")
-    shutil.copy2("/users/aulm/iVTX_transmisstion_line/fast_rcv.sp.txt", out / "fast_rcv.sp")
+def board():
+    """The board for HyperLynx (KiCad's exporter), its signal nets (up to 0.3 mm wide) as traces;
+    GND and +3V0 stay pours."""
+    gds2hyp.hyp(LAYOUT, BOARD, stack=None, refill=True, traces="auto", trace_max_width=0.3)
 
 
 @target
 def info():
     """Stackup, nets with their lengths, VRMs and modelled pins (info/info.json); pins their
     net's copper doesn't reach, and copper on no net."""
-    if not BOARD.exists():
-        setup()
     run.info(BOARD, RESULTS / "info", license="HyperLynx SI/PI")
     analysis.connectivity(BOARD, tolerance_m=25e-6, nets=None, out=RESULTS / "info" / "connectivity.csv")
 
@@ -82,13 +78,12 @@ def info():
 def dc():
     """DC of the ladder's 3 V supply over the flex: +3V0 from the connector to the ladder at 12 A
     (four chips at 3 A), and its GND return; resistance, drop, current density; drop against 5 %."""
-    if not BOARD.exists():
-        setup()
     out = RESULTS / "dc"
-    supply = run.dc(BOARD, out / "supply", license="HyperLynx SI/PI", nets=["+3V0"], include_ref=True, vrm_references={}, sink_currents={"+3V0": 12.0}, max_voltage_drop=5.0, max_current_density=1.5e7, max_via_current=1.0, return_from=None, return_vrm_type="simple", return_sink_resistance=1e6)
+    # the connector's +3V0 VRM (J1.10) referenced to a GND pin beside it (J1.9): HyperLynx needs one
+    supply = run.dc(BOARD, out / "supply", license="HyperLynx SI/PI", nets=["+3V0"], include_ref=True, vrm_references={"+3V0": "J1.9"}, sink_currents={"+3V0": 12.0}, max_voltage_drop=5.0, max_current_density=1.5e7, max_via_current=1.0, return_from=None, return_vrm_type="simple", return_sink_resistance=1e6)
     # the return, re-solved as the supply with the currents the first run measured (HyperLynx
     # maps the loss of supply nets only)
-    ret = run.dc(BOARD, out / "return", license="HyperLynx SI/PI", nets=["+3V0"], include_ref=True, vrm_references={}, sink_currents={}, max_voltage_drop=5.0, max_current_density=1.5e7, max_via_current=1.0, return_from=supply / "ports.csv", return_vrm_type="simple", return_sink_resistance=1e6)
+    ret = run.dc(BOARD, out / "return", license="HyperLynx SI/PI", nets=["+3V0"], include_ref=True, vrm_references={"+3V0": "J1.9"}, sink_currents={}, max_voltage_drop=5.0, max_current_density=1.5e7, max_via_current=1.0, return_from=supply / "ports.csv", return_vrm_type="simple", return_sink_resistance=1e6)
     analysis.dc_table(supply, ret, out=out / "dc_table.csv")
     analysis.dc_drop(supply, max_drop=0.05, out=out / "dc_drop.csv")
     analysis.current_density(supply, max_density=1.5e7, out=out / "current_density_supply.csv")
@@ -100,10 +95,8 @@ def dc():
 def si():
     """Chip 4's data pair (DATA_CHIP_4, ladder to connector over the 45 cm flex) at 160 Mb/s
     PRBS7: eye with ideal lines, eye with loss, crosstalk and jitter, and the crosstalk from
-    CLK and GPIO_4 onto it held low."""
+    CLK and GPIO_4 onto it, quiet."""
     board = BOARD
-    if not board.exists():
-        setup()
     out = RESULTS / "si"
 
     # eye with ideal lines: lossless, smooth, no jitter, no coupling
@@ -171,8 +164,9 @@ def si():
         aggressors=[],
     )
 
-    # chip 4's data drivers held low while CLK (from the connector) and GPIO_4 (from the ladder)
-    # switch as an 80 MHz clock, with HyperLynx's stock IBIS CMOS driver and receivers
+    # chip 4's data pair quiet (its pins have no model in the project: passive) while CLK (from the
+    # connector) and GPIO_4 (from the ladder) switch as an 80 MHz clock, with HyperLynx's stock
+    # IBIS CMOS driver and receivers
     xt = run.si(
         board,
         out / "crosstalk",
@@ -200,7 +194,7 @@ def si():
         trace_coupling={"enabled": True, "method": "geometric", "threshold": 0.001, "max_distance": 0.5e-3, "min_segment": 0.0127, "horizontal_neighbours": 1, "vertical_neighbours": 1, "nonparallel": False, "self": True},
         area_fill_coupling={"enabled": True, "grid": 0.001016, "search_distance": 0.001016},
         sparameter_coupling={"connector": False, "connector_threshold": -20.0, "package": False, "package_threshold": -20.0, "em": False, "em_threshold": -20.0, "fmin": 1e5, "fmax": 2e10},
-        driver_states={"iVTX1.15": "low", "iVTX1.16": "low"},
+        driver_states={},
         aggressors=[{"driver": "J1.36", "receivers": ["iVTX1.18"], "lib": "modvsez.ibs", "device": "MODvsEZIBIS", "model": "3"}, {"driver": "iVTX1.17", "receivers": ["J1.32"], "lib": "modvsez.ibs", "device": "MODvsEZIBIS", "model": "3"}],
     )
 
@@ -216,8 +210,6 @@ def si():
 def sparams():
     """4-port S-parameters of chip 4's data pair (P, N at the ladder, then at the connector);
     insertion and return loss at its Nyquist frequency, 80 MHz."""
-    if not BOARD.exists():
-        setup()
     out = RESULTS / "sparams"
     pair = run.sparam(BOARD, out / "data4", license="HyperLynx SI/PI", pins=["iVTX1.15", "iVTX1.16", "J1.29", "J1.31"], fmin=1e6, fmax=5e9, sweep="adaptive", steps=500, steps_per_decade=100, tolerance="medium", reference_impedance=50.0, lossy=True, roughness=True, trapezoid=True, nonfunctional_pads=False)
     # SDD21 at least -3 dB, SDD11 at most -10 dB (first guesses, to agree on)

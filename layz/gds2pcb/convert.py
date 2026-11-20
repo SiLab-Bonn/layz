@@ -55,7 +55,6 @@ Notes:
 
 from __future__ import annotations
 
-import argparse
 import math
 import re
 import uuid
@@ -500,26 +499,20 @@ def normalize_layer_block(pcb_path: Path) -> None:
     pcb_path.write_text(text[:start] + KICAD_LAYER_BLOCK + text[end:])
 
 
-def main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--lay", type=Path, required=True, help="layout (.gds), with a net label on every net")
-    parser.add_argument("-o", "--out", type=Path, help="KiCad board (default: the layout's name with .kicad_pcb)")
-    parser.add_argument("--stack", type=Path, required=True, help="layz process stack (.toml, or a process: uni-bonn-rdl): the GDS layers (copper zones, footprint pad layers, vias, outline, net labels), written into the board as its KiCad stackup")
-    parser.add_argument("--scale-mm-per-um", type=float, default=1)
-    parser.add_argument("--drill-shrink-um", type=float, default=10.0)
-    parser.add_argument("--no-flip-y", action="store_true", help="Do not flip Y (raw GDS->KiCad coordinate mapping)")
-    args = parser.parse_args(argv)
-    args.pcb = args.out or args.lay.with_suffix(".kicad_pcb")
+def convert(gds: Path, pcb: Path, *, stack: str | Path, scale_mm_per_um: float, drill_shrink_um: float, flip_y: bool) -> Path:
+    """A utility: ``gds`` as a KiCad board at ``pcb``, on the layers of ``stack`` (written into the
+    board as its stackup), every net named by the GDS's net labels.
 
+    scale_mm_per_um  1 for a GDS in µm
+    drill_shrink_um  a via's drill is its GDS shape's smaller side less this
+    flip_y           the board shows the GDS top view (KiCad's y points down)
+    """
     from layz import stack as stackfile
 
-    process = stackfile.load(args.stack)
+    process = stackfile.load(stack)
     if len(process.copper) != 4:
-        parser.error(f"gds2pcb writes 4-copper boards (F.Cu, In1.Cu, In2.Cu, B.Cu) for now; {args.stack} has {len(process.copper)} copper layers")
-    convert_gds_to_kicad(args.lay, args.pcb, process, args.scale_mm_per_um, args.drill_shrink_um, flip_y=not args.no_flip_y)
-    write_stackup(args.pcb, process)
+        raise ValueError(f"gds2pcb writes 4-copper boards (F.Cu, In1.Cu, In2.Cu, B.Cu) for now; {stack} has {len(process.copper)} copper layers")
+    convert_gds_to_kicad(Path(gds), Path(pcb), process, scale_mm_per_um, drill_shrink_um, flip_y=flip_y)
+    write_stackup(Path(pcb), process)
     print(f"stackup: {process.name} ({len(process.layers)} layers, {process.thickness_um:g} µm) written into the board")
-
-
-if __name__ == "__main__":
-    main()
+    return Path(pcb)

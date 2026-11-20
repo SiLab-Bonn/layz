@@ -20,7 +20,6 @@ Boards without a stackup get KiCad's default FR4 stack, with a warning.
 
 from __future__ import annotations
 
-import argparse
 import math
 import re
 import sys
@@ -30,7 +29,7 @@ from klayout import db
 
 from layz import kicad
 from layz import stack as stackfile
-from layz.pex.solve import MODEL_DBU_UM, Conductor, Dielectric, Stack, Via, add_flow_args, run_flow, setup_logging, stack_from_process
+from layz.pex.solve import MODEL_DBU_UM, Conductor, Dielectric, Stack, Via, stack_from_process
 
 pcbnew = None  # KiCad's module, imported where a board is read (layz's KiCad environment, see layz.kicad)
 
@@ -201,33 +200,5 @@ def import_board(folder: Path) -> tuple[db.Layout, db.Cell, Stack, list[str]]:
     return layout, top, stack, json.loads((folder / "warnings.json").read_text())
 
 
-def main(argv: list[str] | None = None) -> None:
-    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("pcb", type=Path, help=".kicad_pcb board")
-    ap.add_argument("--no-fill", action="store_true", help="don't fill unfilled zones (keeps cached fills, e.g. from layz gds2pcb)")
-    ap.add_argument("--export-to", type=Path, help=argparse.SUPPRESS)  # internal: the KiCad environment's half
-    add_flow_args(ap)
-    args = ap.parse_args(argv)
-    if args.export_to:
-        export_board(args.pcb, not args.no_fill, args.export_to)
-        return
-    setup_logging(args.verbose)
-
-    if kicad.use_env() or not kicad.pcbnew_here():
-        # read the board in layz's KiCad environment (pcbnew), solve here (klayout-pex)
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmp:
-            if kicad.run(["pex", str(args.pcb), "--export-to", tmp] + (["--no-fill"] if args.no_fill else [])):
-                raise SystemExit("reading the board in layz's KiCad environment failed")
-            layout, top, stack, warnings = import_board(Path(tmp))
-    else:
-        layout, top, stack, warnings = load_board(args.pcb, refill=not args.no_fill)
-    for w in warnings:
-        print(f"warning: {w}", file=sys.stderr)
-    print_stack(stack)
-    run_flow(args, layout, top, stack, args.out or Path(f"run_{args.pcb.stem}"))
-
-
-if __name__ == "__main__":
-    main()
+if __name__ == "__main__":  # the step layz's KiCad environment runs: BOARD FOLDER [refill]
+    export_board(Path(sys.argv[1]), sys.argv[3:] == ["refill"], Path(sys.argv[2]))

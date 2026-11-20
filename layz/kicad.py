@@ -59,13 +59,13 @@ def use_env() -> bool:
     return python() is not None and not in_kicad_env()
 
 
-def run(argv: list[str]) -> int:
-    """`layz ARGV` in the KiCad environment, with this clone's layz."""
+def run(module: str, argv: list[str]) -> int:
+    """`python -m MODULE ARGV` in the KiCad environment, with this clone's layz."""
     py = python()
     if py is None:
         raise SystemExit("layz's KiCad is not installed: run install/kicad.sh (or ./install.sh)")
     env = {**os.environ, "PYTHONPATH": os.pathsep.join([str(REPO), os.environ.get("PYTHONPATH", "")]).rstrip(os.pathsep)}
-    return subprocess.run([str(py), "-m", "layz.cli", *argv], env=env).returncode
+    return subprocess.run([str(py), "-m", module, *argv], env=env).returncode
 
 
 def require_pcbnew() -> None:

@@ -70,7 +70,7 @@ def _board(pcb: Path, refill: bool):
 
     if kicad.use_env() or not kicad.pcbnew_here():
         with tempfile.TemporaryDirectory() as tmp:
-            if kicad.run(["pex", str(pcb), "--export-to", tmp] + ([] if refill else ["--no-fill"])):
+            if kicad.run("layz.pex.kicad", [str(pcb), tmp] + (["refill"] if refill else [])):
                 raise SystemExit("reading the board in layz's KiCad environment failed")
             layout, top, stack, warnings = import_board(Path(tmp))
     else:
