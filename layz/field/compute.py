@@ -362,11 +362,21 @@ def write_vtk_seeds(path: Path, axis: int, value: float, seeds: np.ndarray) -> N
 
 
 def cross_section(run: Path, tris, sig, owner, volts, axis: int, value: float, threads: int, windows: list[tuple[str, tuple[float, float, float, float]]], res: int, n_seeds: int = 60) -> None:
-    import matplotlib
+    import matplotlib as mpl
 
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
+    mpl.use("Agg")
     from matplotlib.path import Path as MPath
+
+    from layz.plotstyle import PLOT_STYLE
+
+    with mpl.rc_context(PLOT_STYLE):
+        _cross_section(run, tris, sig, owner, volts, axis, value, threads, windows, res, n_seeds, MPath)
+
+
+def _cross_section(run, tris, sig, owner, volts, axis, value, threads, windows, res, n_seeds, MPath) -> None:
+    import matplotlib.pyplot as plt
+
+    from layz.plotstyle import DENSITY_COLOR_MAP, SPINE_COLOR, save_figure
 
     u_ax = 1 - axis
     an, un = "xy"[axis], "xy"[u_ax]
@@ -405,7 +415,7 @@ def cross_section(run: Path, tris, sig, owner, volts, axis: int, value: float, t
         fig_w = 13
         panel_h = max(2.4, min(5.5, fig_w / 2 * (sz * stretch) / su * 1.15))
         fig, axs = plt.subplots(1, 2, figsize=(fig_w, panel_h + 1.2), constrained_layout=True)
-        for ax, data, cmap, lim, label in ((axs[0], phi, "turbo", (vmin, vmax), "potential φ (V)"), (axs[1], Ek, "turbo", (0, ecap), f"|E| ({unit})" + (" (clipped)" if np.nanmax(Ek) > ecap * 1.01 else ""))):
+        for ax, data, cmap, lim, label in ((axs[0], phi, DENSITY_COLOR_MAP, (vmin, vmax), "potential φ (V)"), (axs[1], Ek, DENSITY_COLOR_MAP, (0, ecap), f"|E| ({unit})" + (" (clipped)" if np.nanmax(Ek) > ecap * 1.01 else ""))):
             im = ax.imshow(data, origin="lower", extent=(u0, u1, z0, z1), cmap=cmap, vmin=lim[0], vmax=lim[1], aspect=stretch, interpolation="bilinear")
             fig.colorbar(im, ax=ax, label=label, shrink=0.9)
             # arrows in screen space: z component scaled like the geometry, length ~ sqrt(|E|)
@@ -417,7 +427,7 @@ def cross_section(run: Path, tris, sig, owner, volts, axis: int, value: float, t
             ln = np.sqrt(np.nan_to_num(Em[sl]) / np.nanmax(Em))
             with np.errstate(invalid="ignore", divide="ignore"):
                 du, dz = np.where(mag > 0, du / mag * ln, 0), np.where(mag > 0, dz / mag * ln, 0)
-            ax.quiver(U[sl], Z[sl], du, dz, angles="uv", scale_units="width", scale=36, width=0.0022, headwidth=4, color="k", alpha=0.75)
+            ax.quiver(U[sl], Z[sl], du, dz, angles="uv", scale_units="width", scale=36, width=0.0022, headwidth=4, color=SPINE_COLOR, alpha=0.75)
             for seg in diel_segs:
                 ax.plot(seg[:, 0], seg[:, 1], color="0.35", lw=0.6)
             for n, polys in outlines.items():
@@ -430,11 +440,9 @@ def cross_section(run: Path, tris, sig, owner, volts, axis: int, value: float, t
             ax.set_ylim(z0, z1)
             ax.set_xlabel(f"{un} (µm)")
             ax.set_ylabel("z (µm)" + (f"  — exaggerated ×{stretch:.3g}" if stretch != 1 else ""))
-        fig.suptitle(f"{run.name}: cross-section {an} = {value:g} µm ({tag})", fontsize=11)
-        out = run / f"section_{an}{value:g}_{tag}.png"
-        fig.savefig(out, dpi=150)
-        plt.close(fig)
-        print(f"wrote {out}")
+        fig.suptitle(f"{run.name}: cross-section {an} = {value:g} µm ({tag})")
+        paths = save_figure(fig, run / f"section_{an}{value:g}_{tag}")
+        print(f"wrote {', '.join(str(x) for x in paths)}")
 
 
 def default_windows(tris, owner, axis: int, value: float):
@@ -455,26 +463,23 @@ def default_windows(tris, owner, axis: int, value: float):
 # --------------------------------------------------------------------------- CLI
 
 
-def main(argv: list[str] | None = None) -> None:
-    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("run", type=Path, help="fieldsolve.py run directory (made with --charges)")
-    ap.add_argument("--voltage", action="append", default=[], metavar="NAME=VOLTS", help="conductor voltage; unlisted conductors are at 0 V (default: the first conductor at 1 V)")
-    ap.add_argument("--box", help="field region x0,y0,z0,x1,y1,z1 in µm (default: conductor bounding box + 10 %%)")
-    ap.add_argument("--points", type=float, default=60000, help="approximate grid size (points)")
-    ap.add_argument("--z-stretch", type=float, default=None, help="HTML only: exaggerate z by this factor (default: auto for flat boards)")
-    ap.add_argument("--seeds", type=int, default=60, help="--plane: field-line seeds written next to each section (for ParaView)")
-    ap.add_argument("--threads", type=int, default=min(8, os.cpu_count() or 1))
-    ap.add_argument("--plane", metavar="x=V|y=V", help="2-D cross-section instead of the 3-D grid: plot potential and |E| with arrows on the plane x=V or y=V (µm) as PNGs (full cut and an edge zoom)")
-    ap.add_argument("--window", metavar="U0,U1,Z0,Z1", help="--plane: plot only this window (µm, U = the in-plane horizontal axis)")
-    ap.add_argument("--res", type=int, default=320, help="--plane: points across the window")
-    ap.add_argument("--probe", action="append", default=[], metavar="X,Y,Z", help="print phi and E at this point (µm); repeatable")
-    args = ap.parse_args(argv)
+def field(run: Path, *, voltages: dict[str, float], plane: str | None, window: tuple[float, float, float, float] | None, res: int, seeds: int, points: float, box: tuple[float, float, float, float, float, float] | None, z_stretch: float | None, threads: int, probes: list[tuple[float, float, float]]) -> Path:
+    """E-field and potential of a `layz pex` run made with charges=True, written into ``run``.
 
-    cols = load_run(args.run)
+    voltages   conductor -> V; unlisted conductors are at 0 V ({}: the first at 1 V)
+    plane      "x=V" / "y=V": a 2-D cross-section on that plane (µm), plotted (potential and
+               |E| with arrows) as PNG/PDF, with window (u0, u1, z0, z1 µm; None: the full cut
+               and an edge zoom), res points across, seeds field-line seeds for ParaView; None:
+               the 3-D grid of about ``points`` points in ``box`` (x0, y0, z0, x1, y1, z1 µm;
+               None: the conductors + 10 %), as VTK and field.html (z stretched by z_stretch,
+               None: auto for flat boards)
+    threads    for the Coulomb sums
+    probes     points (µm) to print phi and E at
+    """
+    cols = load_run(run)
     names = list(cols)
-    volts = {names[0]: 1.0} if not args.voltage else {}
-    for v in args.voltage:
-        k, x = v.split("=")
+    volts = {names[0]: 1.0} if not voltages else {}
+    for k, x in voltages.items():
         if k not in cols:
             raise SystemExit(f"unknown conductor {k!r}; have {', '.join(names)}")
         volts[k] = float(x)
@@ -491,23 +496,23 @@ def main(argv: list[str] | None = None) -> None:
             sig += v * s
     print(f"{len(tris)} panels")
 
-    if args.plane:
-        m = re.fullmatch(r"([xy])=(-?[\d.eE+-]+)", args.plane)
+    if plane:
+        m = re.fullmatch(r"([xy])=(-?[\d.eE+-]+)", plane)
         if not m:
             raise SystemExit("--plane expects x=VALUE or y=VALUE (µm)")
         axis, value = "xy".index(m[1]), float(m[2])
-        if args.window:
-            windows = [("window", tuple(float(v) for v in args.window.split(",")))]
+        if window:
+            windows = [("window", tuple(window))]
         else:
             windows = default_windows(tris, owner, axis, value)
-        cross_section(args.run, tris, sig, owner, volts, axis, value, args.threads, windows, args.res, args.seeds)
-        return
+        cross_section(run, tris, sig, owner, volts, axis, value, threads, windows, res, seeds)
+        return run
 
     cond = np.array([not o.startswith("diel") for o in owner])
     ctris = tris[cond]
     lo, hi = ctris.reshape(-1, 3).min(0), ctris.reshape(-1, 3).max(0)
-    if args.box:
-        b = [float(x) for x in args.box.split(",")]
+    if box:
+        b = [float(x) for x in box]
         lo, hi = np.array(b[:3]), np.array(b[3:])
     else:
         pad = 0.1 * (hi - lo)
@@ -515,11 +520,11 @@ def main(argv: list[str] | None = None) -> None:
         lo, hi = lo - pad, hi + pad
     ext = hi - lo
     # spacing: roughly cubic cells, but at least 24 points across the thinnest dimension
-    h = (np.prod(ext) / args.points) ** (1 / 3)
+    h = (np.prod(ext) / points) ** (1 / 3)
     h = min(h, ext[2] / 24)
     dims = np.maximum(np.round(ext / h).astype(int) + 1, 2)
-    if np.prod(dims) > 4 * args.points:  # flat boards: keep x/y resolution bounded
-        sxy = math.sqrt(args.points / dims[2] / (ext[0] * ext[1]))
+    if np.prod(dims) > 4 * points:  # flat boards: keep x/y resolution bounded
+        sxy = math.sqrt(points / dims[2] / (ext[0] * ext[1]))
         dims[:2] = np.maximum(np.round(ext[:2] * sxy).astype(int) + 1, 2)
     spacing = ext / (dims - 1)
     print(f"grid {dims[0]}x{dims[1]}x{dims[2]} = {np.prod(dims)} points, spacing {spacing[0]:.3g},{spacing[1]:.3g},{spacing[2]:.3g} µm")
@@ -527,13 +532,13 @@ def main(argv: list[str] | None = None) -> None:
     gx, gy, gz = (lo[i] + spacing[i] * np.arange(dims[i]) for i in range(3))
     Z, Y, X = np.meshgrid(gz, gy, gx, indexing="ij")  # VTK order: x fastest
     pts = np.column_stack([X.ravel(), Y.ravel(), Z.ravel()])
-    phi, E = coulomb(tris, sig, pts, args.threads)
+    phi, E = coulomb(tris, sig, pts, threads)
 
-    write_vtk_grid(args.run / "field.vtk", lo, spacing, dims, phi, E)
-    write_vtk_panels(args.run / "panels.vtk", tris, sig, owner)
+    write_vtk_grid(run / "field.vtk", lo, spacing, dims, phi, E)
+    write_vtk_panels(run / "panels.vtk", tris, sig, owner)
 
-    for p in args.probe:
-        r = np.array([[float(x) for x in p.split(",")]])
+    for p in probes:
+        r = np.array([list(p)])
         ph, e = coulomb(tris, sig, r, 1)
         print(f"probe ({p}) µm: phi={ph[0]:.4g} V  E=({e[0, 0]:.4g}, {e[0, 1]:.4g}, {e[0, 2]:.4g}) V/m  |E|={np.linalg.norm(e[0]):.4g} V/m")
 
@@ -541,7 +546,7 @@ def main(argv: list[str] | None = None) -> None:
     Em = np.linalg.norm(E, axis=1).reshape(dims[2], dims[1], dims[0])
     scale, unit = (1e-6, "V/µm") if np.nanpercentile(Em, 99) > 1e5 else (1e-3, "V/mm")
     Ek = Em * scale
-    zs = args.z_stretch or max(1.0, min(20.0, 0.25 * max(ext[0], ext[1]) / ext[2]))
+    zs = z_stretch or max(1.0, min(20.0, 0.25 * max(ext[0], ext[1]) / ext[2]))
     ix, iy, iz = dims[0] // 2, dims[1] // 2, dims[2] // 2
     planes = [(f"xz cut, y={gy[iy]:.0f} µm", X[:, iy, :], Y[:, iy, :], Z[:, iy, :], Ek[:, iy, :], True), (f"yz cut, x={gx[ix]:.0f} µm", X[:, :, ix], Y[:, :, ix], Z[:, :, ix], Ek[:, :, ix], False), (f"xy cut, z={gz[iz]:.1f} µm", X[iz], Y[iz], Z[iz], Ek[iz], False)]
     ownr = np.array(owner)
@@ -552,11 +557,31 @@ def main(argv: list[str] | None = None) -> None:
         dielectrics.append((max(float(k1), float(k2)), tris[ownr == key]))
     info = "|E| on the xz cut; " + ", ".join(f"{n}={volts.get(n, 0.0):g} V" for n in names) + (f"; z stretched ×{zs:.3g}" if zs != 1 else "")
     try:
-        write_html(args.run / "field.html", args.run.name, info, zs, unit, scale, conductors, dielectrics, planes)
-        html = f", {args.run / 'field.html'}"
+        write_html(run / "field.html", run.name, info, zs, unit, scale, conductors, dielectrics, planes)
+        html = f", {run / 'field.html'}"
     except ImportError:
         html = " (install plotly for field.html)"
-    print(f"wrote {args.run / 'field.vtk'}, {args.run / 'panels.vtk'}{html}")
+    print(f"wrote {run / 'field.vtk'}, {run / 'panels.vtk'}{html}")
+
+    return run
+
+
+def main(argv: list[str] | None = None) -> None:
+    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    ap.add_argument("run", type=Path, help="fieldsolve.py run directory (made with --charges)")
+    ap.add_argument("--voltage", action="append", default=[], metavar="NAME=VOLTS", help="conductor voltage; unlisted conductors are at 0 V (default: the first conductor at 1 V)")
+    ap.add_argument("--box", help="field region x0,y0,z0,x1,y1,z1 in µm (default: conductor bounding box + 10 %%)")
+    ap.add_argument("--points", type=float, default=60000, help="approximate grid size (points)")
+    ap.add_argument("--z-stretch", type=float, default=None, help="HTML only: exaggerate z by this factor (default: auto for flat boards)")
+    ap.add_argument("--seeds", type=int, default=60, help="--plane: field-line seeds written next to each section (for ParaView)")
+    ap.add_argument("--threads", type=int, default=min(8, os.cpu_count() or 1))
+    ap.add_argument("--plane", metavar="x=V|y=V", help="2-D cross-section instead of the 3-D grid: plot potential and |E| with arrows on the plane x=V or y=V (µm) as PNGs (full cut and an edge zoom)")
+    ap.add_argument("--window", metavar="U0,U1,Z0,Z1", help="--plane: plot only this window (µm, U = the in-plane horizontal axis)")
+    ap.add_argument("--res", type=int, default=320, help="--plane: points across the window")
+    ap.add_argument("--probe", action="append", default=[], metavar="X,Y,Z", help="print phi and E at this point (µm); repeatable")
+    args = ap.parse_args(argv)
+
+    field(args.run, voltages={k: float(v) for k, v in (x.split("=") for x in args.voltage)}, plane=args.plane, window=tuple(float(v) for v in args.window.split(",")) if args.window else None, res=args.res, seeds=args.seeds, points=args.points, box=tuple(float(v) for v in args.box.split(",")) if args.box else None, z_stretch=args.z_stretch, threads=args.threads, probes=[tuple(float(v) for v in p.split(",")) for p in args.probe])
 
 
 if __name__ == "__main__":

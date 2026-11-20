@@ -1,14 +1,19 @@
 # ivtx_rdl: iVTX RDL ladder
 
-HyperLynx runs of the iVTX RDL ladder (obelix1 chips on the Uni Bonn RDL, Andreas Ulm's design), all through the
-generic `layz hyp` analyses. `flow.py` reads top to bottom, step by step, like an OpenROAD
+The full flow of the iVTX RDL ladder (obelix1 chips on the Uni Bonn RDL, Andreas Ulm's design):
+the GDS's design rules and connectivity, its HyperLynx board, then DC drop, SI and S-parameters,
+all through layz's generic API. `flow.py` reads top to bottom, step by step, like an OpenROAD
 flow script; it only names this design's files, nets, pins and aggressors.
 
 ```sh
-layz hyp -d ivtx_rdl                 # list the targets (on a machine with HyperLynx: juno, jupiter)
-layz hyp -d ivtx_rdl all             # run them all
-layz hyp -d ivtx_rdl dc si           # or some, by name
+layz run --design designs/ivtx_rdl              # every target, in order (HyperLynx: juno, jupiter)
+layz run --design ivtx_rdl drc lvs              # or some, by name
+layz run --design ivtx_rdl --list               # the targets
 ```
+
+`board` writes the HyperLynx board straight from the GDS, and stops until every net there has a
+net label on its pin layer (the GDS's labels are on 80/7 today); `lvs` checks no net until then.
+The HyperLynx targets use Andreas' KiCad export meanwhile.
 
 Each target names its inputs and limits itself, runs, checks and plots into its folder in
 `results/ivtx_rdl/`:

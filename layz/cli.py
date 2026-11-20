@@ -1,6 +1,8 @@
 """layz: layout tools for SiLab's FR4 PCBs, RDL chips and flex PCBs.
 
-In the order they run:
+    layz run       a design's flow, from DRC and LVS to SI and power: its targets, in order
+
+In the order they run, one by one:
 
     layz doctor    which external tools (KiCad, FasterCap, ParaView, ...) this machine has, then the tests
     layz drc       design rule check of a GDS (gdscheck, the kit's deck)
@@ -8,7 +10,6 @@ In the order they run:
     layz pex       capacitance matrix with FasterCap/FastCap2 (GDS + stack, or .kicad_pcb)
     layz field     electric field and potential from a `layz pex --charges` run
     layz gds2hyp   GDS / KiCad .kicad_pcb / .hyp -> HyperLynx .hyp (signal pours as traces)
-    layz hyp       HyperLynx headless on a .hyp: setup, info, dc, si, sparam, plot, run
     layz view      open a result: a .lyrdb in KLayout, or ParaView renders of a field run
 
 Utilities:
@@ -29,7 +30,7 @@ import sys
 from pathlib import Path
 
 # command -> (module, one-line help); modules load lazily, so `layz svg` doesn't import pcbnew
-COMMANDS = {"doctor": ("layz.doctor", "which external tools this machine has, then the tests"), "drc": ("layz.drc.check", "design rule check of a GDS"), "lvs": ("layz.lvs.compare", "GDS connectivity vs a KiCad schematic"), "pex": ("layz.pex.cli", "capacitance matrix with FasterCap/FastCap2"), "field": ("layz.field.compute", "electric field and potential from a `layz pex --charges` run"), "gds2hyp": ("layz.gds2hyp.convert", "GDS / KiCad .kicad_pcb / .hyp -> HyperLynx .hyp"), "hyp": ("layz.hyperlynx.cli", "HyperLynx headless on a .hyp: setup, info, dc, si, sparam, plot, run"), "view": (None, "ParaView renders of a run: section | geometry | field"), "gds2pcb": ("layz.gds2pcb.convert", "GDS -> KiCad .kicad_pcb"), "svg": ("layz.svg.render", "GDS -> SVG preview")}
+COMMANDS = {"run": ("layz.flow", "a design's flow: its targets, in order"), "doctor": ("layz.doctor", "which external tools this machine has, then the tests"), "drc": ("layz.drc.check", "design rule check of a GDS"), "lvs": ("layz.lvs.compare", "GDS connectivity vs a KiCad schematic"), "pex": ("layz.pex.cli", "capacitance matrix with FasterCap/FastCap2"), "field": ("layz.field.compute", "electric field and potential from a `layz pex --charges` run"), "gds2hyp": ("layz.gds2hyp.convert", "GDS / KiCad .kicad_pcb / .hyp -> HyperLynx .hyp"), "view": (None, "ParaView renders of a run: section | geometry | field"), "gds2pcb": ("layz.gds2pcb.convert", "GDS -> KiCad .kicad_pcb"), "svg": ("layz.svg.render", "GDS -> SVG preview")}
 
 VIEWS = {"section": "section.py", "geometry": "geometry.py", "field": "view.py"}
 

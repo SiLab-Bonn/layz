@@ -25,7 +25,7 @@ needs_fastercap = pytest.mark.skipif(not HAVE_FASTERCAP, reason="FasterCap not o
 def test_cli_lists_commands(capsys):
     assert cli.main(["--help"]) == 0
     out = capsys.readouterr().out
-    for cmd in ("gds2pcb", "gds2hyp", "hyp", "lvs", "pex", "field", "view", "doctor"):
+    for cmd in ("run", "gds2pcb", "gds2hyp", "lvs", "pex", "field", "view", "doctor"):
         assert f"layz {cmd}" in out
 
 
@@ -112,6 +112,41 @@ def test_gds_conversions_need_a_label_on_every_net(tmp_path):
         gds2pcb.main(["--lay", str(tmp_path / "bare.gds"), "--stack", str(TESTS / "route.toml"), "-o", str(tmp_path / "b.kicad_pcb")])
     with pytest.raises(SystemExit, match="net without a label"):
         cli.main(["gds2hyp", str(tmp_path / "bare.gds"), "--stack", str(TESTS / "route.toml"), "-o", str(tmp_path / "b.hyp")])
+
+
+@needs_fastercap
+def test_pex_and_field_api(tmp_path):
+    """The flow API: run.capacitance -> analysis -> plots, then field.run on its charges."""
+    from layz.field import run as field
+    from layz.pex import analysis, plots
+    from layz.pex import run as pex
+
+    caps = pex.capacitance(TESTS / "plates.gds", tmp_path / "pex", stack=TESTS / "plates.toml", cell=None, names={"TOP": ("TOP", 500.0, 500.0), "BOT": ("BOT", 500.0, 500.0)}, nets=None, split_nets=False, solver="fastercap", tolerance=0.01, mesh=0.5, d_coeff=0.5, galerkin=False, amax=None, delaunay_b=0.5, charges=True, stl=False, refill=False)
+    rows = analysis.coupling(caps, max_coupling_fF=1000.0, out=caps / "coupling.csv")
+    assert rows[0]["mutual_fF"] == pytest.approx(918.8, rel=0.02) and rows[0]["pass"]
+    assert (caps / "coupling.csv").exists() and len(analysis.totals(caps, out=None)) == 2
+    assert {p.suffix for p in plots.matrix(caps, caps)} == {".png", ".pdf"}
+    top = next(n for n in analysis.matrix(caps)[0] if n.startswith("TOP"))
+    field.field(caps, voltages={top: 1.0}, plane="y=500", window=(400.0, 1100.0, -5.0, 20.0), res=40, seeds=5, points=2000, box=None, z_stretch=None, threads=2, probes=[])
+    assert (caps / "section_y500_window.png").exists() and (caps / "section_y500_window.pdf").exists()
+
+
+def test_drc_and_lvs_api(tmp_path):
+    """The flow API of the checks: drc on the RDL kit, lvs of test/route.gds against a netlist."""
+    from layz.lvs import analysis as lvs_analysis
+    from layz.lvs import run as lvs
+
+    net = tmp_path / "route.net"
+    net.write_text('(export (nets (net (code "1") (name "SIG") (node (ref "U1") (pin "1")) (node (ref "U2") (pin "1"))) (net (code "2") (name "GND"))))')
+    checked = lvs.lvs(TESTS / "route.gds", tmp_path / "lvs", stack=TESTS / "route.toml", schematic=net)
+    rows = {r["check"]: r for r in lvs_analysis.findings(checked, out=checked / "summary.csv")}
+    assert all(rows[k]["pass"] for k in ("open", "short", "unknown", "floating")) and (checked / "lvs.lyrdb").exists()
+    if shutil.which("gdscheck") or (Path.home() / ".cargo/bin/gdscheck").exists():
+        from layz.drc import analysis as drc_analysis
+        from layz.drc import run as drc
+
+        done = drc.drc(TESTS / "route.gds", tmp_path / "drc", kit="uni-bonn-rdl", suite="geometry", topcell=None, tile=20000.0)
+        assert (done / "drc.lyrdb").exists() and drc_analysis.violations(done, max_violations=0, out=None)
 
 
 @needs_fastercap
@@ -369,17 +404,19 @@ def test_eye_densify_and_hexagon():
     assert len(hx) == 6 and hx[:, 1].max() <= 0.5 + 1e-9 and hx[:, 1].min() >= -0.5 - 1e-9
 
 
-def test_hyperlynx_targets(tmp_path, capsys):
-    from layz.hyperlynx import cli, targets
+def test_flow_targets(tmp_path, capsys):
+    from layz import flow as targets
 
     flow = tmp_path / "flow.py"
-    flow.write_text('from layz.hyperlynx import target\nDONE = []\n\n@target\ndef first():\n    """One."""\n    DONE.append("first")\n\n@target\ndef second():\n    """Two, after first."""\n    if "first" not in DONE:\n        first()\n    (DONE.append("second"), open(__file__ + ".out", "w").write(" ".join(DONE)))\n')
-    assert cli.main(["-f", str(flow)]) == 0
+    flow.write_text('from layz.flow import target\nDONE = []\n\n@target\ndef first():\n    """One."""\n    DONE.append("first")\n\n@target\ndef second():\n    """Two, after first."""\n    if "first" not in DONE:\n        first()\n    (DONE.append("second"), open(__file__ + ".out", "w").write(" ".join(DONE)))\n\n@target\ndef third():\n    """Fails."""\n    raise SystemExit("broken")\n\n@target\ndef fourth():\n    """After the failure."""\n    open(__file__ + ".4", "w").write("ran")\n')
+    assert targets.main(["-f", str(flow), "--list"]) == 0
     listing = capsys.readouterr().out
     assert "first" in listing and "Two, after first." in listing
-    assert cli.main(["-f", str(flow), "second"]) == 0
+    assert targets.main(["-f", str(flow), "second"]) == 0
     assert (tmp_path / "flow.py.out").read_text() == "first second"
+    assert targets.main(["-f", str(flow)]) == 1 and not (tmp_path / "flow.py.4").exists()  # all, in order: stops at third
+    assert targets.main(["-f", str(flow), "-k"]) == 1 and (tmp_path / "flow.py.4").exists()  # --keep-going
     with pytest.raises(SystemExit):
-        cli.main(["-f", str(flow), "nope"])
+        targets.main(["-f", str(flow), "nope"])
     with pytest.raises(TypeError):
         targets.target(lambda x: None)

@@ -1,4 +1,4 @@
-"""Plots of `layz hyp` run folders, in layz.plotstyle (FRIDA's style). Each folder's job.json
+"""Plots of HyperLynx run folders (layz.hyperlynx.run), in layz.plotstyle (FRIDA's style). Each folder's job.json
 says what it holds; nothing here knows a design's net names.
 
     dc       pin voltages (supply nets | their reference nets), via currents, loss map

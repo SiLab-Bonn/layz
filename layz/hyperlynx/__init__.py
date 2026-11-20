@@ -1,12 +1,13 @@
-"""Run HyperLynx (Siemens, licensed) headless from layz: `layz hl ...`.
+"""Run HyperLynx (Siemens, licensed) headless from layz: the targets of a flow (`layz run`).
 
 HyperLynx ships its own Python (``Scripting/bin/pythonHL``, 3.11) with a ``hyperlynx`` module
 that drives BoardSim without its GUI. layz (its own venv) prepares everything around it and
 runs small scripts (``runner/``) with that Python:
 
     setup.py     find the install, build a writable overlay of it, the environment
-    cli.py       `layz hl setup|info|dc|si|sparam|plot`: copy the board into a run folder,
+    run.py       the API a flow's targets call (layz.flow): copy the board into a run folder,
                  write job.json, run a runner, collect its CSVs
+    analysis.py  the results against limits
     runner/      the scripts HyperLynx's Python runs (stdlib + hyperlynx only)
     plots.py     plots of a run folder, in the plot style of layz.plotstyle
 
@@ -22,5 +23,3 @@ What the API needs, found by trying it (it has no documentation):
 * A wrong argument can crash the Python process outright; the runners stick to calls known
   to work.
 """
-
-from layz.hyperlynx.targets import target  # noqa: F401  (for flow files)

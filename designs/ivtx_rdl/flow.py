@@ -1,19 +1,59 @@
-# iVTX RDL ladder (obelix1 chips on the Uni Bonn RDL, Andreas Ulm): HyperLynx SI/PI flow.
+# iVTX RDL ladder (obelix1 chips on the Uni Bonn RDL, Andreas Ulm): the full flow, from the
+# GDS's design rules and connectivity to SI and power.
 #
-# Run on a machine with HyperLynx (juno, jupiter), from the repo:
-#   layz hyp -d ivtx_rdl                 list the targets
-#   layz hyp -d ivtx_rdl dc si           run some, by name
-#   layz hyp -d ivtx_rdl all             run them all, in this file's order
-# Each target names its own inputs and every HyperLynx setting it uses (layz.hyperlynx.run
-# documents them), runs, checks the results against its limits and plots them, all in
-# results/ivtx_rdl/<target>/.
+# Run from the repo (the HyperLynx targets on a machine with HyperLynx: juno, jupiter):
+#   layz run --design designs/ivtx_rdl              every target, in this file's order
+#   layz run --design ivtx_rdl drc lvs              some, by name
+#   layz run --design ivtx_rdl --list               the targets
+#   layz run --design ivtx_rdl -k                   on past a failing target
+# Each target names its own inputs and every setting it uses (layz.drc.run, layz.lvs.run,
+# layz.hyperlynx.run document them), runs, checks the results against its limits and plots
+# them, all in results/ivtx_rdl/<target>/.
 
 import shutil
 from pathlib import Path
 
+from layz import stack
+from layz.drc import analysis as drc_analysis
+from layz.drc import run as drc_run
+from layz.flow import target
 from layz.gds2hyp import convert as gds2hyp
-from layz.hyperlynx import analysis, plots, run, target
+from layz.gds2hyp import gds as gds_hyp
+from layz.hyperlynx import analysis, plots, run
 from layz.hyperlynx import setup as hyperlynx
+from layz.lvs import analysis as lvs_analysis
+from layz.lvs import run as lvs_run
+
+HERE = Path(__file__).parent
+GDS = HERE / "obelix1_ivtx_ladder_v2.gds"
+SCHEMATIC = HERE / "obelix1_ivtx_ladder_f.kicad_sch"
+
+
+@target
+def drc():
+    """The GDS against the Uni Bonn RDL's design rules (gdscheck, tech/uni-bonn-rdl)."""
+    checked = drc_run.drc(GDS, Path("results/ivtx_rdl/drc"), kit="uni-bonn-rdl", suite="main", topcell=None, tile=20000.0)
+    drc_analysis.violations(checked, max_violations=0, out=checked / "violations.csv")
+
+
+@target
+def lvs():
+    """The GDS's nets, named by its labels on the pin layers (6/1, 3/1, 8/1, 68/1), against the
+    schematic."""
+    checked = lvs_run.lvs(GDS, Path("results/ivtx_rdl/lvs"), stack="uni-bonn-rdl", schematic=SCHEMATIC)
+    lvs_analysis.findings(checked, out=checked / "summary.csv")
+
+
+@target
+def board():
+    """The HyperLynx board straight from the GDS (no KiCad), its nets and pins from the GDS's
+    labels. Stops until the GDS has a net label on every net: its labels are on 80/7 (notes)
+    today, not on the pin layers. The targets below still use Andreas' KiCad export."""
+    out = Path("results/ivtx_rdl/board")
+    out.mkdir(parents=True, exist_ok=True)
+    hyp = out / "obelix1_ivtx_ladder_v2.hyp"
+    gds_hyp.write_hyp(GDS, stack.load("uni-bonn-rdl"), hyp, drill_shrink_um=10.0)
+    gds2hyp.traces_pass(hyp, "auto", 0.08)
 
 
 @target

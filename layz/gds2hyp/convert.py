@@ -19,7 +19,7 @@ the same records, in the same order and number format.
     layz gds2hyp board.kicad_pcb [-o board.hyp]
     layz gds2hyp exported.hyp -o with_traces.hyp                             (pours -> traces only)
 
-Running HyperLynx on the result: `layz hyp` (layz.hyperlynx).
+Running HyperLynx on the result: a flow's targets (`layz run`, layz.hyperlynx.run).
 
 Signal routes drawn as polygons (every GDS route, and KiCad zones made from them) become pours,
 which HyperLynx BoardSim cannot model as transmission lines (no length, loss or crosstalk). By
@@ -278,7 +278,6 @@ TRACE_MAX_WIDTH_MM = 0.08  # auto: nets whose strips are at most this wide (sign
 def _parse_nets(lines: list[str]):
     """Each {NET=...} block of a .hyp: (name, first line, last line, polygons per layer, anchors,
     pin count, whether it has voids/arcs in its pours)."""
-    import re
 
     from shapely.geometry import Point, Polygon
 
@@ -441,7 +440,7 @@ def traces_pass(hyp_path: Path, select: str, max_width_mm: float) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0], epilog="Running HyperLynx on the .hyp: layz hyp {setup,info,dc,si,sparam,plot,run} -h")
+    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0], epilog="Running HyperLynx on the .hyp: a flow's targets, layz run -h")
     ap.add_argument("input", type=Path, help="a GDS (with --stack), a .kicad_pcb board, or a .hyp to rewrite")
     ap.add_argument("-o", "--out", type=Path, help="output .hyp (default: next to the input)")
     ap.add_argument("--stack", type=Path, help="GDS input: layz process stack (.toml)")

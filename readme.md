@@ -4,13 +4,14 @@ Layout tools for SiLab's FR4 PCBs, in-house RDL chips (maskless lithography) and
 that connect them, as one command line tool. Install: [docs/install.md](docs/install.md).
 
 ```
+layz run       a design's flow, from DRC and LVS to SI and power: its targets, in order
+
 layz doctor    which external tools this machine has, then the tests
 layz drc       design rule check of a GDS (gdscheck, with the kit's deck)
 layz lvs       GDS connectivity vs a KiCad schematic (net and pin labels)
 layz pex       3-D capacitance matrix with FasterCap/FastCap2 (GDS + stack, or .kicad_pcb)
 layz field     electric field and potential from a `layz pex --charges` run
 layz gds2hyp   GDS, .kicad_pcb or .hyp -> HyperLynx .hyp (signal pours as traces)
-layz hyp       HyperLynx headless on a .hyp: DC drop, SI, eye, crosstalk, S-parameters
 layz view      open a result: DRC/LVS markers in KLayout, ParaView renders of a field run
 
 utilities:
@@ -34,7 +35,7 @@ flowchart LR
     lvs(["layz lvs"])
     pcb(["layz gds2pcb"])
     hyp(["layz gds2hyp"])
-    hl(["layz hyp"])
+    hl(["layz run (HyperLynx targets)"])
     pex(["layz pex"])
     field(["layz field"])
     svg(["layz svg"])
@@ -71,7 +72,7 @@ layz/
 │   ├── drc/  lvs/        layz drc, layz lvs
 │   ├── gds2pcb/          layz gds2pcb
 │   ├── gds2hyp/          layz gds2hyp (traces.py: pours -> traces)
-│   ├── hyperlynx/        layz hyp (runner/: scripts in HyperLynx's own Python)
+│   ├── hyperlynx/        HyperLynx targets' API (runner/: scripts in HyperLynx's own Python)
 │   ├── pex/  field/      layz pex, layz field (field/paraview/: layz view's scripts)
 │   ├── svg/              layz svg
 │   └── cli.py, doctor.py, stack.py, plotstyle.py, solvers.py
@@ -171,31 +172,44 @@ pours (right for DC drop). `auto` takes nets with ≥ 2 pins that are ≥ 95 % s
 `--trace-max-width` (0.08 mm). On the obelix1 export that is the 17 signal nets (CLK, CMD, rst,
 D1–D4, ADC_1–4: 40 µm, 9 to 131 mm), which HyperLynx then sees with their lengths and coupling.
 
-## layz hyp
+## layz run
 
-Runs HyperLynx's BoardSim (VX.2.14 / 2409; licensed) headless through HyperLynx's own Python,
-as the **targets** of a design's flow: `designs/<design>/flow.py` defines each step as a
-function decorated `@target`, without arguments or return value. A target takes the inputs it
-needs, runs the simulation, checks the results against the design's limits and plots them into
-its own output folder. `layz hyp` runs them by name:
+A design's whole flow, from DRC and LVS to SI and power, as the **targets** of its
+`flow.py`: each step a function decorated `@target`, without arguments or return value. A target
+takes the inputs it needs, runs a tool through layz's Python API, checks the results against the
+design's limits and plots them into its own output folder. `layz run` runs them in order:
 
 ```sh
-export MGLS_LICENSE_FILE=27504@nexus.physik.uni-bonn.de   # the license server
-layz hyp -d ivtx_rdl                                      # list the design's targets
-layz hyp -d ivtx_rdl setup                                # HyperLynx overlay + the board
-layz hyp -d ivtx_rdl dc si                                # run some, in this order
-layz hyp -d ivtx_rdl all                                  # all, in the file's order
-layz hyp -f path/to/flow.py TARGET                        # a flow file elsewhere (default ./flow.py)
+export MGLS_LICENSE_FILE=27504@nexus.physik.uni-bonn.de   # HyperLynx's license server
+layz run --design designs/ivtx_rdl                        # every target, in the file's order
+layz run --design ivtx_rdl drc lvs                        # some, by name (a name: designs/NAME)
+layz run --design ivtx_rdl --list                         # the targets
+layz run --design ivtx_rdl -k                             # on past a failing target
+layz run --flow path/to/flow.py                           # a flow file elsewhere (default ./flow.py)
 ```
 
-The usual targets are `setup`, `info`, `dc`, `si` and `sparams`. Each names its own files, nets,
+Every tool has the same API, one package each: `run` runs it into a folder with every option
+given (no defaults), `analysis` checks the results against limits (a table, printed and written
+as CSV), `plots` plots them in `layz.plotstyle`:
+
+| | run | analysis | plots |
+| --- | --- | --- | --- |
+| design rules | `layz.drc.run.drc` | `layz.drc.analysis.violations` | KLayout markers (`layz view`) |
+| connectivity | `layz.lvs.run.lvs` | `layz.lvs.analysis.findings` | KLayout markers |
+| HyperLynx board | `layz.gds2hyp.gds.write_hyp` (GDS), `layz.gds2hyp.convert` (board) | | |
+| capacitance | `layz.pex.run.capacitance` | `layz.pex.analysis.coupling`, `totals` | `layz.pex.plots.matrix` |
+| E-field | `layz.field.run.field` | | cross-sections (PNG/PDF), VTK |
+| DC, SI, S-parameters | `layz.hyperlynx.run.dc`, `si`, `sparam`, `info` | `layz.hyperlynx.analysis.*` | `layz.hyperlynx.plots.*` |
+
+For HyperLynx the usual targets are `setup`, `info`, `dc`, `si` and `sparams`. Each names its own files, nets,
 limits and every HyperLynx setting it uses (no defaults: `layz.hyperlynx.run` documents them),
 so it reads on its own; one from
 [designs/ivtx_rdl/flow.py](designs/ivtx_rdl/flow.py):
 
 ```python
 from pathlib import Path
-from layz.hyperlynx import analysis, plots, run, target
+from layz.flow import target
+from layz.hyperlynx import analysis, plots, run
 
 
 @target

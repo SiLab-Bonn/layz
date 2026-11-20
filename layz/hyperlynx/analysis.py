@@ -1,36 +1,17 @@
-"""Checks of `layz hyp` run folders against a design's limits: DC drop per rail, eye opening,
+"""Checks of HyperLynx run folders (layz.hyperlynx.run) against a design's limits: DC drop per rail, eye opening,
 crosstalk noise, insertion and return loss. Each returns rows (dicts), prints them as a table and
 writes them as CSV; the limits are the design's (its flow.py), nothing here knows net names.
 """
 
 from __future__ import annotations
 
-import csv
 import json
 from pathlib import Path
 
 import numpy as np
 
 from layz.hyperlynx import plots
-
-
-def _table(title: str, rows: list[dict], out: Path | None) -> list[dict]:
-    if not rows:
-        return rows
-    keys = list(rows[0])
-    fmt = lambda v: f"{v:.4g}" if isinstance(v, float) else str(v)
-    width = {k: max(len(k), *(len(fmt(r[k])) for r in rows)) for k in keys}
-    print(title)
-    print("  " + "  ".join(k.ljust(width[k]) for k in keys))
-    for r in rows:
-        print("  " + "  ".join(fmt(r[k]).ljust(width[k]) for k in keys))
-    if out is not None:
-        out.parent.mkdir(parents=True, exist_ok=True)
-        with open(out, "w", newline="") as f:
-            w = csv.DictWriter(f, keys)
-            w.writeheader()
-            w.writerows(rows)
-    return rows
+from layz.table import table
 
 
 def dc_drop(run: Path, *, max_drop: float, out: Path | None) -> list[dict]:
@@ -48,7 +29,7 @@ def dc_drop(run: Path, *, max_drop: float, out: Path | None) -> list[dict]:
         drop, rise = v["voltage"] - min(sup), (max(ret) if ret else 0.0)
         share = (drop + rise) / v["voltage"]
         rows.append({"net": v["power_net"], "vrm_V": v["voltage"], "min_pin_V": min(sup), "drop_mV": drop * 1e3, "return": v["ref_net"], "return_rise_mV": rise * 1e3, "total_pct": share * 100, "limit_pct": max_drop * 100, "pass": share <= max_drop})
-    return _table(f"DC drop ({run.name})", rows, out)
+    return table(f"DC drop ({run.name})", rows, out)
 
 
 def net_density(run: Path, nets: set[str]) -> dict[str, np.ndarray]:
@@ -93,10 +74,10 @@ def connectivity(hyp: Path, *, tolerance_m: float, nets: list[str] | None, out: 
             rows.append({"net": net, "pins": len(ps), "unconnected": len(far), "which": " ".join(f"{r}({d * 1e3:.1f}mm)" for r, d in far)})
     unassigned = [n for n in cu if n.startswith("EmptyNet")]
     area = sum(g.area for n in unassigned for g in cu[n].values()) * 645.16
-    return _table(f"Connectivity ({Path(hyp).name}): pins farther than {tolerance_m * 1e6:.0f} um from their net's copper; {len(unassigned)} pieces of copper ({area:.1f} mm²) on no net", rows, out)
+    return table(f"Connectivity ({Path(hyp).name}): pins farther than {tolerance_m * 1e6:.0f} um from their net's copper; {len(unassigned)} pieces of copper ({area:.1f} mm²) on no net", rows, out)
 
 
-def dc_table(supply: Path, ret: Path | None, *, out: Path | None) -> list[dict]:
+def dctable(supply: Path, ret: Path | None, *, out: Path | None) -> list[dict]:
     """Per net of a DC run, as in a design review: resistance from the VRM to the net's sink pins
     (min, max; HyperLynx's resistance matrix), voltage drop over those pins (min, max: the VRM
     voltage less the pin's on a supply net, the rise on a return net), and current density (the
@@ -122,7 +103,7 @@ def dc_table(supply: Path, ret: Path | None, *, out: Path | None) -> list[dict]:
         r = np.array([float(x["resistance_ohm"]) for x in res if x["net"] == net])
         j = dens.get(net, np.array([]))
         rows.append({"net": net, "kind": "return" if net in refs else "supply", "sink_pins": len(pins), "current_A": float(sum(abs(float(p["current_A"])) for p in pins)), "R_min_mohm": float(r.min()) * 1e3 if r.size else np.nan, "R_max_mohm": float(r.max()) * 1e3 if r.size else np.nan, "drop_min_V": float(drop.min()) if drop.size else np.nan, "drop_max_V": float(drop.max()) if drop.size else np.nan, "J_median_A_mm2": float(np.median(j)) / 1e6 if j.size else np.nan, "J_max_A_mm2": float(j.max()) / 1e6 if j.size else np.nan})
-    return _table(f"DC per net ({supply.name}{' + ' + ret.name if ret is not None else ''})", rows, out)
+    return table(f"DC per net ({supply.name}{' + ' + ret.name if ret is not None else ''})", rows, out)
 
 
 def current_density(run: Path, *, max_density: float, out: Path | None) -> list[dict]:
@@ -136,7 +117,7 @@ def current_density(run: Path, *, max_density: float, out: Path | None) -> list[
         k = np.unravel_index(np.nanargmax(J), J.shape)
         rows.append({"layer": lay, "max_A_per_mm2": float(np.nanmax(J)) / 1e6, "x_mm": ext[0] + (k[1] + 0.5) * (ext[1] - ext[0]) / J.shape[1], "y_mm": ext[2] + (k[0] + 0.5) * (ext[3] - ext[2]) / J.shape[0], "max_drop_mV_per_mm": rho * float(np.nanmax(J)), "over_limit_pct": 100 * float(np.nanmean(J[np.isfinite(J)] > max_density)), "limit_A_per_mm2": max_density / 1e6, "pass": bool(np.nanmax(J) <= max_density)})
     hl = json.loads((run / "summary.json").read_text())["max_current_density"]
-    return _table(f"Current density ({run.name}; HyperLynx's own maximum: {hl['value'] / 1e6:.0f} A/mm² on {hl['layer']} at ({hl['at'][0] * 1e3:.1f}, {hl['at'][1] * 1e3:.1f}) mm)", rows, out)
+    return table(f"Current density ({run.name}; HyperLynx's own maximum: {hl['value'] / 1e6:.0f} A/mm² on {hl['layer']} at ({hl['at'][0] * 1e3:.1f}, {hl['at'][1] * 1e3:.1f}) mm)", rows, out)
 
 
 def _at(run: Path, at: str | None) -> list[dict]:
@@ -159,7 +140,7 @@ def eyes(runs: list[Path], *, min_height: float, min_width_ui: float, at: str | 
             e = plots.eye(t, v, ui, skip_ui=skip_ui, centre_window=centre_window, edge_levels=edge_levels)
             hgt, wid = e["height"], e["width"]
             rows.append({"run": run.name, "wave": w["name"], "height_mV": hgt * 1e3, "width_ns": wid * 1e9, "width_ui": wid / ui, "rise_ps": e["rise"] * 1e12, "fall_ps": e["fall"] * 1e12, "pass": bool(hgt >= min_height and wid / ui >= min_width_ui)})
-    return _table(f"Eyes (limits: height >= {min_height * 1e3:.0f} mV, width >= {min_width_ui:.2f} UI)", rows, out)
+    return table(f"Eyes (limits: height >= {min_height * 1e3:.0f} mV, width >= {min_width_ui:.2f} UI)", rows, out)
 
 
 def crosstalk(run: Path, *, max_noise: float, at: str | None, settle: float, out: Path | None) -> list[dict]:
@@ -170,7 +151,7 @@ def crosstalk(run: Path, *, max_noise: float, at: str | None, settle: float, out
         t, v = plots.wave(run / w["file"])
         k = t > t[0] + settle * (t[-1] - t[0])  # after the start-up
         rows.append({"wave": w["name"], "noise_pp_mV": float(np.ptp(v[k])) * 1e3, "noise_rms_mV": float(v[k].std()) * 1e3, "limit_pp_mV": max_noise * 1e3, "pass": bool(np.ptp(v[k]) <= max_noise)})
-    return _table(f"Crosstalk ({run.name}, limit {max_noise * 1e3:.0f} mV p-p)", rows, out)
+    return table(f"Crosstalk ({run.name}, limit {max_noise * 1e3:.0f} mV p-p)", rows, out)
 
 
 def sparams(run: Path, *, at_hz: float, min_sdd21_db: float, max_sdd11_db: float, out: Path | None) -> list[dict]:
@@ -185,4 +166,4 @@ def sparams(run: Path, *, at_hz: float, min_sdd21_db: float, max_sdd11_db: float
     db = lambda x: float(20 * np.log10(abs(x) + 1e-30))
     sdd21, sdd11 = db(Smm[k, 1, 0]), db(Smm[k, 0, 0])
     rows = [{"pins": " ".join(info["pins"]), "f_MHz": f[k] / 1e6, "SDD21_dB": sdd21, "SDD11_dB": sdd11, "SCD21_dB": db(Smm[k, 3, 0]), "pass": bool(sdd21 >= min_sdd21_db and sdd11 <= max_sdd11_db)}]
-    return _table(f"S-parameters at {at_hz / 1e6:.0f} MHz (limits: SDD21 >= {min_sdd21_db} dB, SDD11 <= {max_sdd11_db} dB)", rows, out)
+    return table(f"S-parameters at {at_hz / 1e6:.0f} MHz (limits: SDD21 >= {min_sdd21_db} dB, SDD11 <= {max_sdd11_db} dB)", rows, out)
