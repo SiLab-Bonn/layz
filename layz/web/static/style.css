@@ -171,3 +171,9 @@ select.modes { position: absolute; left: 10px; top: 8px; z-index: 2; }
 .title .good { color: var(--sem-ok); } .title .bad { color: var(--sem-error); } .title .dim { color: var(--ink-4); }
 .head .doc { font-size: 12px; }
 section.target { scroll-margin-top: 10px; }
+.tools { position: absolute; left: 10px; top: 8px; display: flex; gap: 6px; align-items: center; z-index: 3; }
+.tools button.fit, .tools select.modes { position: static; margin: 0; }
+button.fit { left: auto; bottom: auto; }
+.canvas .picked { left: auto; right: 10px; top: 92px; max-width: 45%; text-align: left; }
+.view3d .legend { position: absolute; right: 10px; top: 8px; color: var(--ink-4); font-size: 11px; }
+.head .doc { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

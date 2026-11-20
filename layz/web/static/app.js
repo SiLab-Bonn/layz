@@ -141,7 +141,7 @@ function stage(d, t, i) {
     }]);
     right.push(["3D", async () => {
       const inp = await inputs();
-      return inp.layout ? view3d(inp.layout) : h("div", { class: "caption" }, "3D: with the board, below");
+      return inp.layout ? view3d(inp.layout) : h("div", { class: "caption" }, "—");
     }]);
     right.push(["schematic", async () => {
       const inp = await inputs();
@@ -185,7 +185,7 @@ function stage(d, t, i) {
   };
   const left = [];
   if (t.name === "setup") left.push(["inputs", () => h("table", { class: "kvtable" }, h("tr", {}, h("td", {}, "flow"), h("td", {}, d.flow)), Object.entries(d.inputs).map(([k, v]) => h("tr", {}, h("td", {}, k), h("td", {}, v))))]);
-  if (t.name === "setup") left.push(["layout facts", async () => { const inp = await inputs(); return inp.layout ? h("div", { class: "facts" }, layoutFacts(inp.layout)) : h("div", { class: "caption" }, "the board's facts: with the board, below"); }]);
+  if (t.name === "setup") left.push(["layout facts", async () => { const inp = await inputs(); return inp.layout ? h("div", { class: "facts" }, layoutFacts(inp.layout)) : h("div", { class: "caption" }, "—"); }]);
   if (isBoard) left.push(["board facts", async () => h("div", { class: "facts" }, layoutFacts(await board()))]);
   const names = t.tables.map((tb) => tb.path.split("/").slice(1).join("/").replace(/\.csv$/, ""));
   t.tables.forEach((tb, k) => left.push([names[k], () => table(tb, t.markers ? mark : null)]));
@@ -201,7 +201,7 @@ function stage(d, t, i) {
   return h("section", { class: `target ${t.status}`, id: `t-${t.name}` },
     h("div", { class: "head" },
       h("span", { class: "step" }, String(i + 1).padStart(2, "0")), chip(t.status), h("span", { class: "name" }, t.name),
-      h("span", { class: "doc" }, t.doc), h("span", { class: "caption" }, t.seconds == null ? "" : `${t.seconds.toFixed(0)} s`)),
+      h("span", { class: "doc", title: t.doc }, firstSentence(t.doc)), h("span", { class: "caption" }, t.seconds == null ? "" : `${t.seconds.toFixed(0)} s`)),
     t.error ? h("div", { class: "error" }, t.error) : null,
     leftTabs || rightTabs ? h("div", { class: rightTabs && leftTabs ? "split" : "single" }, leftTabs, rightTabs) : null);
 }
@@ -213,6 +213,7 @@ function boardTarget(d) {
 }
 
 const overlayName = (o) => ({ dc: "current density" })[base(o).split("_")[0]] || base(o).replace(/\.overlay\.json$/, "");
+const firstSentence = (text) => { const m = (text || "").match(/^.*?[.:;](\s|$)/); return m ? m[0].trim().replace(/[:;]$/, "") : text; };
 const plotLabel = (png) => base(png).replace(/\.png$/, "").replace(/_/g, " ");
 
 // ---------------------------------------------------------------- tables, violations, logs
@@ -365,8 +366,8 @@ async function svgViewer(themes, index = null) {
   };
   themeListeners.add(show);
   await show();
-  holder.append(h("button", { class: "fit", title: "back to the whole sheet", onclick: () => { vb = null; show(); } }, "fit"));
-  const el = h("div", {}, bar, holder, h("div", { class: "caption" }, "drag to pan · wheel to zoom" + (index ? " · red: LVS findings, yellow: nets no layout label checks (hover for the name)" : "")));
+  holder.append(h("div", { class: "tools" }, h("button", { class: "fit", title: "back to the whole sheet", onclick: () => { vb = null; show(); } }, "fit")));
+  const el = h("div", {}, bar, holder);
   return {
     el,
     mark: (names, focus = [], warn = []) => {
@@ -472,14 +473,14 @@ async function view3d(b) {
     return h("div", { class: "caption" }, "3D needs WebGL, which this browser doesn't offer (in Firefox or Chrome: hardware acceleration on)");
   }
   renderer.setPixelRatio(window.devicePixelRatio || 1);
-  host.append(renderer.domElement, h("div", { class: "hint" }, `drag to orbit · right-drag to pan · wheel to zoom · height ×${zs.toFixed(0)}`));
+  host.append(renderer.domElement, h("div", { class: "legend" }, `z ×${zs.toFixed(0)}`));
   const camera = new THREE.PerspectiveCamera(35, 1, size / 1000, size * 20);
   camera.up.set(0, 0, 1);
   camera.position.set(0, -size * 1.1, size * 0.8);
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.saveState();
-  host.append(h("button", { class: "fit", title: "back to the whole board", onclick: () => controls.reset() }, "fit"));
+  host.append(h("div", { class: "tools" }, h("button", { class: "fit", title: "back to the whole board", onclick: () => controls.reset() }, "fit")));
   const theme = () => { scene.background = new THREE.Color(css("--layout-bg")); };
   theme();
   themeListeners.add(theme);
@@ -546,7 +547,7 @@ function layoutViewer(b, overlay = null, full = false) {
   }
   const canvas = h("canvas");
   const pickedBox = h("div", { class: "picked", style: "display:none" });
-  const wrap = h("div", { class: "canvas" }, canvas, pickedBox, h("div", { class: "hint" }, "drag to pan · wheel to zoom · click copper" + (b.kind === "gds" ? "" : " for its net")));
+  const wrap = h("div", { class: "canvas" }, canvas, pickedBox);
   const [x0, y0, x1, y1] = b.bbox;
   let view = null;
 
@@ -642,7 +643,7 @@ function layoutViewer(b, overlay = null, full = false) {
       } else {
         scale = [`${ov.lo.toPrecision(2)}`, `${ov.hi.toPrecision(3)} ${overlay.unit}`, `current density, ${[...shown].join(", ")} (log)`];
       }
-      const w = 180, x = canvas.clientWidth - w - 14, y = canvas.clientHeight - 52;
+      const w = 180, x = canvas.clientWidth - w - 12, y = 52;
       const grad = ctx.createLinearGradient(x, 0, x + w, 0);
       grad.addColorStop(0, "#5e81ac"); grad.addColorStop(1, "#bf616a");
       ctx.fillStyle = grad; ctx.fillRect(x, y, w, 8);
@@ -714,8 +715,10 @@ function layoutViewer(b, overlay = null, full = false) {
     draw();
   } }, l)));
   if (!full) wrap.append(toggles);
-  wrap.append(h("button", { class: "fit", title: "back to the whole layout", onclick: () => { focus = null; view = null; draw(); } }, "fit"));
-  if (ov) wrap.append(h("select", { class: "panelpick modes", onchange: (e) => {
+  const tools = h("div", { class: "tools" });
+  wrap.append(tools);
+  tools.append(h("button", { class: "fit", title: "back to the whole layout", onclick: () => { focus = null; view = null; draw(); } }, "fit"));
+  if (ov) tools.prepend(h("select", { class: "panelpick modes", onchange: (e) => {
     const m = e.target.value;
     ov.mode = m;
     if (m !== "current density") b.copper.forEach((l) => shown.add(l));
@@ -744,7 +747,7 @@ function bars(rows, colour, label) {
 function stackPanel(b, color, shown, draw) {
   const total = b.stackup.reduce((a, l) => a + l.thickness_mm, 0) || 1;
   const um = (mm) => `${(mm * 1000).toFixed(mm < 0.01 ? 1 : 0)} µm`;
-  return [h("h4", {}, "stackup (click copper to hide)"), h("div", { class: "stack" }, b.stackup.map((l) => {
+  return [h("h4", {}, "stackup"), h("div", { class: "stack" }, b.stackup.map((l) => {
     const el = h("div", { class: l.type, style: `height:${Math.max(16, Math.min(64, (300 * l.thickness_mm) / total))}px` + (l.type === "copper" ? `;box-shadow: inset 5px 0 0 ${color[l.name]}` : ""), title: `${l.name}: ${l.material || l.type}, ${um(l.thickness_mm)}` + (l.er ? `, εr ${l.er}` : "") },
       l.name, h("span", { class: "t" }, um(l.thickness_mm)));
     if (l.type === "copper") el.onclick = () => { shown.has(l.name) ? shown.delete(l.name) : shown.add(l.name); el.classList.toggle("off"); draw(); };
