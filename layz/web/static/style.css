@@ -186,3 +186,4 @@ html[data-theme="light"] .schematic .picked, html[data-theme="light"] .canvas .p
 .chip.timed { min-width: 92px; text-align: left; font-size: 11px; padding: 1px 8px; }
 .head .name { min-width: 80px; }
 button.fit.on { border-color: var(--accent); color: var(--ink-0); }
+.schematic.grey svg > *:not(.marks) { filter: grayscale(1); opacity: 0.75; }

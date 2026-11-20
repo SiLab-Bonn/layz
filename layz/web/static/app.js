@@ -165,7 +165,7 @@ function stage(d, t, i) {
   if (t.name.includes("lvs") && t.markers && (t.markers.boxes.some((m) => m.names) || unchecked.length)) right.push([`schematic · marked`, async () => {
     const inp = await inputs();
     if (!inp.schematic_svgs || !inp.schematic_index) return h("div", { class: "caption" }, "no KiCad schematic to mark");
-    sheet = await svgViewer(inp.schematic_svgs, inp.schematic_index);
+    sheet = await svgViewer(inp.schematic_svgs, inp.schematic_index, true);  // grey: the marks carry the colour
     sheet.mark(t.markers.boxes.flatMap((m) => m.names || []), [], unchecked, t.markers.boxes);
     return sheet.el;
   }]);
@@ -313,8 +313,8 @@ async function plotPane(design, p) {
 
 // a schematic's sheets or a board, as KiCad drew them in the page's colours (Nord themes when
 // dark), inline: pan, zoom, sheets as tabs; redrawn when the system's theme changes
-async function svgViewer(themes, index = null) {
-  const holder = h("div", { class: "schematic" });
+async function svgViewer(themes, index = null, grey = false) {
+  const holder = h("div", { class: "schematic" + (grey ? " grey" : "") });
   const bar = h("div", { class: "pages" });
   const cache = new Map();
   let k = 0, vb = null, marked = [], picked = [], warned = [], svgNow = null;
