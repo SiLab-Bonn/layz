@@ -39,6 +39,7 @@ import klayout.db as kdb
 import klayout.rdb as krdb
 
 from layz import stack as stackfile
+from layz.connectivity import Connectivity, Label
 
 # ------------------------------------------------------------------------------- schematic side
 
@@ -86,73 +87,11 @@ def schematic_netlist(path: Path) -> Schematic:
 # ------------------------------------------------------------------------------- layout side
 
 
-@dataclass
-class Label:
-    text: str
-    x: float  # µm
-    y: float
-    layer: str  # the label's L/D
-    copper: str  # the copper layer (L/D) it names
-    net: int | None  # layout net it sits on (cluster id), None: on no copper
-
-
-def _ld(s: str) -> tuple[int, int]:
-    a, b = s.split("/")
-    return int(a), int(b)
-
-
-def extract(gds: Path, process) -> tuple[dict[int, str], list[Label]]:
-    """Layout nets (cluster id -> KLayout's name for it) and every label, probed onto its net."""
-    ly = kdb.Layout()
-    ly.read(str(gds))
-    top = ly.top_cell()
-    top.flatten(-1, True)  # labels and copper in one coordinate system; boards are small
-    l2n = kdb.LayoutToNetlist(kdb.RecursiveShapeIterator(ly, top, []))
-
-    copper = {}  # "L/D" -> region
-    for layer in process.copper:
-        if not layer.gds:
-            continue
-        li = ly.find_layer(*_ld(layer.gds))
-        if li is None:
-            continue
-        copper[layer.gds] = l2n.make_polygon_layer(li, layer.name)
-        l2n.connect(copper[layer.gds])
-    names = {layer.gds: layer.name for layer in process.copper if layer.gds}
-    for via in process.vias:
-        li = ly.find_layer(*_ld(via.gds))
-        if li is None:
-            continue
-        v = l2n.make_polygon_layer(li, f"via {via.gds}")
-        l2n.connect(v)
-        for side in (via.top, via.bottom):
-            g = process.by_name(side).gds
-            if g in copper:
-                l2n.connect(v, copper[g])
-
-    # label layers: each copper drawing layer and the stack's label layers
-    label_map: list[tuple[str, str]] = [(g, g) for g in copper]
-    for layer in process.copper:
-        for lab in getattr(layer, "labels", []) or []:
-            label_map.append((lab, layer.gds))
-
-    l2n.extract_netlist()
-    circuit = l2n.netlist().circuit_by_name(top.name) or next(l2n.netlist().each_circuit_top_down())
-    nets = {n.cluster_id: n.expanded_name() for n in circuit.each_net()}
-
-    labels = []
-    dbu = ly.dbu
-    for lab, cu in label_map:
-        li = ly.find_layer(*_ld(lab))
-        if li is None:
-            continue
-        for sh in top.shapes(li).each():
-            if not sh.is_text():
-                continue
-            p = sh.text_pos
-            net = l2n.probe_net(copper[cu], kdb.Point(p.x, p.y))
-            labels.append(Label(sh.text_string.strip(), p.x * dbu, p.y * dbu, lab, cu, net.cluster_id if net is not None else None))
-    return nets, labels, names
+def extract(gds: Path, process) -> tuple[dict[int, str], list[Label], dict[str, str]]:
+    """Layout nets (cluster id -> KLayout's name for it), every label probed onto its net, and
+    the copper layers' names by L/D."""
+    c = Connectivity(gds, process)
+    return c.nets, c.labels, c.names
 
 
 # ------------------------------------------------------------------------------- comparison

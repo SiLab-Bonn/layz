@@ -25,7 +25,7 @@ needs_fastercap = pytest.mark.skipif(not HAVE_FASTERCAP, reason="FasterCap not o
 def test_cli_lists_commands(capsys):
     assert cli.main(["--help"]) == 0
     out = capsys.readouterr().out
-    for cmd in ("gds2pcb", "gds2hyp", "hyp", "nets", "lvs", "pex", "field", "view", "doctor"):
+    for cmd in ("gds2pcb", "gds2hyp", "hyp", "lvs", "pex", "field", "view", "doctor"):
         assert f"layz {cmd}" in out
 
 
@@ -101,7 +101,21 @@ def test_gds_to_hyp(tmp_path):
     assert [r[0] for r in rows] == ["SIGNAL" if l.type == "copper" else "DIELECTRIC" for l in layers]
     assert [float(r[1]) * 25400 for r in rows] == pytest.approx([l.thickness_um for l in layers], rel=1e-4)
     assert [float(r[2]) for r in rows if r[0] == "DIELECTRIC"] == [l.er for l in layers if l.type == "dielectric"]
-    assert text.count("(VIA ") == 1 and text.count('(? REF="FP') == 2
+    assert text.count("(VIA ") == 1 and text.count('(? REF="FP') == 3  # the two PADs, and the top cell's own F.Cu (a pad layer)
+    assert sorted(re.findall(r"\{NET=\"?([^\"\s]+)", text)) == ["GND", "SIG"]  # named by the GDS's labels
+
+
+def test_gds2pcb_needs_a_label_on_every_net(tmp_path):
+    from klayout import db
+
+    from layz.gds2pcb import convert as gds2pcb
+
+    ly = db.Layout()
+    ly.read(str(TESTS / "route.gds"))
+    ly.clear_layer(ly.find_layer(1, 1))  # the route's label
+    ly.write(str(tmp_path / "bare.gds"))
+    with pytest.raises(SystemExit, match="net without a label"):
+        gds2pcb.main(["--lay", str(tmp_path / "bare.gds"), "--stack", str(TESTS / "route.toml"), "-o", str(tmp_path / "b.kicad_pcb")])
 
 
 @needs_fastercap

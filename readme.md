@@ -4,17 +4,18 @@ Layout tools for SiLab's FR4 PCBs, in-house RDL chips (maskless lithography) and
 that connect them, as one command line tool. Install: [docs/install.md](docs/install.md).
 
 ```
+layz doctor    which external tools this machine has, then the tests
 layz drc       design rule check of a GDS (gdscheck, with the kit's deck)
 layz lvs       GDS connectivity vs a KiCad schematic (net and pin labels)
-layz gds2pcb   GDS -> KiCad .kicad_pcb (copper zones, footprints, vias, outline, stackup)
-layz nets      assign zone/via nets from a seed footprint's pad nets
+layz pex       3-D capacitance matrix with FasterCap/FastCap2 (GDS + stack, or .kicad_pcb)
+layz field     electric field and potential from a `layz pex --charges` run
 layz gds2hyp   GDS, .kicad_pcb or .hyp -> HyperLynx .hyp (signal pours as traces)
 layz hyp       HyperLynx headless on a .hyp: DC drop, SI, eye, crosstalk, S-parameters
-layz svg       GDS -> SVG preview
-layz pex       3-D capacitance matrix with FasterCap/FastCap2 (.kicad_pcb, or GDS + stack)
-layz field     electric field and potential from a `layz pex --charges` run
 layz view      open a result: DRC/LVS markers in KLayout, ParaView renders of a field run
-layz doctor    which external tools this machine has, then the tests
+
+utilities:
+layz gds2pcb   GDS -> KiCad .kicad_pcb (zones, footprints, vias, outline, stackup; nets from the GDS's labels)
+layz svg       GDS -> SVG preview
 ```
 
 `layz <command> -h` shows each command's options.
@@ -32,7 +33,6 @@ flowchart LR
     drc(["layz drc"])
     lvs(["layz lvs"])
     pcb(["layz gds2pcb"])
-    nets(["layz nets"])
     hyp(["layz gds2hyp"])
     hl(["layz hyp"])
     pex(["layz pex"])
@@ -42,8 +42,7 @@ flowchart LR
 
     drcdb@{ shape: card, label: "DRC markers .lyrdb" }
     lvsdb@{ shape: card, label: "LVS report, .lyrdb" }
-    kpcb@{ shape: card, label: "KiCad board" }
-    kpcb2@{ shape: card, label: "KiCad board with nets" }
+    kpcb@{ shape: card, label: "KiCad board (utility)" }
     hypf@{ shape: card, label: "HyperLynx .hyp, signal routes as traces" }
     caps@{ shape: card, label: "capacitance matrix .csv" }
     fld@{ shape: card, label: "E-field, potential .vtk .png" }
@@ -52,17 +51,16 @@ flowchart LR
     gds --> drc --> drcdb
     gds & sch --> lvs --> lvsdb
     gds --> pcb --> kpcb
-    kpcb --> nets --> kpcb2
-    kpcb2 & board & exthyp --> hyp --> hypf
+    gds & board & exthyp --> hyp --> hypf
     hypf --> hl --> hlres@{ shape: card, label: "DC drop, eye, crosstalk, S-parameters" }
     gds & board --> pex --> caps
     caps --> field --> fld
     drcdb & lvsdb & fld --> view --> tools[["KLayout, ParaView"]]
     gds --> svg --> svgf
-    stack -.-> lvs & pcb & pex
+    stack -.-> lvs & pcb & hyp & pex
 
     classDef cmd fill:#5E81AC,stroke:#4C566A,color:#fff
-    class drc,lvs,pcb,nets,hyp,hl,pex,field,svg,view cmd
+    class drc,lvs,pcb,hyp,hl,pex,field,svg,view cmd
 ```
 
 ## Repository
@@ -71,7 +69,7 @@ flowchart LR
 layz/
 ├── layz/                 the layz package, one folder per command:
 │   ├── drc/  lvs/        layz drc, layz lvs
-│   ├── gds2pcb/          layz gds2pcb, layz nets
+│   ├── gds2pcb/          layz gds2pcb
 │   ├── gds2hyp/          layz gds2hyp (traces.py: pours -> traces)
 │   ├── hyperlynx/        layz hyp (runner/: scripts in HyperLynx's own Python)
 │   ├── pex/  field/      layz pex, layz field (field/paraview/: layz view's scripts)
@@ -133,23 +131,21 @@ no copper), and the schematic nets no label covers. Exit status 1 on opens, shor
 labels. A chip's own pad names (VINA, VDDA, …) are not board nets: label the board on the pin
 layers.
 
-## layz gds2pcb, layz nets
+## layz gds2pcb
 
-GDS -> KiCad board, then nets from a seed footprint.
+A utility: a GDS as a KiCad board, to look at or edit in KiCad. (`layz gds2hyp` still writes a
+GDS's `.hyp` through it, for now.)
 
 ```sh
 layz gds2pcb --lay design.gds --stack uni-bonn-rdl          # -> design.kicad_pcb
-# KiCad: Update PCB from Schematic (references and the seed footprint's pad nets)
-layz nets design.kicad_pcb --seed-footprint VTX2       # -> design_nets_assigned.kicad_pcb
-layz nets design.kicad_pcb --dry-run                   # report only
 ```
 
-`pcb`: GDS cells with pad-layer shapes become footprints (one per cell and orientation),
-top-level copper becomes filled zones, via layers become blind/buried vias, the outline layer
-becomes Edge.Cuts, and the stack becomes the board's physical stackup; Y is flipped so the board
-shows the GDS top view (`--no-flip-y` keeps it raw). `--layer-map 3/0=In2.Cu` and
-`--via-map 7/0=F.Cu,In1.Cu` override single entries of the stack's mapping.
-`nets`: nets propagate from the seed footprint's pads through touching copper and vias.
+GDS cells with pad-layer shapes become footprints (one per cell and orientation), top-level
+copper becomes filled zones, via layers become blind/buried vias, the outline layer becomes
+Edge.Cuts, and the stack becomes the board's physical stackup; Y is flipped so the board shows
+the GDS top view (`--no-flip-y` keeps it raw). Every zone, via and pad gets its net, named by
+the GDS's net labels (the same labels `layz lvs` reads): a net without one stops it, as does a
+net with two names (a short) or a net label on no copper.
 
 ## layz gds2hyp
 
