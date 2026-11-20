@@ -59,6 +59,7 @@ async function render() {
 
 // ---------------------------------------------------------------- home: every design's last run
 
+const boardOf = (d) => d.board || d.inputs.board;  // the board a run made for HyperLynx (older runs: among the inputs)
 const done = (t) => t.status === "ok" || t.status === "skipped";
 const chip = (status, text) => h("span", { class: `chip ${status}` }, text ?? status);
 
@@ -76,7 +77,7 @@ async function homePage() {
       designs.map((d) => h("tr", { onclick: () => go({ design: d.name }) },
         h("td", {}, d.name), h("td", {}, status(d)),
         h("td", {}, `${d.targets.filter(done).length} / ${d.targets.length}`),
-        h("td", {}, base(d.inputs.layout)), h("td", {}, base(d.inputs.board)), h("td", {}, d.started)))));
+        h("td", {}, base(d.inputs.layout)), h("td", {}, base(boardOf(d))), h("td", {}, d.started)))));
 }
 
 // ---------------------------------------------------------------- one design, top to bottom
@@ -135,7 +136,7 @@ function lazy(make) {
 function stage(d, t, i) {
   const inputs = () => once(`/api/inputs?name=${encodeURIComponent(d.name)}`);
   const board = () => once(`/api/board?name=${encodeURIComponent(d.name)}`);
-  const isBoard = d.inputs.board && t.status === "ok" && boardTarget(d) === t.name;
+  const isBoard = boardOf(d) && t.status === "ok" && boardTarget(d) === t.name;
   let viewer = null; // the layout this stage marks its violations on
 
   // right: pictures
@@ -194,7 +195,7 @@ function stage(d, t, i) {
   const left = [];
   if (t.name === "setup") left.push(["inputs", async () => {  // what setup named, and the layout's counts
     const inp = await inputs();
-    return h("div", {}, h("table", { class: "kvtable" }, h("tr", {}, h("td", {}, "flow"), h("td", {}, d.flow)), Object.entries(d.inputs).map(([k, v]) => h("tr", {}, h("td", {}, k), h("td", {}, v)))), inp.layout ? h("div", { class: "facts" }, layoutFacts(inp.layout)) : null);
+    return h("div", {}, h("table", { class: "kvtable" }, h("tr", {}, h("td", {}, "flow"), h("td", {}, d.flow)), Object.entries(d.inputs).filter(([k]) => k !== "board").map(([k, v]) => h("tr", {}, h("td", {}, k), h("td", {}, v)))), inp.layout ? h("div", { class: "facts" }, layoutFacts(inp.layout)) : null);
   }]);
   if (isBoard) left.push(["board facts", async () => h("div", { class: "facts" }, layoutFacts(await board()))]);
   // the step's tables, without those another one contains (its columns and rows); up to three
@@ -238,7 +239,7 @@ function stage(d, t, i) {
 
 function boardTarget(d) {
   // the target whose folder holds the board (results/<design>/<target>/...), else "board"
-  const parts = d.inputs.board.split("/");
+  const parts = boardOf(d).split("/");
   return d.targets.find((t) => parts.includes(t.name))?.name || "board";
 }
 
@@ -546,8 +547,7 @@ async function view3d(b) {
     camera.position.sub(controls.target).multiplyScalar(k).add(controls.target);
   }, { passive: false });
   controls.saveState();
-  const edgesBtn = h("button", { class: "fit on", title: "outlines", onclick: () => { const on = !outlines[0]?.visible; outlines.forEach((l) => (l.visible = on)); edgesBtn.classList.toggle("on", on); } }, "edges");
-  host.append(h("div", { class: "tools" }, h("button", { class: "fit", title: "back to the whole board", onclick: () => controls.reset() }, "fit"), edgesBtn));
+  host.append(h("div", { class: "tools" }, h("button", { class: "fit", title: "back to the whole board", onclick: () => controls.reset() }, "fit")));
   const theme = () => { scene.background = new THREE.Color(css("--layout-bg")); };
   theme();
   themeListeners.add(theme);

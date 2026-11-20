@@ -78,7 +78,7 @@ def board(name: str) -> dict:
     from layz.web import board as boardfile
 
     run = json.loads((RESULTS / name / "run.json").read_text())
-    hyp = Path(run.get("inputs", {}).get("board", ""))
+    hyp = Path(run.get("board") or run.get("inputs", {}).get("board", ""))
     if not hyp.is_file():
         raise FileNotFoundError(f"{name}: no board yet (its setup names BOARD, the board target writes it)")
     cache = RESULTS / name / "board.json"
@@ -122,7 +122,7 @@ def inputs(name: str) -> dict:
     elif lay.is_file() and lay.suffix == ".kicad_pcb":
         # a KiCad board: drawn from the run's HyperLynx board of it (copper per layer, vias, its
         # stackup), as a GDS is; KiCad's own drawing until there is one
-        if Path(i.get("board", "")).is_file():
+        if Path(run.get("board") or i.get("board", "")).is_file():
             out["layout"] = board(name)
         else:
             out["layout_svgs"] = drawings(lay, web / "board")

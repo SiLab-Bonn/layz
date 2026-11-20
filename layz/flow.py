@@ -62,7 +62,7 @@ def load(flow: Path) -> dict[str, Callable[[], None]]:
     return dict(TARGETS)
 
 
-INPUTS = ("LAYOUT", "STACK", "SCHEMATIC", "BOARD")
+INPUTS = ("LAYOUT", "STACK", "SCHEMATIC")  # what a flow's setup names as its inputs, for the viewer
 
 
 class Skip(Exception):
@@ -108,6 +108,8 @@ def run_targets(targets: dict[str, Callable[[], None]], record: Path | None = No
         if record is not None:
             g = function.__globals__
             run["inputs"] = {k.lower(): str(g[k]) for k in INPUTS if g.get(k) is not None}
+            if g.get("BOARD") is not None:  # the board the flow makes for HyperLynx: an output
+                run["board"] = str(g["BOARD"])
             record.parent.mkdir(parents=True, exist_ok=True)
             record.write_text(json.dumps(run, indent=1))
         if failed:
