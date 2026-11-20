@@ -202,3 +202,5 @@ button.fit.on { border-color: var(--accent); color: var(--ink-0); }
 .files { margin-top: 14px; font-size: 11px; line-height: 1.8; color: var(--ink-4); }
 .files a { color: var(--accent); text-decoration: none; margin-right: 10px; white-space: nowrap; } .files a:hover { text-decoration: underline; }
 .files a:first-child { color: var(--ink-1); font-weight: 600; }
+.stackover { position: absolute; right: 12px; top: 6px; width: 200px; z-index: 2; }
+.stackover h4 { margin: 4px 0 6px; }

@@ -836,7 +836,8 @@ function layoutViewer(b, overlay = null, full = false) {
     toggles.querySelectorAll("a").forEach((x) => x.classList.toggle("off", !shown.has(x.textContent)));
     draw();
   } }, ["current density", "pin voltage", "via current"].map((m) => h("option", { value: m }, m))));
-  const el = h("div", { class: "layout" + (full ? "" : " bare") }, wrap, full ? h("aside", {}, stackPanel(b, color, shown, draw)) : null);
+  if (full) wrap.append(h("div", { class: "stackover" }, stackPanel(b, color, shown, draw)));  // on the grid itself
+  const el = h("div", { class: "layout" + (full ? "" : " bare") }, wrap);
   return { el, setMarkers: (boxes, at = null) => { markers = boxes; focus = at ? at.box || at : null; view = null; draw(); if (at && at.rule) say(at); } };
 }
 
