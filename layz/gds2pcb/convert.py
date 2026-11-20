@@ -2,7 +2,7 @@
 """Prototype GDS -> KiCad .kicad_pcb converter, v3.
 
 KiCad needs its own layer names, so the RDL's layers go to KiCad's by their order top to
-bottom (with --stack, from the stack file; without, this default for uni-bonn-rdl):
+bottom, from the stack file; for uni-bonn-rdl:
 
     8/0  top pads  -> F.Cu    (also the front-side footprint pad layer)
     6/0  M3        -> In1.Cu
@@ -31,9 +31,9 @@ v2 additions compared to gds2pcb.py:
   but keeps the pad (size w h) axis-aligned to the board (verified against
   KiCad 10.0.6 gerber/SVG export), so each rotation variant carries the
   rotated pad width/height (a 90-degree pad swaps w and h).
-- Y-flip is ON by default: GDS is y-up, the KiCad board file is y-down (top
+- Y-flip (flip_y=True): GDS is y-up, the KiCad board file is y-down (top
   view), so a GDS design and the resulting .kicad_pcb render the same
-  top-view orientation. Use --no-flip-y to restore the v1 raw mapping.
+  top-view orientation. flip_y=False restores the v1 raw mapping.
 
 Coordinate conventions (empirically verified against KiCad 10 drill/SVG exports):
 - KiCad board file: x right, y DOWN.  GDS/KLayout: x right, y UP.
@@ -182,7 +182,7 @@ def parse_trans_translation(trans: db.Trans) -> tuple[float, float]:
 def to_file_point(x_db: float, y_db: float, scale: float, flip_y: bool, y_ref_db: float) -> Point:
     """Map a GDS top-level DB point to KiCad file coordinates (mm).
 
-    GDS is y-up, KiCad board file is y-down: with flip_y (default) the top of
+    GDS is y-up, KiCad board file is y-down: with flip_y the top of
     the GDS bbox maps to file y=0 and GDS +y maps to file -y.
     """
     y_db = y_ref_db - y_db if flip_y else y_db
@@ -465,7 +465,7 @@ def convert_gds_to_kicad(gds_path: Path, pcb_path: Path, process, scale_mm_per_u
 
 def write_stackup(pcb_path: Path, process) -> None:
     """Put the process's stackup into the board's (setup ...) and set the board thickness, so
-    KiCad, `layz gds2hyp` and `layz pex` all read the same stack from the .kicad_pcb."""
+    KiCad, layz.gds2hyp and layz.pex all read the same stack from the .kicad_pcb."""
     text = pcb_path.read_text()
     # board thickness first, in (general ...), before the stackup adds its own (thickness ...)
     mm = f"{process.thickness_um / 1000:.6g}"

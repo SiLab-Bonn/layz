@@ -1,2 +1,2 @@
-"""`layz field`: electric field and potential from a `layz pex --charges` run (compute.py);
-paraview/ holds the ParaView scripts `layz view` runs on its results."""
+"""Electric field and potential of a layz.pex.run folder solved with charges=True (run.py,
+compute.py); paraview/ holds ParaView scripts for its results, run with pvpython."""

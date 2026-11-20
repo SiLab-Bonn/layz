@@ -26,6 +26,6 @@ write_json(job["out"] + "/info.json", info)
 say("stackup: " + ", ".join(f"{s['name']} {s['thickness_m'] * 1e6:.2f} um" for s in stackup))
 say(f"{len(nets)} nets; VRMs: " + ", ".join(f"{v['power_net']} {v['voltage']} V (ref {v['ref_net'] or '-'})" for v in info["vrms"]))
 routed = sorted((n for n in nets if n["segments"]), key=lambda n: -n["length_m"])
-say(f"{len(routed)} nets with traces" + (": " + ", ".join(f"{n['name']} {n['length_m'] * 1e3:.1f} mm" for n in routed[:12]) if routed else " (all copper is pours: `layz gds2hyp` writes signal routes as traces)"))
+say(f"{len(routed)} nets with traces" + (": " + ", ".join(f"{n['name']} {n['length_m'] * 1e3:.1f} mm" for n in routed[:12]) if routed else " (all copper is pours: layz.gds2hyp writes signal routes as traces)"))
 modelled = [p["pin"] for n in nets for p in n["pins"] if p["model"]]
 say(f"{len(modelled)} pins with IBIS/SPICE models")

@@ -1,12 +1,12 @@
 """Design rule check for a flow's targets (layz.flow): gdscheck with the kit's deck, every option
-given, into one folder. The command line (`layz drc`) is the same with defaults.
+given, into one folder.
 
     from layz.drc import analysis, run
 
     checked = run.drc(GDS, RESULTS / "drc", kit="uni-bonn-rdl", suite="main", topcell=None, tile=20000.0)
     analysis.violations(checked, max_violations=0, out=checked / "violations.csv")
 
-Writes drc.lyrdb (KLayout markers: `layz view drc.lyrdb --lay GDS`), rules.csv (violations per
+Writes drc.lyrdb (KLayout markers: `klayout GDS -m drc.lyrdb`), rules.csv (violations per
 rule) and job.json. A PCB is checked by KiCad itself, against the rules in its own board:
 
     checked = run.board(PCB, RESULTS / "drc", refill_zones=True, all_track_errors=False)
@@ -19,8 +19,9 @@ from __future__ import annotations
 
 import csv
 import json
-import subprocess
 from pathlib import Path
+
+from layz import log
 
 
 def drc(layout: Path, out: Path, *, kit: str, suite: str, topcell: str | None, tile: float) -> Path:
@@ -40,7 +41,7 @@ def drc(layout: Path, out: Path, *, kit: str, suite: str, topcell: str | None, t
     report = out / "drc.lyrdb"
     report.unlink(missing_ok=True)
     cmd = [solvers.find("gdscheck"), "run", "--pdk-path", str(DRC_DIR), "-p", kit, "-s", suite, "-t", topcell or top_cell(Path(layout)), "--tile", str(tile), "-i", str(layout), "-r", str(report)]
-    rc = subprocess.call(cmd)
+    rc = log.run("gdscheck", cmd)
     if not report.exists():
         raise SystemExit(f"gdscheck wrote no report (exit {rc})")
     with open(out / "rules.csv", "w", newline="") as f:
@@ -86,7 +87,8 @@ def board(pcb: Path, out: Path, *, refill_zones: bool, all_track_errors: bool) -
     (out / "job.json").write_text(json.dumps({"board": str(pcb), "refill_zones": refill_zones, "all_track_errors": all_track_errors}, indent=1))
     report = out / "drc.json"
     cmd = [cli, "pcb", "drc", "--format", "json", "--severity-all", "--units", "mm", "-o", str(report), *(["--refill-zones"] if refill_zones else []), *(["--all-track-errors"] if all_track_errors else []), str(pcb)]
-    subprocess.run(cmd, check=True, capture_output=True)
+    if log.run("kicad-cli", cmd):
+        raise SystemExit("kicad-cli pcb drc failed")
     d = json.loads(report.read_text())
     counts: dict[str, int] = {}
     for v in d["violations"]:

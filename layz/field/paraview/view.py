@@ -1,10 +1,10 @@
-"""Render a fieldview.py result with ParaView: conductors, a vertical cut plane colored by E_z,
+"""Render a layz.field.run result with ParaView: conductors, a vertical cut plane colored by E_z,
 and field arrows. Saves a PNG; also a starting point for the ParaView GUI (View > Python Shell,
-or File > Load State after saving one).
+or File > Load State after saving one). Run with ParaView's own Python:
 
-    layz view field RUN_DIR [--y Y_UM] [--z-stretch S] [-o out.png]
+    pvpython layz/field/paraview/view.py RUN_DIR [--y Y_UM] [--z-stretch S] [-o out.png]
 
-HWLOC_COMPONENTS=-gl works around Ubuntu's ParaView hanging at startup (hwloc probing X displays).
+Set HWLOC_COMPONENTS=-gl to work around Ubuntu's ParaView hanging at startup (hwloc probing X displays).
 """
 
 import argparse

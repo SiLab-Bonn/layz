@@ -15,15 +15,15 @@ the same records, in the same order and number format.
     {NET="..." ...}   per net: PIN, VIA, SEG, ARC, and zone fills as POLYGON / POLYVOID;
                       every copper object without a net gets its own EmptyNet<n>
 
-    layz gds2hyp design.gds --stack uni-bonn-rdl [-o design.hyp]   (nets from its labels)
-    layz gds2hyp board.kicad_pcb [-o board.hyp]
-    layz gds2hyp exported.hyp -o with_traces.hyp                             (pours -> traces only)
+    hyp(GDS, OUT, stack="uni-bonn-rdl", refill=False, traces="auto", trace_max_width=0.08)  (nets from its labels)
+    hyp(PCB, OUT, stack=None, refill=True, traces="auto", trace_max_width=0.08)
+    hyp(EXPORTED_HYP, OUT, stack=None, refill=False, traces="auto", trace_max_width=0.08)  (pours -> traces only)
 
 Running HyperLynx on the result: a flow's targets (`layz run`, layz.hyperlynx.run).
 
 Signal routes drawn as polygons (every GDS route, and KiCad zones made from them) become pours,
-which HyperLynx BoardSim cannot model as transmission lines (no length, loss or crosstalk). By
-default (--traces auto) strip-shaped pours of signal nets are written as traces instead: their
+which HyperLynx BoardSim cannot model as transmission lines (no length, loss or crosstalk). With
+traces="auto" strip-shaped pours of signal nets are written as traces instead: their
 centreline as SEG records, as wide as the strip (layz.gds2hyp.traces). Supplies and planes stay pours.
 """
 
@@ -396,7 +396,7 @@ def board_process(pcb_path: Path, board):
     if process is None:
         cu = [board.GetLayerName(l) for l in board.GetEnabledLayers().CuStack()]
         board_mm = board.GetDesignSettings().GetBoardThickness() / 1e6
-        print(f"warning: {pcb_path.name} has no stackup: writing KiCad's default {board_mm:g} mm FR4 stack; use `layz gds2pcb --stack` or set it in Board Setup > Physical Stackup", file=sys.stderr)
+        print(f"warning: {pcb_path.name} has no stackup: writing KiCad's default {board_mm:g} mm FR4 stack; write the board with layz.gds2pcb.convert.convert(..., stack=...) or set it in Board Setup > Physical Stackup", file=sys.stderr)
         process = stackfile.kicad_default(cu, board_mm)
     return process
 
@@ -435,7 +435,7 @@ def traces_pass(hyp_path: Path, select: str, max_width_mm: float) -> None:
         for name, n, length, width in report:
             print(f"  {name:20} {n:4d} segments, {length:8.2f} mm, {width * 1e3:5.1f} um wide")
     elif select != "none":
-        print("pours -> traces: no net qualified (see --traces)")
+        print("pours -> traces: no net qualified (see traces=, trace_max_width=)")
 
 
 def hyp(source: Path, out: Path, *, stack: str | Path | None, refill: bool, traces: str, trace_max_width: float) -> Path:

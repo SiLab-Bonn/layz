@@ -9,13 +9,13 @@ Everything comes from the board file itself:
                layer, εr of each dielectric (Board Setup > Physical Stackup in KiCad)
 
 and goes, in memory, to KLayout regions -> KLayout-PEX's FasterCapModelBuilder -> FasterCap's
-.lst/.geo input -> FasterCap or FastCap2 -> capacitance matrix (and, with --charges, the panel
-charges fieldview.py turns into E-field plots). No intermediate files.
+.lst/.geo input -> FasterCap or FastCap2 -> capacitance matrix (and, with charges=True, the panel
+charges layz.field.run turns into E-field plots). No intermediate files.
 
 Inner copper is embedded in the prepreg next to it, outer copper in the solder mask.
 Boards without a stackup get KiCad's default FR4 stack, with a warning.
 
-    layz pex board.kicad_pcb [--charges] [--stl]
+    layz.pex.run.capacitance(PCB, OUT, stack=None, ..., charges=True, stl=True, refill=True)
 """
 
 from __future__ import annotations
@@ -155,7 +155,7 @@ def load_board(pcb_path: Path, refill: bool) -> tuple[db.Layout, db.Cell, Stack,
     process = stackfile.from_kicad_pcb(pcb_path)
     if process is None:
         board_mm = board.GetDesignSettings().GetBoardThickness() / 1e6
-        warnings.append(f"{pcb_path.name} has no stackup: using KiCad's default {board_mm:g} mm FR4 stack; set the real one in Board Setup > Physical Stackup, or write the board with `layz gds2pcb --stack`")
+        warnings.append(f"{pcb_path.name} has no stackup: using KiCad's default {board_mm:g} mm FR4 stack; set the real one in Board Setup > Physical Stackup, or write the board with layz.gds2pcb.convert.convert(..., stack=...)")
         process = stackfile.kicad_default(cu_names, board_mm)
     process.halo_um = 1000.0
     return layout, top, stack_from_process(process, gds=False, via_spans=via_spans), warnings

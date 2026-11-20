@@ -4,24 +4,29 @@ Layout tools for SiLab's FR4 PCBs, in-house RDL chips (maskless lithography) and
 that connect them, as one command line tool. Install: [docs/install.md](docs/install.md).
 
 ```
-layz run       a design's flow, from DRC and LVS to SI and power: its targets, in order
-
-layz doctor    which external tools this machine has, then the tests
-layz drc       design rule check of a GDS (gdscheck, with the kit's deck)
-layz lvs       GDS connectivity vs a KiCad schematic (net and pin labels)
-layz pex       3-D capacitance matrix with FasterCap/FastCap2 (GDS + stack, or .kicad_pcb)
-layz field     electric field and potential from a `layz pex --charges` run
-layz gds2hyp   GDS, .kicad_pcb or .hyp -> HyperLynx .hyp (signal pours as traces)
-layz view      open a result: DRC/LVS markers in KLayout, ParaView renders of a field run
-
-utilities:
-layz gds2pcb   GDS -> KiCad .kicad_pcb (zones, footprints, vias, outline, stackup; nets from the GDS's labels)
-layz svg       GDS -> SVG preview
+layz run FLOW    a design's flow (its flow.py, or the folder with it): its targets, in order
+layz web         the runs in a browser, on port 8003: http://HOST:8003/
+layz doctor      which external tools this machine has, then the tests
 ```
 
-`layz <command> -h` shows each command's options.
+Everything else is layz's Python API, which a design's `flow.py` calls, one module per tool:
+
+```
+layz.drc         design rules: a GDS with gdscheck and the kit's deck, a board with KiCad's DRC
+layz.lvs         connectivity vs the KiCad schematic (net and pin labels; KiCad's parity for boards)
+layz.gds2hyp     GDS, .kicad_pcb or .hyp -> HyperLynx .hyp (signal pours as traces)
+layz.pex         3-D capacitance matrix with FasterCap/FastCap2 (GDS + stack, or .kicad_pcb)
+layz.field       electric field and potential of a pex run solved with charges
+layz.hyperlynx   DC drop, SI, crosstalk and S-parameters in HyperLynx
+
+utilities:
+layz.gds2pcb     GDS -> KiCad .kicad_pcb (zones, footprints, vias, outline, stackup; nets from the GDS's labels)
+layz.svg         GDS -> SVG preview
+```
 
 ## Pipeline
+
+Each box is a step of a flow (a target calling that module); the inputs are named in its `setup`.
 
 ```mermaid
 flowchart LR
@@ -31,51 +36,51 @@ flowchart LR
     board@{ shape: card, label: "KiCad .kicad_pcb" }
     exthyp@{ shape: card, label: "exported .hyp" }
 
-    drc(["layz drc"])
-    lvs(["layz lvs"])
-    pcb(["layz gds2pcb"])
-    hyp(["layz gds2hyp"])
-    hl(["layz run (HyperLynx targets)"])
-    pex(["layz pex"])
-    field(["layz field"])
-    svg(["layz svg"])
-    view(["layz view"])
+    drc(["drc: layz.drc"])
+    lvs(["lvs: layz.lvs"])
+    pcb(["layz.gds2pcb (utility)"])
+    hyp(["board: layz.gds2hyp"])
+    hl(["info, dc, si, sparams: layz.hyperlynx"])
+    pex(["layz.pex"])
+    field(["layz.field"])
+    svg(["layz.svg (utility)"])
 
-    drcdb@{ shape: card, label: "DRC markers .lyrdb" }
-    lvsdb@{ shape: card, label: "LVS report, .lyrdb" }
-    kpcb@{ shape: card, label: "KiCad board (utility)" }
+    drcdb@{ shape: card, label: "DRC markers .lyrdb, violations .csv" }
+    lvsdb@{ shape: card, label: "LVS report .lyrdb, findings .csv" }
+    kpcb@{ shape: card, label: "KiCad board" }
     hypf@{ shape: card, label: "HyperLynx .hyp, signal routes as traces" }
     caps@{ shape: card, label: "capacitance matrix .csv" }
     fld@{ shape: card, label: "E-field, potential .vtk .png" }
     svgf@{ shape: card, label: "SVG preview" }
 
-    gds --> drc --> drcdb
-    gds & sch --> lvs --> lvsdb
+    gds & board --> drc --> drcdb
+    gds & board & sch --> lvs --> lvsdb
     gds --> pcb --> kpcb
     gds & board & exthyp --> hyp --> hypf
     hypf --> hl --> hlres@{ shape: card, label: "DC drop, eye, crosstalk, S-parameters" }
     gds & board --> pex --> caps
     caps --> field --> fld
-    drcdb & lvsdb & fld --> view --> tools[["KLayout, ParaView"]]
+    drcdb & lvsdb --> klayout[["KLayout"]]
+    fld --> paraview[["ParaView (pvpython)"]]
     gds --> svg --> svgf
     stack -.-> lvs & pcb & hyp & pex
 
     classDef cmd fill:#5E81AC,stroke:#4C566A,color:#fff
-    class drc,lvs,pcb,hyp,hl,pex,field,svg,view cmd
+    class drc,lvs,pcb,hyp,hl,pex,field,svg cmd
 ```
 
 ## Repository
 
 ```text
 layz/
-├── layz/                 the layz package, one folder per command:
-│   ├── drc/  lvs/        layz drc, layz lvs
-│   ├── gds2pcb/          layz gds2pcb
-│   ├── gds2hyp/          layz gds2hyp (traces.py: pours -> traces)
-│   ├── hyperlynx/        HyperLynx targets' API (runner/: scripts in HyperLynx's own Python)
-│   ├── pex/  field/      layz pex, layz field (field/paraview/: layz view's scripts)
-│   ├── svg/              layz svg
-│   └── cli.py, doctor.py, stack.py, plotstyle.py, solvers.py
+├── layz/                 the layz package, one folder per tool:
+│   ├── drc/  lvs/        design rules, connectivity
+│   ├── gds2pcb/          GDS -> KiCad board (a utility)
+│   ├── gds2hyp/          GDS, board or .hyp -> HyperLynx .hyp (traces.py: pours -> traces)
+│   ├── hyperlynx/        HyperLynx (runner/: scripts in HyperLynx's own Python)
+│   ├── pex/  field/      capacitance, fields (field/paraview/: scripts for pvpython)
+│   ├── svg/              GDS -> SVG (a utility)
+│   └── cli.py, flow.py, doctor.py, stack.py, plotstyle.py, solvers.py
 ├── tech/                 processes: stack file, DRC deck, notes
 │   ├── uni-bonn-rdl/
 │   └── multicb/          Multi-CB FR4 and flex buildups
@@ -87,33 +92,126 @@ layz/
                           the steps install.sh runs: layz, fastercap, gdscheck, paraview, kicad
 ```
 
-A process is given by name (`--stack uni-bonn-rdl`, `--kit uni-bonn-rdl`) or as a stack file;
+A process is given by name (`stack="uni-bonn-rdl"`, `kit="uni-bonn-rdl"`) or as a stack file;
 the format is in [docs/stacks.md](docs/stacks.md).
 
-## layz drc
+## Flows
 
-Design rule check with [gdscheck](https://github.com/aesc-silicon/gdscheck) and a kit's deck.
+A design's whole flow, from DRC and LVS to SI and power, is the **targets** of its `flow.py`:
+each step a function decorated `@target`, without arguments or return value. A target takes the
+inputs it needs, runs a tool through layz's Python API, checks the results against the design's
+limits and plots them into its own output folder. `layz run` runs them in the file's order and
+stops at the first that fails:
 
 ```sh
-layz drc --lay design.gds --kit uni-bonn-rdl              # -> design.lyrdb
-layz drc --lay design.gds --kit uni-bonn-rdl --suite geometry   # without density
-layz drc --lay design.gds --kit uni-bonn-rdl --benchmark  # time each rule, no report
-layz view design.lyrdb --lay design.gds                   # KLayout with the markers
+export MGLS_LICENSE_FILE=27504@nexus.physik.uni-bonn.de   # HyperLynx's license server
+layz run designs/ivtx_rdl                                 # its flow.py: every target, in order
+layz run path/to/flow.py                                  # a flow file elsewhere
 ```
 
-`--tile` sets gdscheck's merge tile (default 20 mm: board/RDL scale); `-v` lists every
-violation. Rules of the RDL kit: [tech/uni-bonn-rdl](tech/uni-bonn-rdl/readme.md).
+The first target, `setup`, names the inputs (as globals the later targets read): the layout (a
+GDS or a KiCad board), its stack, the schematic, the board HyperLynx simulates. One from
+[designs/ivtx_rdl/flow.py](designs/ivtx_rdl/flow.py):
 
-## layz lvs
+```python
+from pathlib import Path
+from layz.drc import analysis as drc_analysis
+from layz.drc import run as drc_run
+from layz.flow import target
+
+HERE = Path(__file__).parent
+RESULTS = Path("results/ivtx_rdl")
+
+
+@target
+def setup():
+    """The inputs: the layout, its stack and schematic."""
+    global LAYOUT, STACK, SCHEMATIC
+    LAYOUT = HERE / "obelix1_ivtx_ladder_v2.gds"
+    STACK = "uni-bonn-rdl"  # tech/uni-bonn-rdl/stack.toml
+    SCHEMATIC = HERE / "obelix1_ivtx_ladder_f.kicad_sch"
+
+
+@target
+def drc():
+    """The layout against the Uni Bonn RDL's design rules (gdscheck, tech/uni-bonn-rdl)."""
+    checked = drc_run.drc(LAYOUT, RESULTS / "drc", kit="uni-bonn-rdl", suite="main", topcell=None, tile=20000.0)
+    drc_analysis.violations(checked, max_violations=0, out=checked / "violations.csv")
+```
+
+[designs/flex_ivtx/flow.py](designs/flex_ivtx/flow.py) is the same for a KiCad board.
+
+## The log, and `layz web`
+
+While a flow runs, every line of every tool it calls comes to the terminal, one line each with
+its time, level and the tool that said it (`layz.log`):
+
+```
+13:41:04 INFO  [flow]       [2/5] drc: The route against the Uni Bonn RDL rules (geometry suite).
+13:41:04 INFO  [gdscheck]   [RDL.M1.width] Checking min_width >= 10.00 µm on layer M1 (1/0)
+13:41:04 ERROR [gdscheck]   Status: FAIL (2 violation(s))
+13:41:50 WARN  [fastercap]  dummy dielectric-dielectric interface found in the input file, skipping
+```
+
+INFO in green, WARN in yellow, ERROR in red (NO_COLOR turns the colours off); the level is the
+tool's own where it tags its lines, else read from the words. The run is recorded in
+`results/<design>/`: `run.json` (each target's status, time, error, and the inputs `setup`
+named) and `run.log` (the log).
+
+`layz web`, from the repo, serves those runs on port 8003 (the same idea as FRIDA's viewer on
+8001: on juno, `http://juno.physik.uni-bonn.de:8003/`). The first page lists the designs and their
+last run; click one to open it:
+
+* **RUN**: the inputs, then the targets top to bottom with their status and time; each opens to
+  its tables (the CSVs it wrote: DRC rules, LVS findings, DC drop, eyes, ...) and its log.
+* **PLOTS**: every plot the targets wrote, by target (click to enlarge).
+* **LAYOUT**: the board the flow simulated (its `.hyp`): copper layer by layer (click a layer in
+  the stackup to hide it, click copper to see its net and pins), the stackup with thicknesses,
+  trace widths, via sizes and spans, and the board's counts.
+
+## The API
+
+Every tool has the same API, one package each: `run` runs it into a folder with every option
+given (keyword-only, no defaults: each target says every setting it uses, so it reads on its
+own), `analysis` checks the results against limits (a table, printed and written as CSV),
+`plots` plots them in `layz.plotstyle`:
+
+| | run | analysis | plots |
+| --- | --- | --- | --- |
+| design rules | `layz.drc.run.drc` (GDS), `board` (KiCad) | `layz.drc.analysis.violations` | KLayout markers (`drc.lyrdb`) |
+| connectivity | `layz.lvs.run.lvs` (GDS), `board` (KiCad) | `layz.lvs.analysis.findings`, `parity` | KLayout markers (`lvs.lyrdb`) |
+| HyperLynx board | `layz.gds2hyp.convert.hyp` | | |
+| capacitance | `layz.pex.run.capacitance` | `layz.pex.analysis.coupling`, `totals` | `layz.pex.plots.matrix` |
+| E-field | `layz.field.run.field` | | cross-sections (PNG/PDF), VTK |
+| DC, SI, S-parameters | `layz.hyperlynx.run.dc`, `si`, `sparam`, `info` | `layz.hyperlynx.analysis.*` | `layz.hyperlynx.plots.*` |
+
+Each function's docstring documents its options. The markers open in KLayout over the GDS:
+`klayout design.gds -m results/.../drc.lyrdb`.
+
+### Design rules: layz.drc
+
+```python
+checked = drc_run.drc(LAYOUT, RESULTS / "drc", kit="uni-bonn-rdl", suite="main", topcell=None, tile=20000.0)
+checked = drc_run.board(PCB, RESULTS / "drc", refill_zones=True, all_track_errors=False)
+drc_analysis.violations(checked, max_violations=0, out=checked / "violations.csv")
+```
+
+A GDS goes through [gdscheck](https://github.com/aesc-silicon/gdscheck) with a kit's deck:
+`suite="geometry"` leaves out density, `tile` is gdscheck's merge tile (20 mm: board/RDL
+scale). A KiCad board goes through KiCad's own DRC, with the rules in the board. Rules of the RDL
+kit: [tech/uni-bonn-rdl](tech/uni-bonn-rdl/readme.md).
+
+### Connectivity: layz.lvs
 
 Compares a layout's connectivity with a KiCad schematic, net by net (interconnect has no
 devices to recognise). KLayout extracts the nets from the stack's copper and via layers; text
 labels say what each net is meant to be.
 
-```sh
-layz lvs --lay design.gds --stack uni-bonn-rdl --sch design.kicad_sch
-layz lvs --lay design.gds --stack uni-bonn-rdl --sch design.net --report lvs.lyrdb
-layz view lvs.lyrdb --lay design.gds
+```python
+checked = lvs_run.lvs(LAYOUT, RESULTS / "lvs", stack=STACK, schematic=SCHEMATIC)  # .kicad_sch or .net
+lvs_analysis.findings(checked, out=checked / "summary.csv")
+checked = lvs_run.board(PCB, RESULTS / "lvs", refill_zones=True)  # KiCad's schematic parity
+lvs_analysis.parity(checked, out=checked / "summary.csv")
 ```
 
 **Labels.** A label names the net whose copper its **origin** lies on:
@@ -128,99 +226,50 @@ a stack can name other label layers (`labels = [...]`).
 
 **Reported:** open (one schematic net on several layout nets), short (one layout net carrying
 several schematic nets), unknown (a label naming nothing in the schematic), floating (a label on
-no copper), and the schematic nets no label covers. Exit status 1 on opens, shorts or unknown
-labels. A chip's own pad names (VINA, VDDA, …) are not board nets: label the board on the pin
-layers.
+no copper), and the schematic nets no label covers. `analysis.findings` fails on opens, shorts
+or unknown labels. A chip's own pad names (VINA, VDDA, …) are not board nets: label the board on
+the pin layers.
 
-## layz gds2pcb
-
-A utility: a GDS as a KiCad board, to look at or edit in KiCad. No analysis needs it.
-
-```sh
-layz gds2pcb --lay design.gds --stack uni-bonn-rdl          # -> design.kicad_pcb
-```
-
-GDS cells with pad-layer shapes become footprints (one per cell and orientation), top-level
-copper becomes filled zones, via layers become blind/buried vias, the outline layer becomes
-Edge.Cuts, and the stack becomes the board's physical stackup; Y is flipped so the board shows
-the GDS top view (`--no-flip-y` keeps it raw). Every zone, via and pad gets its net, named by
-the GDS's net labels (the same labels `layz lvs` reads): a net without one stops it, as does a
-net with two names (a short) or a net label on no copper.
-
-## layz gds2hyp
+### HyperLynx board: layz.gds2hyp
 
 HyperLynx `.hyp` from a GDS (directly, with KLayout: no KiCad), a KiCad board, or an existing
 `.hyp`.
 
-```sh
-layz gds2hyp board.kicad_pcb                              # -> board.hyp
-layz gds2hyp design.gds --stack uni-bonn-rdl              # nets, pins from the GDS's labels
-layz gds2hyp exported.hyp -o with_traces.hyp              # rewrite a .hyp exported elsewhere
-layz gds2hyp board.kicad_pcb --traces none                # KiCad's own output
-layz gds2hyp board.kicad_pcb --traces /CLK_P,/CLK_N       # traces for just these nets
+```python
+gds2hyp.hyp(LAYOUT, BOARD, stack=STACK, refill=False, traces="auto", trace_max_width=0.08)  # nets, pins from the GDS's labels
+gds2hyp.hyp(PCB, BOARD, stack=None, refill=True, traces="auto", trace_max_width=0.08)       # the board's own stackup
+gds2hyp.hyp(EXPORTED, BOARD, stack=None, refill=False, traces="auto", trace_max_width=0.08) # rewrite a .hyp exported elsewhere
 ```
 
-From a GDS, every net is named by its net labels and every pin label (REF.PIN) becomes a pin on
-the pad under it, a device per REF; layers keep the stack's names (M3, P3, ...). A net without a
-label stops it, as in `layz gds2pcb`. From a KiCad board, the writer reproduces KiCad's GUI
-exporter (records and number format). **Signal routes as
-traces** (`--traces auto`, the default): a GDS draws every route as a polygon, which KiCad
-exports as a pour, and HyperLynx BoardSim builds transmission lines, loss and crosstalk only from
-traces. So strip-shaped pours of signal nets are written as their centreline (SEG records), as
-wide as the strip and run into the pads, vias and pins at their ends; supplies and planes stay
-pours (right for DC drop). `auto` takes nets with ≥ 2 pins that are ≥ 95 % strips no wider than
-`--trace-max-width` (0.08 mm). On the obelix1 export that is the 17 signal nets (CLK, CMD, rst,
-D1–D4, ADC_1–4: 40 µm, 9 to 131 mm), which HyperLynx then sees with their lengths and coupling.
+`traces="none"` keeps KiCad's own output, `traces="/CLK_P,/CLK_N"` writes traces for just these
+nets. From a GDS, every net is named by its net labels and every pin label (REF.PIN) becomes a
+pin on the pad under it, a device per REF; layers keep the stack's names (M3, P3, ...). A net
+without a label stops it, as in `layz.gds2pcb`. From a KiCad board, the writer reproduces KiCad's
+GUI exporter (records and number format). **Signal routes as traces** (`traces="auto"`): a GDS
+draws every route as a polygon, which KiCad exports as a pour, and HyperLynx BoardSim builds
+transmission lines, loss and crosstalk only from traces. So strip-shaped pours of signal nets are
+written as their centreline (SEG records), as wide as the strip and run into the pads, vias and
+pins at their ends; supplies and planes stay pours (right for DC drop). `auto` takes nets with
+≥ 2 pins that are ≥ 95 % strips no wider than `trace_max_width` (0.08 mm). On the obelix1 export
+that is the 17 signal nets (CLK, CMD, rst, D1–D4, ADC_1–4: 40 µm, 9 to 131 mm), which HyperLynx
+then sees with their lengths and coupling.
 
-## layz run
+### DC, SI and S-parameters: layz.hyperlynx
 
-A design's whole flow, from DRC and LVS to SI and power, as the **targets** of its
-`flow.py`: each step a function decorated `@target`, without arguments or return value. A target
-takes the inputs it needs, runs a tool through layz's Python API, checks the results against the
-design's limits and plots them into its own output folder. `layz run` runs them in order:
-
-```sh
-export MGLS_LICENSE_FILE=27504@nexus.physik.uni-bonn.de   # HyperLynx's license server
-layz run --design designs/ivtx_rdl                        # every target, in the file's order
-layz run --design ivtx_rdl drc lvs                        # some, by name (a name: designs/NAME)
-layz run --design ivtx_rdl --list                         # the targets
-layz run --design ivtx_rdl -k                             # on past a failing target
-layz run --flow path/to/flow.py                           # a flow file elsewhere (default ./flow.py)
-```
-
-Every tool has the same API, one package each: `run` runs it into a folder with every option
-given (no defaults), `analysis` checks the results against limits (a table, printed and written
-as CSV), `plots` plots them in `layz.plotstyle`:
-
-| | run | analysis | plots |
-| --- | --- | --- | --- |
-| design rules | `layz.drc.run.drc` | `layz.drc.analysis.violations` | KLayout markers (`layz view`) |
-| connectivity | `layz.lvs.run.lvs` | `layz.lvs.analysis.findings` | KLayout markers |
-| HyperLynx board | `layz.gds2hyp.gds.write_hyp` (GDS), `layz.gds2hyp.convert` (board) | | |
-| capacitance | `layz.pex.run.capacitance` | `layz.pex.analysis.coupling`, `totals` | `layz.pex.plots.matrix` |
-| E-field | `layz.field.run.field` | | cross-sections (PNG/PDF), VTK |
-| DC, SI, S-parameters | `layz.hyperlynx.run.dc`, `si`, `sparam`, `info` | `layz.hyperlynx.analysis.*` | `layz.hyperlynx.plots.*` |
-
-For HyperLynx the usual targets are `setup`, `info`, `dc`, `si` and `sparams`. Each names its own files, nets,
-limits and every HyperLynx setting it uses (no defaults: `layz.hyperlynx.run` documents them),
-so it reads on its own; one from
-[designs/ivtx_rdl/flow.py](designs/ivtx_rdl/flow.py):
+For HyperLynx the usual targets are `info`, `dc`, `si` and `sparams`, after `setup` and `board`.
+Each names its own files, nets, limits and every HyperLynx setting it uses (`layz.hyperlynx.run`
+documents them); one from [designs/ivtx_rdl/flow.py](designs/ivtx_rdl/flow.py), shortened:
 
 ```python
-from pathlib import Path
-from layz.flow import target
 from layz.hyperlynx import analysis, plots, run
 
 
 @target
 def dc():
     """DC drop of the 3 V rails and their returns, against 5 %."""
-    board = Path("results/ivtx_rdl/setup/obelix1_ivtx_ladder_with_nets_v3.1.hyp")
-    if not board.exists():
-        setup()
-    out = Path("results/ivtx_rdl/dc")
-    supply = run.dc(board, out / "supply", license="HyperLynx SI/PI", nets=["/3V_1", "/3V_2", "/3V_3", "/3V_4"], include_ref=True, max_voltage_drop=5.0, max_current_density=1.5e7, max_via_current=1.0, return_from=None, return_vrm_type="simple", return_sink_resistance=1e6)
-    ret = run.dc(board, out / "return", license="HyperLynx SI/PI", nets=["/3V_1", "/3V_2", "/3V_3", "/3V_4"], include_ref=True, max_voltage_drop=5.0, max_current_density=1.5e7, max_via_current=1.0, return_from=supply / "ports.csv", return_vrm_type="simple", return_sink_resistance=1e6)
+    out = RESULTS / "dc"
+    supply = run.dc(BOARD, out / "supply", license="HyperLynx SI/PI", nets=["/3V_1", "/3V_2", "/3V_3", "/3V_4"], include_ref=True, ...)
+    ret = run.dc(BOARD, out / "return", license="HyperLynx SI/PI", nets=["/3V_1", "/3V_2", "/3V_3", "/3V_4"], include_ref=True, ..., return_from=supply / "ports.csv")
     analysis.dc_drop(supply, max_drop=0.05, out=out / "dc_drop.csv")
     plots.plot_dc(supply, out, ret)
 ```
@@ -246,34 +295,60 @@ Install, overlay and license come from `LAYZ_HYPERLYNX_HOME` (the `SDD_HOME` fol
 `/eda/Siemens` otherwise), `LAYZ_HYPERLYNX_OVERLAY` and `MGLS_LICENSE_FILE`. How the API is
 driven is in [layz/hyperlynx](layz/hyperlynx/__init__.py).
 
-## layz pex, layz field
+### Capacitance and fields: layz.pex, layz.field
 
 3-D capacitance matrix (FasterCap, or FastCap2), and the field of a solved run.
 
-```sh
-layz pex board.kicad_pcb                                  # stack from the board
-layz pex chip.gds --stack uni-bonn-rdl        # stack from the file
-layz pex chip.gds --stack uni-bonn-rdl --list # just list the conductors
-layz pex board.kicad_pcb --charges --out run              # keep charges for field plots
-layz field run --voltage TOP=1                            # 3-D grid -> run/field.vtk
-layz field run --voltage TOP=1 --plane y=5000             # cross-section, PNG + VTK
-layz field run --probe 100,200,30                         # φ and E at one point
-layz view section run/section_y5000_edge.vtk              # ParaView: heatmap + field lines
-layz view geometry run                                    # ParaView: the 3-D model
+```python
+from layz.field import run as field
+from layz.pex import analysis, plots, run as pex
+
+caps = pex.capacitance(PCB, RESULTS / "pex", stack=None, ..., charges=True, ...)  # stack from the board
+caps = pex.capacitance(LAYOUT, RESULTS / "pex", stack=STACK, ..., charges=True, ...)  # a GDS with its stack
+analysis.coupling(caps, max_coupling_fF=50.0, out=caps / "coupling.csv")
+plots.matrix(caps, caps)
+field.field(caps, voltages={"TOP": 1.0}, plane=None, ...)       # 3-D grid -> field.vtk
+field.field(caps, voltages={"TOP": 1.0}, plane="y=5000", ...)   # cross-section, PNG + VTK
 ```
 
 A conductor is any copper that touches or is joined by vias, named by net (KiCad), by GDS texts
-or `--name NAME=LAYER@X,Y`. Results: `maxwell_matrix_fF.csv` (Maxwell convention: diagonal
-total, off-diagonal −mutual) and `spice_caps_fF.csv`. **Keep `--tolerance` at 1 % or tighter**
-(the default): with dielectrics FasterCap's first passes can be far off without an error.
-`--voltage` sets conductor voltages for the field only; any bias is a superposition of the solved
-columns, so it needs no new solve.
+or `names={NAME: (LAYER, X, Y)}`. Results: `maxwell_matrix_fF.csv` (Maxwell convention: diagonal
+total, off-diagonal −mutual) and `spice_caps_fF.csv`. **Keep `tolerance` at 0.01 or tighter**:
+with dielectrics FasterCap's first passes can be far off without an error. `charges=True` keeps
+the panel charges `layz.field` needs. Its `voltages` set conductor voltages for the field only;
+any bias is a superposition of the solved columns, so it needs no new solve; `probes` prints φ
+and E at given points.
 
-## layz svg, layz view, layz doctor
+The field's results open in ParaView, with scripts run by ParaView's own Python (on Ubuntu with
+`HWLOC_COMPONENTS=-gl` set); each takes `-h`:
 
 ```sh
-layz svg design.gds design.svg --width-px 2000            # quick preview
-layz view design.lyrdb --lay design.gds                   # DRC/LVS markers in KLayout
-layz view {section,geometry,field} ...                    # ParaView renders (each takes -h)
+pvpython layz/field/paraview/section.py RUN/section_y5000_edge.vtk   # heatmap + field lines
+pvpython layz/field/paraview/geometry.py RUN                         # the 3-D model
+pvpython layz/field/paraview/view.py RUN                             # conductors, a cut plane, arrows
+```
+
+### Utilities: layz.gds2pcb, layz.svg
+
+A GDS as a KiCad board, to look at or edit in KiCad (no analysis needs it), and a GDS as SVG:
+
+```python
+from layz.gds2pcb.convert import convert
+from layz.svg.render import render_gds_to_svg
+
+convert(LAYOUT, Path("design.kicad_pcb"), stack="uni-bonn-rdl", scale_mm_per_um=1.0, drill_shrink_um=10.0, flip_y=True)
+render_gds_to_svg(LAYOUT, Path("design.svg"), scale_mm_per_um=0.001, width_px=2000, flip_y=True)
+```
+
+GDS cells with pad-layer shapes become footprints (one per cell and orientation), top-level
+copper becomes filled zones, via layers become blind/buried vias, the outline layer becomes
+Edge.Cuts, and the stack becomes the board's physical stackup; Y is flipped so the board shows
+the GDS top view (`flip_y=False` keeps it raw). Every zone, via and pad gets its net, named by
+the GDS's net labels (the same labels `layz.lvs` reads): a net without one stops it, as does a
+net with two names (a short) or a net label on no copper.
+
+## layz doctor
+
+```sh
 layz doctor                                               # which tools are installed, then the tests
 ```

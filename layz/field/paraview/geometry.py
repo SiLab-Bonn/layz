@@ -1,12 +1,12 @@
 """Render the solved 3-D model of a run in ParaView, without any field: the conductors as copper
 solids and the dielectric layers as translucent slabs, as FasterCap saw them (panels.vtk, written
-by fieldview.py). Saves a PNG and a ParaView state.
+by layz.field.run). Saves a PNG and a ParaView state. Run with ParaView's own Python:
 
-    layz view geometry RUN [--z-stretch 5] [--mesh] [-o out.png]
+    pvpython layz/field/paraview/geometry.py RUN [--z-stretch 5] [--mesh] [-o out.png]
     paraview --state RUN/geometry.pvsm
 
 --mesh draws the solver's triangle edges on the conductors.
-(On Ubuntu, ParaView needs HWLOC_COMPONENTS=-gl in the environment; `layz view` sets it.)
+(On Ubuntu, ParaView needs HWLOC_COMPONENTS=-gl in the environment.)
 """
 
 import argparse

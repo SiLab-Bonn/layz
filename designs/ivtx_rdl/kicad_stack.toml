@@ -1,6 +1,6 @@
 # The stackup typed into KiCad for obelix1_ivtx_ladder_with_nets_v3.1.hyp
 # (FR4 and copper placeholders, not the real RDL: see tech/uni-bonn-rdl/stack.toml). Kept as a
-# test fixture: layz gds2hyp must write exactly the STACKUP that KiCad's GUI wrote from it.
+# test fixture: layz.gds2hyp must write exactly the STACKUP that KiCad's GUI wrote from it.
 #
 # Layers top to bottom, thicknesses in µm; z is derived from the order (layz/stack.py).
 

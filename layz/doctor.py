@@ -1,7 +1,6 @@
 """`layz doctor`: check that this machine has what layz needs, then run layz's tests.
 
     layz doctor            the tools, then the test suite (about 40 s)
-    layz doctor --quick    the tools only
 
 One line per tool: ok, !! (required and missing, with how to get it), -- (optional, or not
 available). The tests that need a missing tool are skipped.
@@ -16,7 +15,7 @@ import shutil
 import sys
 
 # (what, checks, required, needed for, how to get it); a check is (kind, name)
-CHECKS = [("KLayout", [("klayout", "")], True, "DRC/LVS, viewing GDS", "sudo install/system.sh"), ("KiCad 10", [("kicad", "")], True, "gds2hyp from a board or GDS, pex on boards, lvs", "./install.sh (layz's own KiCad: install/kicad.sh)"), ("FasterCap", [("solver", "fastercap")], True, "pex, field", "./install.sh"), ("gdscheck", [("solver", "gdscheck")], True, "drc", "./install.sh"), ("Python modules", [("module", "klayout.db"), ("module", "klayout_pex"), ("module", "shapely")], True, "everything", "./install.sh"), ("HyperLynx", [("hyperlynx", "")], False, "hyp", "licensed; set LAYZ_HYPERLYNX_HOME to its SDD_HOME"), ("FastCap2", [("solver", "fastcap2")], False, "pex --solver fastcap2", "sudo install/system.sh, then ./install.sh"), ("ParaView", [("program", "pvpython")], False, "view", "./install.sh")]
+CHECKS = [("KLayout", [("klayout", "")], True, "layz.drc, layz.lvs, viewing GDS", "sudo install/system.sh"), ("KiCad 10", [("kicad", "")], True, "boards: layz.gds2hyp, layz.pex, KiCad's DRC and parity; schematics: layz.lvs", "./install.sh (layz's own KiCad: install/kicad.sh)"), ("FasterCap", [("solver", "fastercap")], True, "layz.pex, layz.field", "./install.sh"), ("gdscheck", [("solver", "gdscheck")], True, "layz.drc.run.drc", "./install.sh"), ("Python modules", [("module", "klayout.db"), ("module", "klayout_pex"), ("module", "shapely")], True, "everything", "./install.sh"), ("HyperLynx", [("hyperlynx", "")], False, "layz.hyperlynx", "licensed; set LAYZ_HYPERLYNX_HOME to its SDD_HOME"), ("FastCap2", [("solver", "fastcap2")], False, 'layz.pex with solver="fastcap2"', "sudo install/system.sh, then ./install.sh"), ("ParaView", [("program", "pvpython")], False, "the scripts in layz/field/paraview", "./install.sh")]
 
 
 def _short(path: str) -> str:

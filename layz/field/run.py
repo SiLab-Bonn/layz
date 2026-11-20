@@ -1,5 +1,5 @@
 """E-field and potential for a flow's targets (layz.flow): of a `layz.pex.run` folder solved with
-charges=True, every option given. The command line (`layz field`) is the same with defaults.
+charges=True, every option given.
 
     from layz.field import run as field
 

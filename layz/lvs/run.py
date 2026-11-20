@@ -1,5 +1,5 @@
 """LVS for a flow's targets (layz.flow): the layout's nets, named by its labels, against a KiCad
-schematic, into one folder. The command line (`layz lvs`) is the same.
+schematic, into one folder.
 
     from layz.lvs import analysis, run
 
@@ -52,9 +52,7 @@ def lvs(layout: Path, out: Path, *, stack: str | Path, schematic: Path) -> Path:
 def board(pcb: Path, out: Path, *, refill_zones: bool) -> Path:
     """KiCad's schematic parity of ``pcb`` (kicad-cli pcb drc --schematic-parity): footprints,
     nets and values against the project's schematic, and the copper's unconnected items."""
-    import subprocess
-
-    from layz import kicad
+    from layz import kicad, log
 
     cli = kicad.cli()
     if not cli:
@@ -64,7 +62,8 @@ def board(pcb: Path, out: Path, *, refill_zones: bool) -> Path:
     out.mkdir(parents=True, exist_ok=True)
     (out / "job.json").write_text(json.dumps({"board": str(pcb), "refill_zones": refill_zones}, indent=1))
     report = out / "parity.json"
-    subprocess.run([cli, "pcb", "drc", "--format", "json", "--schematic-parity", "--severity-all", "--units", "mm", "-o", str(report), *(["--refill-zones"] if refill_zones else []), str(pcb)], check=True, capture_output=True)
+    if log.run("kicad-cli", [cli, "pcb", "drc", "--format", "json", "--schematic-parity", "--severity-all", "--units", "mm", "-o", str(report), *(["--refill-zones"] if refill_zones else []), str(pcb)]):
+        raise SystemExit("kicad-cli pcb drc --schematic-parity failed")
     d = json.loads(report.read_text())
     with open(out / "parity.csv", "w", newline="") as f:
         w = csv.writer(f)

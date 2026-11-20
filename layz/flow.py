@@ -30,10 +30,13 @@ The targets run in file order; the run stops at the first that fails.
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 import time
 from collections.abc import Callable
 from pathlib import Path
+
+from layz import log
 
 TARGETS: dict[str, Callable[[], None]] = {}
 
@@ -58,41 +61,64 @@ def load(flow: Path) -> dict[str, Callable[[], None]]:
     return dict(TARGETS)
 
 
-def describe(targets: dict[str, Callable[[], None]]) -> str:
-    import textwrap
-
-    width = max(len(n) for n in targets)
-    lines = []
-    for name, fn in targets.items():
-        first = " ".join((fn.__doc__ or "").strip().split("\n\n")[0].split())  # its first paragraph
-        text = textwrap.wrap(first, 96 - width) or [""]
-        lines.append(f"  {name:<{width}}  {text[0]}")
-        lines += [f"  {'':<{width}}  {t}" for t in text[1:]]
-    return "\n".join(lines)
+INPUTS = ("LAYOUT", "STACK", "SCHEMATIC", "BOARD")  # what a flow's setup names, for the viewer
 
 
-def run_targets(targets: dict[str, Callable[[], None]]) -> str | None:
-    """Run every target in order; the name of the one that failed, if one did."""
-    for name, function in targets.items():
+def run_targets(targets: dict[str, Callable[[], None]], record: Path | None = None) -> str | None:
+    """Run every target in order; the name of the one that failed, if one did. With ``record``,
+    write the run there as it goes (run.json: the targets with status and time, the inputs
+    setup named), which `layz web` shows."""
+    run = {"flow": "", "started": time.strftime("%Y-%m-%d %H:%M:%S"), "inputs": {}, "targets": [{"name": n, "doc": " ".join((f.__doc__ or "").split()), "status": "pending", "seconds": None, "error": None} for n, f in targets.items()]}
+    if record is not None:
+        run["flow"] = str(next(iter(targets.values())).__globals__.get("__file__", ""))
+    failed = None
+    for i, (name, function) in enumerate(targets.items()):
+        entry = run["targets"][i]
         start = time.monotonic()
-        print(f"== {name}", flush=True)
+        first = log.FILE["lines"]
+        log.info("flow", f"[{i + 1}/{len(targets)}] {name}: {entry['doc'].split('. ')[0]}")
         try:
-            function()
+            with log.capture("layz"):
+                function()
+            entry["status"] = "ok"
         except (Exception, SystemExit) as e:  # a target stops with SystemExit or any error
-            print(f"== {name} FAILED after {time.monotonic() - start:.0f} s: {e}", flush=True)
-            return name
-        print(f"== {name} done in {time.monotonic() - start:.0f} s", flush=True)
-    return None
+            entry["status"], entry["error"] = "failed", str(e) or type(e).__name__
+            failed = name
+        entry["seconds"] = round(time.monotonic() - start, 1)
+        if failed:
+            for line in entry["error"].splitlines():
+                log.error("flow", line)
+            log.error("flow", f"[{i + 1}/{len(targets)}] {name}: failed after {entry['seconds']:.0f} s")
+        else:
+            log.info("flow", f"[{i + 1}/{len(targets)}] {name}: ok in {entry['seconds']:.0f} s")
+        entry["log"] = [first, log.FILE["lines"]]  # its lines in run.log
+        if record is not None:
+            g = function.__globals__
+            run["inputs"] = {k.lower(): str(g[k]) for k in INPUTS if g.get(k) is not None}
+            record.parent.mkdir(parents=True, exist_ok=True)
+            record.write_text(json.dumps(run, indent=1))
+        if failed:
+            break
+    return failed
 
 
 def main(argv: list[str]) -> int:
-    """`layz run FLOW`: FLOW is a flow.py, or the folder with it."""
+    """`layz run FLOW`: FLOW is a flow.py, or the folder with it. The run is recorded in
+    results/<the flow's folder>/run.json."""
     flow = Path(argv[0])
     if flow.is_dir():
         flow = flow / "flow.py"
     if not flow.is_file():
         raise SystemExit(f"no flow file {flow}")
     found = load(flow)
-    print(f"{flow}: {', '.join(found)}", flush=True)
-    failed = run_targets(found)
+    log.info("flow", f"{flow}: {len(found)} targets: {', '.join(found)}")
+    record = Path("results") / flow.resolve().parent.name / "run.json"
+    record.parent.mkdir(parents=True, exist_ok=True)
+    with open(record.parent / "run.log", "w") as f:
+        log.FILE.update(file=f, lines=0)
+        try:
+            failed = run_targets(found, record)
+        finally:
+            log.FILE.update(file=None, lines=0)
+    (log.error if failed else log.info)("flow", f"{flow.resolve().parent.name}: " + (f"stopped at {failed}" if failed else "every target ok") + f"; results in {record.parent}")
     return 1 if failed else 0

@@ -3,9 +3,8 @@
 A stack lists the physical layers top to bottom, each with its thickness; heights (z) are
 derived from the order, never typed. Copper layers name the GDS layer they're drawn on, via
 layers the two copper layers they join. From this one description layz writes the KiCad board
-stackup (`layz gds2pcb --stack`), so the .kicad_pcb, the HyperLynx .hyp (`layz gds2hyp`) and the
-FasterCap model (`layz pex`) all carry the same stack; a GDS can also go to `layz pex --stack`
-directly.
+stackup (layz.gds2pcb), the HyperLynx .hyp (layz.gds2hyp) and the FasterCap model (layz.pex),
+so they all carry the same stack; a GDS goes to layz.pex with its stack directly.
 
     name = "SiLab RDL, 4 copper"     # free text
     outline = "70/0"                 # GDS layer of the board/die outline (optional)
@@ -24,9 +23,9 @@ directly.
     type = "copper"
     thickness_um = 6.0
     gds = "6/0"                      # GDS layer/datatype drawn on this copper layer
-    pads = true                      # layz gds2pcb: shapes in sub-cells become footprint pads
-    zones = false                    # layz gds2pcb: top-level shapes become copper zones (default true)
-    labels = ["6/1"]                 # layz lvs: text layers naming this copper's nets; default:
+    pads = true                      # layz.gds2pcb: shapes in sub-cells become footprint pads
+    zones = false                    # layz.gds2pcb: top-level shapes become copper zones (default true)
+    labels = ["6/1"]                 # layz.lvs: text layers naming this copper's nets; default:
                                      # the drawing layer's datatype 1 (6/0 -> 6/1), [] for none;
                                      # texts on the drawing layer itself always count
 
@@ -36,12 +35,12 @@ directly.
     bottom = "M2"
 
 Units are µm throughout. Masks may only be the first and last layers. Where the stack goes to
-KiCad (`layz gds2pcb`, `layz gds2hyp`), the copper layers become KiCad's in order, top to
+KiCad (layz.gds2pcb, layz.gds2hyp), the copper layers become KiCad's in order, top to
 bottom: F.Cu, In1.Cu, ..., B.Cu (`Process.kicad_names`); a .hyp from a GDS names them as the
 stack does again. Stacks of real PCBs (tech/multicb) simply use KiCad's names.
 
 This module also reads the stackup out of a .kicad_pcb (the reverse direction), which is how
-`layz pex` and `layz gds2hyp` get the stack of a KiCad board.
+layz.pex and layz.gds2hyp get the stack of a KiCad board.
 """
 
 from __future__ import annotations
@@ -145,7 +144,7 @@ class Process:
         return "\n".join(out) + "\n"
 
     def gds_layer_maps(self):
-        """layz gds2pcb's maps, in KiCad layers: zones {gds: copper}, vias {gds: (a, b)}, pads {gds: copper}."""
+        """layz.gds2pcb's maps, in KiCad layers: zones {gds: copper}, vias {gds: (a, b)}, pads {gds: copper}."""
         key = lambda s: tuple(int(x) for x in s.split("/"))
         kicad = self.kicad_names()
         zones = {key(l.gds): kicad[l.name] for l in self.copper if l.gds and l.zones}

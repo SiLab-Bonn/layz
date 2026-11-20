@@ -1,6 +1,6 @@
 """A GDS's nets: KLayout's connectivity of the copper and via layers of a layz stack
-(LayoutToNetlist), and the text labels on them. `layz lvs` compares them with a schematic;
-`layz gds2pcb` names the board's nets from them.
+(LayoutToNetlist), and the text labels on them. layz.lvs compares them with a schematic;
+layz.gds2pcb and layz.gds2hyp name the board's nets from them.
 
 A label names the net whose copper its origin lies on. Labels are read from each copper
 layer's label layers (its datatype 1, 6/0 -> 6/1, or what the stack lists as labels = [...])

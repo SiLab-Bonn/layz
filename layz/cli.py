@@ -1,6 +1,7 @@
 """layz: layout tools for SiLab's FR4 PCBs, RDL chips and flex PCBs.
 
     layz run FLOW      a design's flow: FLOW is its flow.py, or the folder with it
+    layz web           the runs in a browser: http://HOST:8003/
     layz doctor        which external tools this machine has, then the tests
 
 A flow.py names its layout (GDS or KiCad board), stack, schematic and limits, and runs its
@@ -37,6 +38,10 @@ def main(argv: list[str] | None = None) -> int:
         from layz import flow
 
         return flow.main(argv[1:])
+    if argv == ["web"]:
+        from layz.web import server
+
+        return server.main()
     if argv == ["doctor"]:
         from layz import doctor
 

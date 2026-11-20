@@ -3,15 +3,15 @@
 The in-house RDL of Uni Bonn: Al on polyimide, as on obelix1 (M2 + M3 on the chip pads).
 
 - `stack.toml`: layers (TopPad 8/0, M3 6/0, M2 3/0, ChipPad 68/0), heights, εr
-  (`--stack uni-bonn-rdl`). Thicknesses from asiclab's `tech/uni-bonn-rdl`; the polyimide εr and
+  (`stack="uni-bonn-rdl"`). Thicknesses from asiclab's `tech/uni-bonn-rdl`; the polyimide εr and
   8/0 are still to confirm.
-- `pdk.yml`, `decks/`, `suites/`: the DRC deck (`--kit uni-bonn-rdl`), below.
+- `pdk.yml`, `decks/`, `suites/`: the DRC deck (`kit="uni-bonn-rdl"`), below.
 
 ## DRC
 
 gdscheck PDK for the in-house RDL (maskless lithography), with the layers of asiclab's
 `tech/uni-bonn-rdl`: chip pads 68/0, Al M1 1/0, M2 3/0, M3 6/0, polyimide openings V1 2/0,
-V2 4/0, pad openings 7/0, outline 70/0. Run it with `layz drc --kit uni-bonn-rdl`.
+V2 4/0, pad openings 7/0, outline 70/0. A flow runs it with `layz.drc.run.drc(GDS, OUT, kit="uni-bonn-rdl", ...)`.
 
 | Rule | Value |
 | --- | --- |
@@ -27,7 +27,7 @@ has 4/0 AND 5/0; designs draw V2 on 4/0). Suites: `main` (everything), `geometry
 density).
 
 Performance: on the obelix1 ladder the M2 and M3 width checks are 98 % of the run
-(`layz drc --benchmark`). layz uses a 20 mm merge tile (`--tile`), about 5x faster than 2 mm on
+(timed per rule). layz's flows use a 20 mm merge tile (`tile=20000.0`), about 5x faster than 2 mm on
 the ladder's long planes; the ladder GDS takes about 35 s (18 threads) and reports 261
 violations: V2 enclosure by M2 (52) and M3 (138), density in 19 + 20 windows on M2/M3,
 19 notches, 1 width, and 12 at V1 and pad openings.

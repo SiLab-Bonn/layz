@@ -1,6 +1,6 @@
 # multicb
 
-Multi-CB's published standard buildups, one stack file each (`--stack multicb/4L-01`):
+Multi-CB's published standard buildups, one stack file each (`stack="multicb/4L-01"`):
 
 | Process | | Source |
 | --- | --- | --- |

@@ -20,7 +20,7 @@
 # enclosed by M3 like vias.
 #
 #   gdscheck run --pdk-path drc -p uni-bonn-rdl -s main -t TOP --tile 2000 -i design.gds -r design.lyrdb
-#   (or: layz drc --lay design.gds --kit uni-bonn-rdl)
+#   (or, in a flow: layz.drc.run.drc(GDS, OUT, kit="uni-bonn-rdl", ...))
 
 name: Uni Bonn RDL
 version: "0.2"

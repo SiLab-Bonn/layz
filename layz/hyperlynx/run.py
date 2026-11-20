@@ -13,10 +13,9 @@ from __future__ import annotations
 
 import json
 import shutil
-import subprocess
-import sys
 from pathlib import Path
 
+from layz import log
 from layz.hyperlynx import setup
 
 RUNNERS = Path(__file__).parent / "runner"
@@ -29,7 +28,7 @@ def copy_board(board: Path, dest: Path, extra: list[Path] | tuple = ()) -> Path:
     """The .hyp, its project files and the model files beside it, into ``dest``."""
     board = Path(board)
     if board.suffix.lower() != ".hyp":
-        raise SystemExit(f"{board}: give a .hyp (layz gds2hyp writes one from a GDS or .kicad_pcb)")
+        raise SystemExit(f"{board}: give a .hyp (layz.gds2hyp.convert.hyp writes one from a GDS or .kicad_pcb)")
     if not board.exists():
         raise SystemExit(f"{board} not found")
     dest.mkdir(parents=True, exist_ok=True)
@@ -60,15 +59,7 @@ def _run(kind: str, board, out, options: dict, display: bool = False) -> Path:
         if not xvfb:
             raise SystemExit("SI runs need an X display: install xvfb (xvfb-run), or run from a desktop session")
         cmd = [xvfb, "-a", *cmd]
-    log = (out / "run.log").open("w")
-    proc = subprocess.Popen(cmd, cwd=copy.parent, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
-    for line in proc.stdout:
-        log.write(line)
-        noise = line.startswith(("[INFO] ******", "[INFO] Opening", "[INFO] Opened", "[INFO] Closing", "[INFO] A .CSV", "Path: ")) or "Model Builder: Ground node" in line or "Stackup Verifier" in line
-        if not noise:
-            sys.stdout.write(line)
-    rc = proc.wait()
-    log.close()
+    rc = log.run("hyperlynx", cmd, cwd=copy.parent, env=env, log=out / "run.log")
     if rc:
         raise SystemExit(f"HyperLynx {kind} run failed (exit {rc}); log: {out / 'run.log'}")
     return out

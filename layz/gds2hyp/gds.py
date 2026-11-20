@@ -9,7 +9,7 @@
                       merged copper per layer as POLYGON / POLYVOID
 
 Coordinates are the GDS's, in inches (Y up, as in the GDS). Every net must carry a net label,
-as in `layz gds2pcb`; a net with two names, or a label on no copper, stops it too.
+as in layz.gds2pcb; a net with two names, or a label on no copper, stops it too.
 """
 
 from __future__ import annotations

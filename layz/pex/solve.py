@@ -6,14 +6,13 @@ Pipeline:
         -> KLayout-PEX FasterCapModelBuilder (3-D extrusion, dielectric interfaces, mesh)
         -> .lst/.geo -> FasterCap or FastCap2 -> capacitance matrix (CSV, fF)
 
-KiCad boards go through kicad2fastercap.py, which reuses this module's flow (run_flow).
+KiCad boards go through layz/pex/kicad.py, which reuses this module's flow (run_flow).
 
 No LVS and no netlist are involved: a conductor is every set of shapes that touch,
 or are joined by vias. Name conductors with texts on the conductor layer or with
---name NAME=LAYER@X,Y; unnamed bodies are numbered n1, n2, ... and listed with their location.
+names={NAME: (LAYER, X, Y)}; unnamed bodies are numbered n1, n2, ... and listed with their location.
 
-Run from the layz command (docs/install.md):
-    layz pex designs/conversion_tests/conv_test_2.gds --stack <process>
+A flow runs it with layz.pex.run.capacitance(GDS, OUT, stack="<process>", ...).
 """
 
 from __future__ import annotations
@@ -204,7 +203,7 @@ def extract_bodies(layout: db.Layout, top: db.Cell, stack: Stack, ports: list[tu
     port_layers: dict[str, int] = {}
     for name, cond, x, y in ports:
         if cond not in cond_by_name:
-            raise SystemExit(f"--name {name}: unknown conductor {cond!r} (stack has {', '.join(cond_by_name)})")
+            raise SystemExit(f"names: {name}: unknown conductor {cond!r} (stack has {', '.join(cond_by_name)})")
         li = port_layers.setdefault(cond, layout.layer(db.LayerInfo(f"__port_{cond}")))
         p = db.DPoint(x, y)
         top.shapes(li).insert(db.DText(name, db.DTrans(p)))
@@ -386,14 +385,14 @@ def run_solver(args, lst: Path, log: Path) -> CapacitanceMatrix:
 
     layz starts the solvers itself (only KLayout-PEX's 3-D model builder is used from it), so a
     newer KLayout-PEX can't change how the solvers are called or read."""
-    import subprocess
 
     if args.solver == "fastercap":
         cmd = [solvers.find("fastercap"), "-b", "-i", f"-a{args.tolerance}", f"-d{args.d_coeff}", f"-m{args.mesh}", "-ap", *(["-c"] if args.charges else []), *(["-g"] if args.galerkin else []), lst.name]
     else:
         cmd = [solvers.find("fastcap2"), "-o2", "-p1.0", f"-t{args.tolerance}", f"-l{lst.name}"]
-    with open(log, "w") as f:
-        rc = subprocess.run(cmd, cwd=lst.parent, stdin=subprocess.DEVNULL, stdout=f, stderr=subprocess.STDOUT).returncode
+    from layz import log as layz_log
+
+    rc = layz_log.run(args.solver, cmd, cwd=lst.parent, log=log)
     if rc != 0:
         why = FASTERCAP_EXIT.get(rc, "") if args.solver == "fastercap" else ""
         raise SystemExit(f"{cmd[0]} failed with exit code {rc}{f' ({why})' if why else ''}, see {log}")
@@ -544,5 +543,5 @@ def run_flow(args, layout: db.Layout, top: db.Cell, stack: Stack, out: Path, por
     if args.solver == "fastercap":
         passes = (out / "fastercap.log").read_text().count("Iteration number")
         if passes < 2:
-            print(f"WARNING: FasterCap stopped after {passes} refinement pass(es); with dielectrics the first pass can be far off (e.g. 35 % low). Lower --tolerance (now {args.tolerance}) and compare.", file=sys.stderr)
+            print(f"WARNING: FasterCap stopped after {passes} refinement pass(es); with dielectrics the first pass can be far off (e.g. 35 % low). Lower tolerance (now {args.tolerance}) and compare.", file=sys.stderr)
     report(cm, bodies, out)

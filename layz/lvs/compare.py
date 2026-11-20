@@ -1,4 +1,4 @@
-"""`layz lvs`: compare a GDS layout's connectivity with a KiCad schematic's netlist.
+"""Compare a GDS layout's connectivity with a KiCad schematic's netlist.
 
 For interconnect (RDL, PCB) there are no devices to recognise: the comparison is net by net.
 KLayout extracts the layout's nets from the copper and via layers of a layz stack
@@ -13,21 +13,20 @@ A label names the net whose copper its origin lies on. Labels are read from
       labels = [...] for that layer,
     * the copper drawing layers themselves (a text on 6/0 names the 6/0 net under it).
 
-Checks (each listed with where it is, also as a KLayout marker database with --report):
+Checks (each listed with where it is, also as a KLayout marker database, lvs.lyrdb):
 
     open        one schematic net on several layout nets (its pins, or its name, are split)
     short       one layout net carrying several schematic nets (pins or names)
     unknown     a label naming no schematic net or pin
     unlabelled  schematic nets no label checks (info: add labels to cover them)
 
-    layz lvs --lay design.gds --stack uni-bonn-rdl --sch design.kicad_sch [--report lvs.lyrdb]
-Exit status 0 when there are no opens, shorts or unknown labels, 1 otherwise.
+A flow runs it with layz.lvs.run.lvs(GDS, OUT, stack="uni-bonn-rdl", schematic=SCH), and
+layz.lvs.analysis.findings fails on opens, shorts or unknown labels.
 """
 
 from __future__ import annotations
 
 import re
-import subprocess
 import tempfile
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -76,7 +75,10 @@ def schematic_netlist(path: Path) -> Schematic:
             raise SystemExit("kicad-cli not found: run install/kicad.sh, or export the netlist in KiCad and pass the .net file")
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "netlist.net"
-            subprocess.run([cli, "sch", "export", "netlist", "--format", "kicadsexpr", "-o", str(out), str(path)], check=True, capture_output=True)
+            from layz import log
+
+            if log.run("kicad-cli", [cli, "sch", "export", "netlist", "--format", "kicadsexpr", "-o", str(out), str(path)]):
+                raise SystemExit(f"kicad-cli could not export the netlist of {path}")
             return read_netlist(out.read_text(encoding="utf-8"))
     return read_netlist(path.read_text(encoding="utf-8"))
 
@@ -137,7 +139,7 @@ def compare(sch: Schematic, labels: list[Label]) -> tuple[list[Finding], dict]:
 
 def write_report(path: Path, top: str, findings: list[Finding]) -> None:
     """KLayout marker database: one category per kind, a marker per label involved."""
-    rdb = krdb.ReportDatabase("layz lvs")
+    rdb = krdb.ReportDatabase("layz.lvs")
     cell = rdb.create_cell(top)
     cats = {}
     for f in findings:

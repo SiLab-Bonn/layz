@@ -1,5 +1,5 @@
 """Capacitance extraction for a flow's targets (layz.flow): every option given, the results in
-one folder. The command line (`layz pex`) is the same with defaults.
+one folder.
 
     from layz.pex import analysis, plots, run
 

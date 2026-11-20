@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build the field solvers used by `layz pex` into $TOOLS (default: ~/.local/share/layz) and link
+# Build the field solvers used by layz.pex into $TOOLS (default: ~/.local/share/layz) and link
 # them where this terminal finds them (install/lib.sh).
 #
 #   tools/src/FastFieldSolvers/build/FasterCap   iic-jku/FasterCap, headless   (LGPL-2.1)
@@ -58,7 +58,7 @@ cmake -S FasterCap -B build -DCMAKE_BUILD_TYPE=Release -DFASTFIELDSOLVERS_HEADLE
 cmake --build build -j"$JOBS"
 popd
 
-# --- FastCap2 (optional, `layz pex --solver fastcap2`): its CMake needs GoogleTest and the Python
+# --- FastCap2 (optional, layz.pex with solver="fastcap2"): its CMake needs GoogleTest and the Python
 # headers, system packages where the system has them (install/system.sh; on RHEL and AlmaLinux
 # GoogleTest is only in EPEL)
 have_gtest() {

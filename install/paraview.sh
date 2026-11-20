@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ParaView with pvpython, for `layz view` of field results. No arguments, no sudo.
+# ParaView with pvpython, for the field results' scripts (layz/field/paraview). No arguments, no sudo.
 #
 #   Debian, Ubuntu, Fedora, Arch, macOS   a system package (install/system.sh); this checks it
 #                                         and, on macOS, links pvpython onto your PATH

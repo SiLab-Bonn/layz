@@ -16,7 +16,6 @@ from __future__ import annotations
 import importlib.util
 import os
 import shutil
-import subprocess
 import sys
 from pathlib import Path
 
@@ -65,7 +64,9 @@ def run(module: str, argv: list[str]) -> int:
     if py is None:
         raise SystemExit("layz's KiCad is not installed: run install/kicad.sh (or ./install.sh)")
     env = {**os.environ, "PYTHONPATH": os.pathsep.join([str(REPO), os.environ.get("PYTHONPATH", "")]).rstrip(os.pathsep)}
-    return subprocess.run([str(py), "-m", module, *argv], env=env).returncode
+    from layz import log
+
+    return log.run("kicad", [str(py), "-m", module, *argv], env=env)
 
 
 def require_pcbnew() -> None:

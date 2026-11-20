@@ -224,7 +224,7 @@ def test_hyp_traces_pass_converts_signal_keeps_supply():
     assert add_traces(hyp, "none")[0] == hyp
 
 
-# ------------------------------------------------------------------ layz lvs
+# ----------------------------------------------------------------- layz.lvs
 
 
 def test_lvs_finds_open_short_unknown(tmp_path):
@@ -404,7 +404,8 @@ def test_eye_densify_and_hexagon():
     assert len(hx) == 6 and hx[:, 1].max() <= 0.5 + 1e-9 and hx[:, 1].min() >= -0.5 - 1e-9
 
 
-def test_flow_targets(tmp_path, capsys):
+def test_flow_targets(tmp_path, capsys, monkeypatch):
+    monkeypatch.chdir(tmp_path)  # the run is recorded in ./results/
     from layz import flow as targets
 
     flow = tmp_path / "flow.py"
@@ -413,5 +414,9 @@ def test_flow_targets(tmp_path, capsys):
     assert (tmp_path / "flow.py.out").read_text() == "first second" and not (tmp_path / "flow.py.4").exists()
     assert "first, second, third, fourth" in capsys.readouterr().out
     assert cli.main(["run", str(tmp_path)]) == 1  # the folder with flow.py
+    import json
+
+    run = json.loads((tmp_path / "results" / tmp_path.name / "run.json").read_text())
+    assert [t["status"] for t in run["targets"]] == ["ok", "ok", "failed", "pending"] and run["targets"][2]["error"] == "broken"
     with pytest.raises(TypeError):
         targets.target(lambda x: None)

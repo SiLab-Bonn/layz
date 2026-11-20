@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install gdscheck (https://github.com/aesc-silicon/gdscheck), the DRC engine of `layz drc`, for
+# Install gdscheck (https://github.com/aesc-silicon/gdscheck), the DRC engine of layz.drc, for
 # yourself, without sudo: `cargo install` into ~/.cargo, linked where this terminal finds it. No
 # arguments. Needs Rust's cargo (install/system.sh). Run again to update.
 set -euo pipefail

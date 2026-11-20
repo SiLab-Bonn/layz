@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Electric field and potential from a FasterCap charge solution (fieldsolve.py --charges).
+"""Electric field and potential from a FasterCap charge solution (layz.pex.run with charges=True).
 
 FasterCap solves for the surface charge on every panel: on conductors and, for dielectric
 interfaces, the polarization charge. Both are *total* charges, so the potential and field
@@ -17,8 +17,7 @@ Writes into the run directory:
     panels.vtk    the refined panels with their charge density, conductor/dielectric id
     field.html    interactive preview: conductors + |E| on cut planes (open in a browser)
 
-Run from the layz command (docs/install.md):
-    layz field run_board --voltage TOP=1 --voltage BOT=0
+Called from a flow's targets as layz.field.run.field(run, voltages={"TOP": 1.0, "BOT": 0.0}, ...).
 """
 
 from __future__ import annotations
@@ -64,7 +63,7 @@ def load_run(run: Path) -> dict[str, tuple[np.ndarray, np.ndarray, list[str]]]:
     cols = {}
     lst = sorted(p for p in run.glob("m_g*.lst"))
     if not lst:
-        raise SystemExit(f"no charge files in {run}: run fieldsolve.py with --charges")
+        raise SystemExit(f"no charge files in {run}: run layz.pex.run.capacitance with charges=True")
     for p in lst:
         exc = clean(p.stem[2:])
         parts = []
@@ -462,7 +461,7 @@ def default_windows(tris, owner, axis: int, value: float):
 
 
 def field(run: Path, *, voltages: dict[str, float], plane: str | None, window: tuple[float, float, float, float] | None, res: int, seeds: int, points: float, box: tuple[float, float, float, float, float, float] | None, z_stretch: float | None, threads: int, probes: list[tuple[float, float, float]]) -> Path:
-    """E-field and potential of a `layz pex` run made with charges=True, written into ``run``.
+    """E-field and potential of a layz.pex.run folder solved with charges=True, written into ``run``.
 
     voltages   conductor -> V; unlisted conductors are at 0 V ({}: the first at 1 V)
     plane      "x=V" / "y=V": a 2-D cross-section on that plane (µm), plotted (potential and
@@ -497,7 +496,7 @@ def field(run: Path, *, voltages: dict[str, float], plane: str | None, window: t
     if plane:
         m = re.fullmatch(r"([xy])=(-?[\d.eE+-]+)", plane)
         if not m:
-            raise SystemExit("--plane expects x=VALUE or y=VALUE (µm)")
+            raise SystemExit("plane expects x=VALUE or y=VALUE (µm)")
         axis, value = "xy".index(m[1]), float(m[2])
         if window:
             windows = [("window", tuple(window))]

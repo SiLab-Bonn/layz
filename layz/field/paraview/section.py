@@ -1,15 +1,15 @@
-"""Open a fieldview.py cross-section in ParaView: |E| (or Ez, phi) heatmap, field lines and the
-copper outline. Saves a PNG and a ParaView state, so the same view opens interactively:
+"""Open a layz.field.run cross-section in ParaView: |E| (or Ez, phi) heatmap, field lines and the
+copper outline. Saves a PNG and a ParaView state, so the same view opens interactively. Run with ParaView's own Python:
 
-    layz view section RUN/section_y5000_edge.vtk [--color Emag|Ez|phi]
+    pvpython layz/field/paraview/section.py RUN/section_y5000_edge.vtk [--color Emag|Ez|phi]
     paraview --state RUN/section_y5000_edge.pvsm
 
 The field lines follow the in-plane field (E_plane), traced both ways from the seeds that
-fieldview.py writes next to the section (section_*_seeds.vtk): points just outside every
+layz.field.run writes next to the section (section_*_seeds.vtk): points just outside every
 conductor's outline, denser where the field is stronger, so this works for any geometry. In the
 GUI, add ParaView's own Stream Tracer (line or point-cloud seeds) for more lines, recolour the
 section, add a Contour on phi for equipotentials, etc.
-(On Ubuntu, ParaView needs HWLOC_COMPONENTS=-gl in the environment; `layz view` sets it.)
+(On Ubuntu, ParaView needs HWLOC_COMPONENTS=-gl in the environment.)
 """
 
 import argparse
@@ -22,7 +22,7 @@ from paraview.simple import Clip, ColorBy, CreateView, GetColorTransferFunction,
 from vtkmodules.numpy_interface import dataset_adapter as dsa
 
 ap = argparse.ArgumentParser()
-ap.add_argument("section", help="section_*.vtk written by fieldview.py --plane")
+ap.add_argument("section", help="section_*.vtk written by layz.field.run with a plane")
 ap.add_argument("--color", default="Emag", choices=["Emag", "Ez", "phi"])
 ap.add_argument("-o", "--out", help="PNG (default: next to the section)")
 args = ap.parse_args()
@@ -87,7 +87,7 @@ if os.path.exists(panels_path):
     od.AmbientColor = [0.0, 0.0, 0.0]
     od.LineWidth = 2.5
 
-# field lines from the seeds fieldview.py wrote next to the section
+# field lines from the seeds layz.field.run wrote next to the section
 seeds_path = f"{stem}_seeds.vtk"
 if os.path.exists(seeds_path):
     seeds = OpenDataFile(os.path.abspath(seeds_path))
@@ -102,7 +102,7 @@ if os.path.exists(seeds_path):
     ld.LineWidth = 1.2
     ld.Opacity = 0.8
 else:
-    print(f"no {seeds_path}: no field lines (rerun fieldview.py --plane)")
+    print(f"no {seeds_path}: no field lines (rerun layz.field.run with a plane)")
 
 # camera: straight at the section, parallel projection, true aspect (after a first render,
 # which would otherwise reset it to fit everything, including the copper beyond the section)
