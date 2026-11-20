@@ -15,7 +15,6 @@ Used by layz.hyperlynx.plots; any new layz plot should use it too.
 from __future__ import annotations
 
 import json
-
 import os
 from collections.abc import Mapping, Sequence
 from pathlib import Path
