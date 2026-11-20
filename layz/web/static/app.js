@@ -432,7 +432,7 @@ async function view3d(b) {
   const [x0, y0, x1, y1] = b.bbox;
   const size = Math.max(x1 - x0, y1 - y0);
   const total = b.stackup.reduce((a, l) => a + l.thickness_mm, 0) || 0.1;
-  const zs = Math.max(1, (0.04 * size) / total);  // height exaggerated: a thin stack stays visible
+  const zs = Math.max(1, Math.min(50, (0.01 * size) / total));  // height stretched (at most 50x): the stack about 1 % of the board's length
   // each layer's bottom and top (mm, z up from the bottom of the stack), exaggerated
   const z = {};
   let at = 0;
@@ -524,7 +524,7 @@ async function view3d(b) {
   host.append(renderer.domElement, h("div", { class: "legend" }, `z ×${zs.toFixed(0)}`));
   const camera = new THREE.PerspectiveCamera(35, 1, size / 1000, size * 20);
   camera.up.set(0, 0, 1);
-  camera.position.set(0, -size * 1.1, size * 0.8);
+  camera.position.set(0, -size * 0.55, size * 0.75);  // from the front, mostly above
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.saveState();
