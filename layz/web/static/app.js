@@ -280,7 +280,9 @@ async function plotPane(design, p) {
   const label = (ax, k) => (byY ? ax.ylabel : (ax.title || "").replace(/\s*\(.*$/, "")) || `panel ${k + 1}`;
   const select = fig.axes.length > 1 ? h("select", { class: "panelpick", onchange: (e) => { pick = Number(e.target.value); draw(); } }, fig.axes.map((ax, k) => h("option", { value: k, selected: k === pick ? "" : null }, label(ax, k)))) : null;
   const draw = () => {
-    const axesShown = select ? [{ ...fig.axes[pick], box: [0, 0, 1, 1], title: "" }] : fig.axes;
+    // one panel at a time, always over the whole area (not where the PNG's layout put it), so every
+    // plot has one width
+    const axesShown = [{ ...fig.axes[select ? pick : 0], box: [0, 0, 1, 1], title: select ? "" : fig.axes[0].title }];
     const ink = css("--ink-1"), grid = css("--line-2"), dim = css("--ink-4");
     const traces = [], layout = { paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: { color: ink, family: css("--font-mono"), size: 11 }, margin: { l: 60, r: 20, t: fig.title ? 36 : 14, b: 84 }, showlegend: true, legend: { orientation: "h", x: 0.5, xanchor: "center", yref: "container", y: 0.01, yanchor: "bottom", bgcolor: "rgba(0,0,0,0)", font: { size: 10 } }, title: fig.title ? { text: fig.title, font: { size: 12 } } : undefined, annotations: [] };
     axesShown.forEach((ax, k) => {
