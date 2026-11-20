@@ -7,7 +7,13 @@ schematic, into one folder. The command line (`layz lvs`) is the same.
     analysis.findings(checked, out=checked / "summary.csv")
 
 Writes lvs.lyrdb (KLayout markers), findings.csv (kind, what, x, y µm), summary.json (the
-counts) and job.json.
+counts) and job.json. A PCB is compared with its schematic by KiCad itself (its schematic
+parity: the .kicad_sch next to the board, by the project's name):
+
+    checked = run.board(PCB, RESULTS / "lvs", refill_zones=True)
+    analysis.parity(checked, out=checked / "summary.csv")
+
+which writes parity.json (KiCad's DRC report with schematic parity) and parity.csv.
 """
 
 from __future__ import annotations
@@ -40,4 +46,29 @@ def lvs(layout: Path, out: Path, *, stack: str | Path, schematic: Path) -> Path:
     ly = kdb.Layout()
     ly.read(str(layout))
     write_report(out / "lvs.lyrdb", ly.top_cell().name, found)
+    return out
+
+
+def board(pcb: Path, out: Path, *, refill_zones: bool) -> Path:
+    """KiCad's schematic parity of ``pcb`` (kicad-cli pcb drc --schematic-parity): footprints,
+    nets and values against the project's schematic, and the copper's unconnected items."""
+    import subprocess
+
+    from layz import kicad
+
+    cli = kicad.cli()
+    if not cli:
+        raise SystemExit("kicad-cli not found: run install/kicad.sh")
+    if not Path(pcb).with_suffix(".kicad_sch").exists():
+        raise SystemExit(f"no {Path(pcb).with_suffix('.kicad_sch').name} next to {pcb}: KiCad compares the board with its project's schematic")
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "job.json").write_text(json.dumps({"board": str(pcb), "refill_zones": refill_zones}, indent=1))
+    report = out / "parity.json"
+    subprocess.run([cli, "pcb", "drc", "--format", "json", "--schematic-parity", "--severity-all", "--units", "mm", "-o", str(report), *(["--refill-zones"] if refill_zones else []), str(pcb)], check=True, capture_output=True)
+    d = json.loads(report.read_text())
+    with open(out / "parity.csv", "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["kind", "what"])
+        w.writerows([p["type"], "; ".join(i["description"] for i in p.get("items", [])) or p["description"]] for p in d["schematic_parity"])
+        w.writerows(["unconnected", "; ".join(i["description"] for i in u.get("items", []))] for u in d["unconnected_items"])
     return out

@@ -7,7 +7,12 @@ given, into one folder. The command line (`layz drc`) is the same with defaults.
     analysis.violations(checked, max_violations=0, out=checked / "violations.csv")
 
 Writes drc.lyrdb (KLayout markers: `layz view drc.lyrdb --lay GDS`), rules.csv (violations per
-rule) and job.json.
+rule) and job.json. A PCB is checked by KiCad itself, against the rules in its own board:
+
+    checked = run.board(PCB, RESULTS / "drc", refill_zones=True, all_track_errors=False)
+
+which writes drc.json (KiCad's report: open the board in KiCad to see the markers) and the same
+rules.csv, so analysis.violations reads both.
 """
 
 from __future__ import annotations
@@ -64,3 +69,32 @@ def per_rule(report: Path) -> dict[str, int]:
 
     walk(list(db.each_category()))
     return counts
+
+
+def board(pcb: Path, out: Path, *, refill_zones: bool, all_track_errors: bool) -> Path:
+    """KiCad's DRC of ``pcb`` (kicad-cli pcb drc), with the board's own rules; every severity.
+
+    refill_zones      fill the zones first (else the fills as saved)
+    all_track_errors  every error of each track (else KiCad's first)
+    """
+    from layz import kicad
+
+    cli = kicad.cli()
+    if not cli:
+        raise SystemExit("kicad-cli not found: run install/kicad.sh")
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "job.json").write_text(json.dumps({"board": str(pcb), "refill_zones": refill_zones, "all_track_errors": all_track_errors}, indent=1))
+    report = out / "drc.json"
+    cmd = [cli, "pcb", "drc", "--format", "json", "--severity-all", "--units", "mm", "-o", str(report), *(["--refill-zones"] if refill_zones else []), *(["--all-track-errors"] if all_track_errors else []), str(pcb)]
+    subprocess.run(cmd, check=True, capture_output=True)
+    d = json.loads(report.read_text())
+    counts: dict[str, int] = {}
+    for v in d["violations"]:
+        key = f"{v['severity']}: {v['type']}"
+        counts[key] = counts.get(key, 0) + 1
+    counts["unconnected items"] = len(d["unconnected_items"])
+    with open(out / "rules.csv", "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["rule", "violations"])
+        w.writerows(sorted(counts.items()))
+    return out
