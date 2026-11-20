@@ -168,7 +168,7 @@ def main(argv: list[str]) -> int:
     run = json.loads(record.read_text()) if record.exists() else {"targets": []}
     ran = [t for t in run["targets"] if only is None or t["name"] in only]
     tally = {st: [t["name"] for t in ran if t["status"] == st] for st in ("errors", "warnings")}
-    summary = f"stopped at {failed}" if failed else "every step ran" + "".join(f"; {', '.join(n)} with {st}" for st, n in tally.items() if n)
+    summary = f"stopped at {failed}" if failed else ("every step ran" if only is None else f"{', '.join(n for n in found if n in only)} ran") + "".join(f"; {', '.join(n)} with {st}" for st, n in tally.items() if n)
     (log.error if failed else log.warn if any(tally.values()) else log.info)("flow", f"{flow.resolve().parent.name}: {summary}; results in {record.parent}")
     try:  # the run as a page to open from the file manager, without `layz web`
         from layz.web import report
