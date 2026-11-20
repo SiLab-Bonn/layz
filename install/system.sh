@@ -91,7 +91,7 @@ case "$family" in
         group "build tools" cmake g++ make git curl ca-certificates bzip2 libopenblas-dev
         group "FastCap2's build: GoogleTest, Python headers" libgtest-dev python3-dev
         group "Rust (gdscheck)" cargo
-        group "ParaView" paraview
+        group "ParaView" paraview python3-paraview   # pvpython is in python3-paraview (only recommended)
         if [ "$family" = ubuntu ]; then
             u="$(. /etc/os-release && echo "${VERSION_ID%%.*}")"
             klayout_official "https://www.klayout.org/downloads/Ubuntu-$u/klayout_${KLAYOUT}-1_amd64.deb" as_root env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends
