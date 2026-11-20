@@ -90,7 +90,7 @@ def drawings(src: Path, folder: Path) -> dict[str, list[str]]:
 
     out = {}
     for theme in ("dark", "light"):
-        where = folder.with_name(f"{folder.name}-{theme}")
+        where = folder.with_name(f"{folder.name}-{src.stem}-{theme}")  # per source: another file, another drawing
         pages = sorted(where.glob("*.svg"))
         if not pages or pages[0].stat().st_mtime < src.stat().st_mtime:
             pages = draw.kicad_svg(src, where, dark=theme == "dark")
