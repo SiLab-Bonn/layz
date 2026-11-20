@@ -62,6 +62,7 @@ def design(name: str) -> dict:
         t["plots"] = [{"png": str(f.relative_to(folder)), "data": str(f.with_suffix(".plot.json").relative_to(folder)) if f.with_suffix(".plot.json").exists() else None} for f in found if f.suffix == ".png"]
         t["markers"] = json.loads((out / "markers.json").read_text()) if (out / "markers.json").exists() else None
         t["overlays"] = [str(f.relative_to(folder)) for f in found if f.name.endswith(".overlay.json")]
+        t["summary"] = json.loads((out / "summary.json").read_text()) if (out / "summary.json").is_file() and (out / "summary.json").stat().st_size < 200_000 else None
     flow = Path(run.get("flow", ""))
     run["source"] = flow.read_text() if flow.is_file() else ""
     return {"name": name, **run}
@@ -117,6 +118,7 @@ def inputs(name: str) -> dict:
     sch = Path(i.get("schematic", "")) if i.get("schematic") else (lay.with_suffix(".kicad_sch") if lay.suffix == ".kicad_pcb" else Path())
     if sch.is_file() and sch.suffix == ".kicad_sch":
         out["schematic_svgs"] = drawings(sch, web / "schematic")
+        out["schematic_index"] = draw.schematic_index(sch)
     elif sch.is_file():
         out["netlist"] = draw.netlist(sch)
     return out

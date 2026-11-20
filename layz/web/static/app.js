@@ -107,6 +107,7 @@ function tabs(entries) {
   show(0);
   const box = h("div", { class: "tabbox" }, bar, body);
   box.show = (label) => show(Math.max(0, entries.findIndex(([l]) => l === label)));
+  box.current = () => entries[[...bar.querySelectorAll("a")].findIndex((a) => a.classList.contains("on"))]?.[0];
   return box;
 }
 
@@ -133,7 +134,7 @@ function stage(d, t, i) {
     right.push(["layout", async () => {
       const inp = await inputs();
       if (inp.layout) return layoutViewer(inp.layout, null, true).el;
-      if (inp.layout_svgs) return svgViewer(inp.layout_svgs);
+      if (inp.layout_svgs) return (await svgViewer(inp.layout_svgs)).el;
       return h("div", { class: "caption" }, "no layout");
     }]);
     right.push(["3D", async () => {
@@ -142,7 +143,7 @@ function stage(d, t, i) {
     }]);
     right.push(["schematic", async () => {
       const inp = await inputs();
-      if (inp.schematic_svgs) return svgViewer(inp.schematic_svgs);
+      if (inp.schematic_svgs) return (await svgViewer(inp.schematic_svgs, inp.schematic_index)).el;
       if (inp.netlist) return table({ path: "", rows: [["net", "pins"], ...inp.netlist.map((n) => [n.net, n.pins.join(" ")])] });
       return h("div", { class: "caption" }, "no schematic");
     }]);
@@ -157,6 +158,15 @@ function stage(d, t, i) {
     }]);
   }
   for (const o of t.overlays || []) right.push([`on the board`, async () => layoutViewer(await board(), await once(fileUrl(d.name, o))).el]);
+  let sheet = null; // the schematic this stage marks its findings on
+  const unchecked = (t.summary && t.summary["unchecked nets"]) || [];
+  if (t.name.includes("lvs") && t.markers && (t.markers.boxes.some((m) => m.names) || unchecked.length)) right.push([`schematic · marked`, async () => {
+    const inp = await inputs();
+    if (!inp.schematic_svgs || !inp.schematic_index) return h("div", { class: "caption" }, "no KiCad schematic to mark");
+    sheet = await svgViewer(inp.schematic_svgs, inp.schematic_index);
+    sheet.mark(t.markers.boxes.flatMap((m) => m.names || []), [], unchecked);
+    return sheet.el;
+  }]);
   if (isBoard) right.push(["board", async () => layoutViewer(await board()).el]);
   if (isBoard) right.push(["board 3D", async () => view3d(await board())]);
   const REPLACES = { dc: ["dc_current_density", "dc_loss_map", "dc_pin_voltage", "dc_via_current"] };  // maps an overlay draws on the board
@@ -177,7 +187,11 @@ function stage(d, t, i) {
   if (isBoard) left.push(["board facts", async () => h("div", { class: "facts" }, layoutFacts(await board()))]);
   const names = t.tables.map((tb) => tb.path.split("/").slice(1).join("/").replace(/\.csv$/, ""));
   t.tables.forEach((tb, k) => left.push([names[k], () => table(tb, t.markers ? mark : null)]));
-  if (t.markers && t.markers.boxes.length) left.push(["each violation", () => violations(t.markers.boxes, (m) => { rightTabs.show(`layout · ${t.markers.boxes.length} marked`); setTimeout(() => viewer && viewer.setMarkers(t.markers.boxes, m), 50); })]);
+  if (t.markers && t.markers.boxes.length) left.push(["each violation", () => violations(t.markers.boxes, (m) => {
+    if (sheet && m.names && rightTabs.current() === "schematic · marked") { sheet.mark(t.markers.boxes.flatMap((x) => x.names || []), m.names, unchecked); return; }
+    rightTabs.show(`layout · ${t.markers.boxes.length} marked`);
+    setTimeout(() => viewer && viewer.setMarkers(t.markers.boxes, m), 50);
+  })]);
   if (t.lines.length) left.push([`log${countLevels(t.lines)}`, () => h("pre", { class: "log" }, t.lines.map(logLine))]);
 
   const rightTabs = tabs(right);
@@ -279,11 +293,39 @@ async function plotPane(design, p) {
 
 // a schematic's sheets or a board, as KiCad drew them in the page's colours (Nord themes when
 // dark), inline: pan, zoom, sheets as tabs; redrawn when the system's theme changes
-async function svgViewer(themes) {
+async function svgViewer(themes, index = null) {
   const holder = h("div", { class: "schematic" });
   const bar = h("div", { class: "pages" });
   const cache = new Map();
-  let k = 0, vb = null;
+  let k = 0, vb = null, marked = [], picked = [], warned = [], svgNow = null;
+  // where a name is on the sheet: a pin (REF.PIN), a net's labels, a symbol (REF)
+  const places = (name) => {
+    if (!index) return [];
+    if (index.pins[name]) return [index.pins[name]];
+    const net = name.replace(/^.*\//, "").toUpperCase();
+    if (index.labels[net]) return index.labels[net];
+    const ref = index.refs[name.split(".")[0]];
+    return ref ? [ref] : [];
+  };
+  const drawMarks = () => {
+    if (!svgNow) return;
+    svgNow.querySelector("g.marks")?.remove();
+    const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    g.setAttribute("class", "marks");
+    const err = css("--sem-error"), warn = css("--sem-warn");
+    const all = [...warned.map((n) => [n, warn, "not checked by any layout label"]), ...marked.map((n) => [n, err, ""])];
+    for (const [name, colour, note] of all) for (const [x, y] of places(name)) {
+      const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      const hot = picked.includes(name);
+      c.setAttribute("cx", x); c.setAttribute("cy", y); c.setAttribute("r", hot ? 3.2 : 2.2);
+      c.setAttribute("fill", colour); c.setAttribute("fill-opacity", hot ? 0.35 : 0.18); c.setAttribute("stroke", colour); c.setAttribute("stroke-width", hot ? 0.6 : 0.35);
+      const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
+      title.textContent = note ? `${name}: ${note}` : name;
+      c.append(title);
+      g.append(c);
+    }
+    svgNow.append(g);
+  };
   const fetchSvg = async (u) => { if (!cache.has(u)) cache.set(u, (await fetch(u)).text()); return cache.get(u); };
   const show = async () => {
     const urls = themes[document.documentElement.dataset.theme] || themes.dark;
@@ -291,6 +333,8 @@ async function svgViewer(themes) {
     const svg = new DOMParser().parseFromString(await fetchSvg(urls[k]), "image/svg+xml").documentElement;
     svg.removeAttribute("width"); svg.removeAttribute("height");
     holder.replaceChildren(svg);
+    svgNow = svg;
+    drawMarks();
     requestAnimationFrame(() => {
       if (!vb) { const b = svg.getBBox(); vb = [b.x - 2, b.y - 2, b.width + 4, b.height + 4]; }
       const set = () => svg.setAttribute("viewBox", vb.join(" "));
@@ -313,7 +357,20 @@ async function svgViewer(themes) {
   };
   themeListeners.add(show);
   await show();
-  return h("div", {}, bar, holder, h("div", { class: "caption" }, "drag to pan · wheel to zoom"));
+  const el = h("div", {}, bar, holder, h("div", { class: "caption" }, "drag to pan · wheel to zoom" + (index ? " · red: LVS findings, yellow: nets no layout label checks (hover for the name)" : "")));
+  return {
+    el,
+    mark: (names, focus = [], warn = []) => {
+      marked = names; picked = focus; warned = warn; drawMarks();
+      const pts = focus.flatMap(places);
+      if (pts.length && svgNow) {  // zoom to the picked ones
+        const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
+        const pad = 25, x0 = Math.min(...xs) - pad, y0 = Math.min(...ys) - pad;
+        vb = [x0, y0, Math.max(...xs) + pad - x0, Math.max(...ys) + pad - y0];
+        svgNow.setAttribute("viewBox", vb.join(" "));
+      }
+    },
+  };
 }
 
 // ---------------------------------------------------------------- 3D (three.js, WebGL)

@@ -43,7 +43,9 @@ def lvs(layout: Path, out: Path, *, stack: str | Path, schematic: Path) -> Path:
     kinds = ("open", "short", "unknown", "floating")
     summary = {"layout nets": len(nets), **stats, **{k: sum(1 for x in found if x.kind == k) for k in kinds}}
     (out / "summary.json").write_text(json.dumps(summary, indent=1))
-    boxes = [{"rule": x.kind, "what": x.what, "box": [px / 1000 - 0.005, py / 1000 - 0.005, px / 1000 + 0.005, py / 1000 + 0.005]} for x in found for px, py, _ in x.where[:4]]
+    # each finding at its labels, with the names it involves (net names, REF.PIN): the viewer marks
+    # them on the layout and on the schematic
+    boxes = [{"rule": x.kind, "what": x.what, "names": sorted({text for _, _, text in x.where}), "box": [px / 1000 - 0.005, py / 1000 - 0.005, px / 1000 + 0.005, py / 1000 + 0.005]} for x in found for px, py, _ in x.where[:4]]
     (out / "markers.json").write_text(json.dumps({"on": "layout", "boxes": boxes}))
     ly = kdb.Layout()
     ly.read(str(layout))

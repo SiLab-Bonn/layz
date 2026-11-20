@@ -107,3 +107,58 @@ def netlist(path: Path) -> list[dict]:
         if m:
             nets.append({"net": m[1], "pins": [f"{r}.{p}" for r, p in re.findall(r'\(node\s+\(ref\s+"([^"]*)"\)\s+\(pin\s+"([^"]*)"\)', block)]})
     return nets
+
+
+def schematic_index(path: Path) -> dict:
+    """Where things are in a KiCad schematic, in its page's millimetres (y down, as KiCad's SVG
+    drawing of it): each net label's places, each symbol's place, each pin's (REF.PIN)."""
+    import math
+
+    from layz.stack import _sexp
+
+    root = _sexp(Path(path).read_text(errors="replace"))[0]
+    find = lambda node, key: next((c for c in node if isinstance(c, list) and c and c[0] == key), None)
+    lib_pins: dict[str, list] = {}  # lib_id -> [(number, x, y)] in the symbol's own frame (y up)
+    libs = find(root, "lib_symbols") or []
+    for sym in libs[1:]:
+        if not (isinstance(sym, list) and sym[0] == "symbol"):
+            continue
+        pins = []
+        stack = [sym]
+        while stack:
+            node = stack.pop()
+            for c in node:
+                if isinstance(c, list) and c:
+                    if c[0] == "pin":
+                        at, num = find(c, "at"), find(c, "number")
+                        if at and num:
+                            pins.append((num[1], float(at[1]), float(at[2])))
+                    elif c[0] == "symbol":
+                        stack.append(c)
+        lib_pins[sym[1]] = pins
+    labels: dict[str, list] = {}
+    refs: dict[str, list] = {}
+    pins: dict[str, list] = {}
+    for c in root[1:]:
+        if not isinstance(c, list) or not c:
+            continue
+        if c[0] in ("label", "global_label", "hierarchical_label"):
+            at = find(c, "at")
+            if at:
+                labels.setdefault(c[1].rsplit("/", 1)[-1].upper(), []).append([float(at[1]), float(at[2])])
+        elif c[0] == "symbol":
+            at, lib = find(c, "at"), find(c, "lib_id")
+            ref = next((q[2] for q in c if isinstance(q, list) and q[:2] == ["property", "Reference"]), None)
+            if not (at and lib and ref):
+                continue
+            x, y, rot = float(at[1]), float(at[2]), math.radians(float(at[3]) if len(at) > 3 else 0.0)
+            refs[ref] = [x, y]
+            mirror = find(c, "mirror")
+            for num, px, py in lib_pins.get(lib[1], []):
+                if mirror and mirror[1] == "x":
+                    py = -py
+                elif mirror and mirror[1] == "y":
+                    px = -px
+                rx, ry = px * math.cos(rot) - py * math.sin(rot), px * math.sin(rot) + py * math.cos(rot)
+                pins[f"{ref}.{num}"] = [x + rx, y - ry]  # the symbol's y is up, the page's down
+    return {"labels": labels, "refs": refs, "pins": pins}
