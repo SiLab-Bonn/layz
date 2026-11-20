@@ -8,7 +8,7 @@ Python's own `venv` and `pip`. It also uses tools that are not on PyPI:
 | KiCad 10 (`kicad-cli`, its `pcbnew` Python module) | `gds2hyp` from a board or GDS, `pex` on boards, `lvs` | `install/kicad.sh` |
 | FasterCap (default) / FastCap2 | `pex`, `field` | `install/fastercap.sh` |
 | gdscheck | `drc` | `install/gdscheck.sh` |
-| ParaView (optional) | `view` of field results | `install/paraview.sh` |
+| ParaView (optional) | looking at field results in 3-D (layz/field/paraview, with pvpython) | `install/paraview.sh` |
 | KLayout | viewing GDS, DRC and LVS results | [klayout.de/build.html](https://www.klayout.de/build.html) |
 | HyperLynx (optional, licensed) | `hyp` (SI/PI runs) | Siemens |
 
