@@ -104,7 +104,34 @@ def _loss(ports, volts: dict) -> float:
 
 
 @mpl.rc_context(PLOT_STYLE)
+def board_overlay(run: Path, out: Path, ret: Path | None = None) -> Path:
+    """A DC run's results for `layz web` to draw over the board, in the .hyp's coordinates (mm):
+    the current density per layer (A/mm², supply and return runs together) and each pin's voltage
+    and current."""
+    import json
+
+    layers = {}
+    for r in [run] + ([ret] if ret else []):
+        for lay, (J, _, ext) in current_density(r).items():
+            if lay in layers and layers[lay][1] == ext and layers[lay][0].shape == J.shape:
+                J = np.fmax(layers[lay][0], J)
+            layers[lay] = (J, ext)
+    pins = []
+    for r in [run] + ([ret] if ret else []):
+        for p in _rows(r / "ports.csv"):
+            if p["x"]:
+                pins.append({"pin": p["pin"], "net": p["net"], "x": float(p["x"]) * MM, "y": float(p["y"]) * MM, "v": float(p["voltage_V"]), "i": float(p["current_A"]), "run": r.name})
+    data = {"kind": "dc", "unit": "A/mm²", "layers": {lay: {"extent": ext, "ny": J.shape[0], "nx": J.shape[1], "z": [[None if not np.isfinite(v) else round(float(v) / 1e6, 6) for v in row] for row in J]} for lay, (J, ext) in layers.items()}, "pins": pins}
+    path = out / "dc_board.overlay.json"
+    path.write_text(json.dumps(data))
+    return path
+
+
 def plot_dc(run: Path, out: Path, ret: Path | None = None) -> list[Path]:
+    try:  # the results on the board, for the viewer
+        board_overlay(run, out, ret)
+    except Exception as e:  # noqa: BLE001
+        print(f"warning: no board overlay: {e}")
     ports, vias = _rows(run / "ports.csv"), [c for c in _rows(run / "vias.csv") if c["x1"]]
     sup, ref = _sides(run)
     paths: list[Path] = []

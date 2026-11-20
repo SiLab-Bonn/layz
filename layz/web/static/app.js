@@ -30,25 +30,17 @@ const fileUrl = (design, rel) => `/results/${encodeURIComponent(design)}/${rel.s
 const base = (p) => (p || "").split("/").pop();
 const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
-// ---------------------------------------------------------------- theme: the OS's, or the switch's
+// ---------------------------------------------------------------- theme: the system's
 
 const themeListeners = new Set();
-function setTheme(theme) {
-  document.documentElement.dataset.theme = theme;
-  $("#theme").textContent = theme === "dark" ? "☾" : "☀";
-  for (const f of themeListeners) f();
-}
 function initTheme() {
-  let saved = null;
-  try { saved = localStorage.getItem("layz-theme"); } catch {}
-  const os = window.matchMedia("(prefers-color-scheme: light)");
-  setTheme(saved || (os.matches ? "light" : "dark"));
-  os.addEventListener("change", (e) => { if (!saved) setTheme(e.matches ? "light" : "dark"); });
-  $("#theme").onclick = () => {
-    saved = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
-    try { localStorage.setItem("layz-theme", saved); } catch {}
-    setTheme(saved);
+  const light = window.matchMedia("(prefers-color-scheme: light)");
+  const set = () => {
+    document.documentElement.dataset.theme = light.matches ? "light" : "dark";
+    for (const f of themeListeners) f();
   };
+  set();
+  light.addEventListener("change", set);
 }
 
 async function render() {
@@ -160,6 +152,7 @@ function stage(d, t, i) {
       return viewer.el;
     }]);
   }
+  for (const o of t.overlays || []) right.push([`board · ${overlayName(o)}`, async () => layoutViewer(await board(), await once(fileUrl(d.name, o))).el]);
   if (isBoard) right.push(["board", async () => layoutViewer(await board()).el]);
   for (const p of t.plots) right.push([plotLabel(p.png), async () => plotPane(d.name, p)]);
 
@@ -193,6 +186,7 @@ function boardTarget(d) {
   return d.targets.find((t) => parts.includes(t.name))?.name || "board";
 }
 
+const overlayName = (o) => ({ dc: "current density" })[base(o).split("_")[0]] || base(o).replace(/\.overlay\.json$/, "");
 const plotLabel = (png) => base(png).replace(/\.png$/, "").replace(/_/g, " ");
 
 // ---------------------------------------------------------------- tables, violations, logs
@@ -301,7 +295,25 @@ async function schematicViewer(urls) {
 const NORD_LAYERS = ["#bf616a", "#ebcb8b", "#a3be8c", "#b48ead", "#88c0d0", "#d08770", "#8fbcbb", "#81a1c1"];
 const BOTTOM = "#5e81ac";
 
-function layoutViewer(b) {
+// an overlay's values as an image: log scale, blue (low) to red (high), empty cells clear
+function overlayImage(layer, lo, hi) {
+  const c = document.createElement("canvas");
+  c.width = layer.nx; c.height = layer.ny;
+  const ctx = c.getContext("2d");
+  const img = ctx.createImageData(layer.nx, layer.ny);
+  const [b0, b1] = [[0x5e, 0x81, 0xac], [0xbf, 0x61, 0x6a]];
+  const l0 = Math.log10(lo), span = Math.log10(hi) - l0 || 1;
+  layer.z.forEach((row, j) => row.forEach((v, i) => {
+    const k = 4 * ((layer.ny - 1 - j) * layer.nx + i);  // row 0 at the bottom (Y up)
+    if (v == null || !(v > 0)) return;
+    const t = Math.min(1, Math.max(0, (Math.log10(v) - l0) / span));
+    img.data[k] = b0[0] + t * (b1[0] - b0[0]); img.data[k + 1] = b0[1] + t * (b1[1] - b0[1]); img.data[k + 2] = b0[2] + t * (b1[2] - b0[2]); img.data[k + 3] = 235;
+  }));
+  ctx.putImageData(img, 0, 0);
+  return c;
+}
+
+function layoutViewer(b, overlay = null) {
   const color = Object.fromEntries(b.copper.map((l, i) => [l, i === b.copper.length - 1 && i > 0 ? BOTTOM : NORD_LAYERS[i % NORD_LAYERS.length]]));
   const shown = new Set(b.copper);
   let picked = null, markers = [], focus = null;
@@ -309,6 +321,15 @@ function layoutViewer(b) {
   const paths = b.polys.map((p) => { const path = new Path2D(); for (const r of [p.pts, ...p.holes]) ring(path, r); return { ...p, path }; });
   const cuts = (b.cuts || []).map((c) => { const path = new Path2D(); ring(path, c.pts); return { ...c, path }; });
 
+  // the overlay: per layer an image of its values (one colour scale for all), pins by voltage
+  let ov = null;
+  if (overlay) {
+    const vals = Object.values(overlay.layers).flatMap((l) => l.z.flat().filter((v) => v > 0)).sort((x, y) => x - y);
+    const lo = vals.length ? vals[Math.floor(vals.length * 0.02)] : 1, hi = vals.length ? vals[vals.length - 1] : 1;
+    overlay.pins = overlay.pins.filter((p) => p.run === overlay.pins[0]?.run);  // the supply run's pins
+    const vs = overlay.pins.map((p) => p.v);
+    ov = { lo, hi, vmin: Math.min(...vs), vmax: Math.max(...vs), images: Object.fromEntries(Object.entries(overlay.layers).map(([n, l]) => [n, { img: overlayImage(l, lo, hi), ext: l.extent }])) };
+  }
   const canvas = h("canvas");
   const pickedBox = h("div", { class: "picked", style: "display:none" });
   const wrap = h("div", { class: "canvas" }, canvas, pickedBox, h("div", { class: "hint" }, "drag to pan · wheel to zoom · click copper" + (b.kind === "gds" ? "" : " for its net")));
@@ -337,7 +358,7 @@ function layoutViewer(b) {
     const px = 1 / view.s;
     for (const layer of [...b.copper].reverse()) {
       if (!shown.has(layer)) continue;
-      ctx.globalAlpha = 0.55;
+      ctx.globalAlpha = ov ? 0.18 : 0.55;
       for (const p of paths) if (p.layer === layer) { ctx.fillStyle = picked && p.net && p.net === picked ? css("--ink-0") : color[layer]; ctx.fill(p.path, "evenodd"); }
       ctx.globalAlpha = 0.9;
       ctx.lineCap = "round";
@@ -345,6 +366,20 @@ function layoutViewer(b) {
         ctx.strokeStyle = picked && s.net === picked ? css("--ink-0") : color[layer];
         ctx.lineWidth = Math.max(s.w, px);
         ctx.beginPath(); ctx.moveTo(s.x1, s.y1); ctx.lineTo(s.x2, s.y2); ctx.stroke();
+      }
+    }
+    if (ov) {  // the results over the copper: each shown layer's map, the top layer last
+      ctx.imageSmoothingEnabled = false;
+      for (const layer of [...b.copper].reverse()) {
+        const o = ov.images[layer];
+        if (!o || !shown.has(layer)) continue;
+        const [ex0, ex1, ey0, ey1] = o.ext;
+        ctx.save();
+        ctx.translate(ex0, ey1);
+        ctx.scale((ex1 - ex0) / o.img.width, -(ey1 - ey0) / o.img.height);
+        ctx.globalAlpha = 0.85;
+        ctx.drawImage(o.img, 0, 0);
+        ctx.restore();
       }
     }
     ctx.globalAlpha = 1;
@@ -369,6 +404,22 @@ function layoutViewer(b) {
         ctx.fillStyle = css("--ink-0");
         ctx.fillText(l.text, sx + 4, sy - 3);
       }
+    }
+    if (ov) {  // pins coloured by voltage (low: red), and the scales
+      for (const p of overlay.pins) {
+        const sx = view.tx + view.s * p.x, sy = view.ty - view.s * p.y;
+        const t = (p.v - ov.vmin) / (ov.vmax - ov.vmin || 1);
+        ctx.fillStyle = `rgb(${0xbf + t * (0xa3 - 0xbf)},${0x61 + t * (0xbe - 0x61)},${0x6a + t * (0x8c - 0x6a)})`;
+        ctx.beginPath(); ctx.arc(sx, sy, 3, 0, 2 * Math.PI); ctx.fill();
+      }
+      const w = 160, x = canvas.clientWidth - w - 14, y = 12;
+      const grad = ctx.createLinearGradient(x, 0, x + w, 0);
+      grad.addColorStop(0, "#5e81ac"); grad.addColorStop(1, "#bf616a");
+      ctx.fillStyle = grad; ctx.fillRect(x, y, w, 8);
+      ctx.fillStyle = css("--ink-1"); ctx.font = "10px ui-monospace, monospace";
+      ctx.fillText(`${ov.lo.toPrecision(2)}`, x, y + 20);
+      ctx.fillText(`${ov.hi.toPrecision(2)} ${overlay.unit} (log)`, x + w - 90, y + 20);
+      ctx.fillText(`pins ${ov.vmin.toFixed(3)} (red) to ${ov.vmax.toFixed(3)} V (green)`, x - 40, y + 34);
     }
     // the violations: boxes in the error colour, at least 8 pixels across (as FRIDA's)
     if (markers.length) {

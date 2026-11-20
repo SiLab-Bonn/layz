@@ -124,7 +124,6 @@ aside { width: 290px; border-left: 1px solid var(--line-1); overflow-y: auto; pa
 details.flowsrc { margin: 0 0 12px; }
 details.flowsrc summary { cursor: pointer; color: var(--ink-3); font: 12px var(--font-mono); }
 details.flowsrc pre { background: var(--surface-sunken); border: 1px solid var(--line-1); border-radius: 4px; padding: 10px; font: 12px/1.45 var(--font-mono); max-height: 600px; overflow: auto; color: var(--ink-1); }
-#theme { margin-left: auto; background: none; border: 1px solid var(--line-2); color: var(--ink-1); border-radius: 4px; width: 28px; height: 24px; cursor: pointer; }
 .split { display: grid; grid-template-columns: minmax(320px, 2fr) 3fr; gap: 14px; padding: 10px 14px 14px; align-items: start; }
 .single { padding: 10px 14px 14px; }
 .tabbox { min-width: 0; }
