@@ -204,3 +204,4 @@ button.fit.on { border-color: var(--accent); color: var(--ink-0); }
 .files a:first-child { color: var(--ink-1); font-weight: 600; }
 .stackover { position: absolute; right: 12px; top: 6px; width: 200px; z-index: 2; }
 .stackover h4 { margin: 4px 0 6px; }
+.layout:not(.bare) .canvas .picked { right: auto; left: 10px; top: 40px; }
