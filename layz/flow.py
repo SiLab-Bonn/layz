@@ -2,7 +2,7 @@
 
     layz run designs/ivtx_rdl                     the flow.py in that folder, every step
     layz run designs/ivtx_rdl/flow.py             the same
-    layz run designs/ivtx_rdl drc lvs             only these steps (and setup, first: the inputs);
+    layz drc lvs designs/ivtx_rdl                 only these steps (and setup, first: the inputs);
                                                   the others keep their last run's results
 
 At the end, the run's page is written as a file, results/NAME/report.html: open it in a browser

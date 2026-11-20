@@ -5,7 +5,7 @@ that connect them, as one command line tool. Install: [docs/install.md](docs/ins
 
 ```
 layz run FLOW    a design's flow (its flow.py, or the folder with it): its targets, in order
-layz run FLOW drc lvs    only those targets (after setup); the others keep their last results
+layz drc lvs FLOW    only those targets (setup first, always); the others keep their last results
 layz web         the runs in a browser, on port 8003: http://HOST:8003/
 layz doctor      which external tools this machine has, then the tests
 ```

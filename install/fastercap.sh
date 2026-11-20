@@ -35,6 +35,7 @@ cd "$TOOLS/src"
 
 # --- wxWidgets base (Linux only)
 WX_CONFIG=$(command -v wx-config || true)
+[[ -z "$WX_CONFIG" && -x "$TOOLS/wx/bin/wx-config" ]] && WX_CONFIG=$TOOLS/wx/bin/wx-config   # built by an earlier run: not again
 if [[ -z "$WX_CONFIG" && "$(uname)" == Linux ]]; then
   if [[ ! -d wxWidgets-3.2.6 ]]; then  # unpacked aside first: an interrupted unpack isn't taken for a whole one
     rm -rf wx-unpack && mkdir wx-unpack
