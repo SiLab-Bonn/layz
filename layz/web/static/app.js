@@ -527,6 +527,15 @@ async function view3d(b) {
   camera.position.set(0, -size * 0.55, size * 0.75);  // from the front, mostly above
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
+  // left-drag orbits, middle- and right-drag pan; the wheel scrolls the page, Ctrl (⌘) + wheel zooms
+  controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.PAN };
+  controls.enableZoom = false;
+  renderer.domElement.addEventListener("wheel", (e) => {
+    if (!(e.ctrlKey || e.metaKey)) return;
+    e.preventDefault();
+    const k = Math.exp(e.deltaY * 0.0015);
+    camera.position.sub(controls.target).multiplyScalar(k).add(controls.target);
+  }, { passive: false });
   controls.saveState();
   const edgesBtn = h("button", { class: "fit on", title: "outlines", onclick: () => { const on = !outlines[0]?.visible; outlines.forEach((l) => (l.visible = on)); edgesBtn.classList.toggle("on", on); } }, "edges");
   host.append(h("div", { class: "tools" }, h("button", { class: "fit", title: "back to the whole board", onclick: () => controls.reset() }, "fit"), edgesBtn));
