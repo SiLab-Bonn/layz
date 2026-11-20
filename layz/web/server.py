@@ -1,13 +1,15 @@
 """`layz web`: the runs of this clone's flows in a browser, on port 8003 (http://HOST:8003/).
 
-Each `layz run designs/NAME` records itself in results/NAME/run.json (layz.flow); the page lists
-those designs and shows one at a time: its targets with their status, the tables and plots each
-target wrote into results/NAME/<target>/, and its board (the .hyp its setup named) with the
-stackup, copper layer by layer, trace widths and vias.
+Each `layz run designs/NAME` records itself in results/NAME/run.json (layz.flow); the first page
+lists those designs, and one opens as a single page, top to bottom in the flow's order: the
+inputs its setup named (layout layer by layer with its stackup, schematic), then each target
+with its tables, plots and log; the board target with the board HyperLynx simulates (copper,
+stackup, trace widths, vias).
 
     /                      the page (layz/web/static)
     /api/designs           every results/*/run.json
     /api/design?name=      one run, with each target's log lines, tables (CSV) and plots (PNG)
+    /api/inputs?name=      its inputs drawn: the layout (a GDS on its stack, a board as SVG), the schematic
     /api/board?name=       its board, read from its .hyp (layz.web.board), cached next to the run
     /results/...           the files themselves
 """
@@ -62,6 +64,38 @@ def board(name: str) -> dict:
     return json.loads(cache.read_text())
 
 
+def inputs(name: str) -> dict:
+    """What a run's setup named, drawn: the layout (a GDS on its stack, or a board as SVG) and the
+    schematic (SVG pages, or a netlist's nets); made once, kept in results/NAME/web/."""
+    from layz.web import layout as draw
+
+    run = json.loads((RESULTS / name / "run.json").read_text())
+    i = run.get("inputs", {})
+    web = RESULTS / name / "web"
+    web.mkdir(parents=True, exist_ok=True)
+    url = lambda f: "/results/" + str(Path(f).resolve().relative_to(RESULTS.resolve()))
+    fresh = lambda cache, src: cache.exists() and cache.stat().st_mtime >= Path(src).stat().st_mtime
+    out: dict = {"inputs": i}
+    lay = Path(i.get("layout", ""))
+    if lay.is_file() and lay.suffix.lower() in (".gds", ".gds2", ".oas") and i.get("stack"):
+        cache = web / "layout.json"
+        if not fresh(cache, lay):
+            cache.write_text(json.dumps(draw.gds(lay, i["stack"])))
+        out["layout"] = json.loads(cache.read_text())
+    elif lay.is_file() and lay.suffix == ".kicad_pcb":
+        pages = sorted((web / "board").glob("*.svg")) if fresh(web / "board" / "board.svg", lay) else draw.kicad_svg(lay, web / "board")
+        out["layout_svgs"] = [url(f) for f in pages]
+    sch = Path(i.get("schematic", "")) if i.get("schematic") else (lay.with_suffix(".kicad_sch") if lay.suffix == ".kicad_pcb" else Path())
+    if sch.is_file() and sch.suffix == ".kicad_sch":
+        pages = sorted((web / "schematic").glob("*.svg"))
+        if not pages or pages[0].stat().st_mtime < sch.stat().st_mtime:
+            pages = draw.kicad_svg(sch, web / "schematic")
+        out["schematic_svgs"] = [url(f) for f in pages]
+    elif sch.is_file():
+        out["netlist"] = draw.netlist(sch)
+    return out
+
+
 class Handler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(STATIC), **kwargs)
@@ -85,6 +119,8 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.send(200, json.dumps(designs()).encode(), "application/json")
             if url.path == "/api/design":
                 return self.send(200, json.dumps(design(q["name"])).encode(), "application/json")
+            if url.path == "/api/inputs":
+                return self.send(200, json.dumps(inputs(q["name"])).encode(), "application/json")
             if url.path == "/api/board":
                 return self.send(200, json.dumps(board(q["name"])).encode(), "application/json")
             if url.path.startswith("/results/"):

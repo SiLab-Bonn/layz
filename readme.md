@@ -160,14 +160,14 @@ named) and `run.log` (the log).
 
 `layz web`, from the repo, serves those runs on port 8003 (the same idea as FRIDA's viewer on
 8001: on juno, `http://juno.physik.uni-bonn.de:8003/`). The first page lists the designs and their
-last run; click one to open it:
+last run; click one to open it as one page, top to bottom in the flow's order:
 
-* **RUN**: the inputs, then the targets top to bottom with their status and time; each opens to
-  its tables (the CSVs it wrote: DRC rules, LVS findings, DC drop, eyes, ...) and its log.
-* **PLOTS**: every plot the targets wrote, by target (click to enlarge).
-* **LAYOUT**: the board the flow simulated (its `.hyp`): copper layer by layer (click a layer in
-  the stackup to hide it, click copper to see its net and pins), the stackup with thicknesses,
-  trace widths, via sizes and spans, and the board's counts.
+* `setup` with the inputs it named: the layout drawn layer by layer (a GDS on its stack, with its
+  labels; a KiCad board as SVG), its stackup, the schematic (SVG pages, or a netlist's nets);
+* then every target with its status, time, tables (the CSVs it wrote: DRC rules, LVS findings,
+  DC drop, eyes, ...), plots and log; the board target with the board HyperLynx simulates
+  (copper by layer: click a layer in the stackup to hide it, click copper for its net and pins;
+  trace widths, via sizes and spans).
 
 ## The API
 
