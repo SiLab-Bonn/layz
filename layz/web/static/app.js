@@ -541,6 +541,10 @@ function overlayImage(layer, lo, hi) {
   return c;
 }
 
+// a round length near ``target`` (1, 2 or 5 times a power of ten), and how to write it (mm in)
+const niceLength = (target) => { const e = 10 ** Math.floor(Math.log10(target)); return [1, 2, 5, 10].map((m) => m * e).find((v) => v >= target) || 10 * e; };
+const lengthText = (mm) => (mm >= 1 ? `${+mm.toPrecision(3)} mm` : `${+(mm * 1000).toPrecision(3)} µm`);
+
 function layoutViewer(b, overlay = null, full = false) {
   const color = layerColors(b.copper);
   const shown = new Set(b.copper);
@@ -586,6 +590,18 @@ function layoutViewer(b, overlay = null, full = false) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.fillStyle = css("--layout-bg");
     ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+    // a grid at a fifth of the scale bar's length, where its lines are at least 14 px apart (FRIDA's)
+    const step = niceLength(110 / view.s), minor = step / 5;
+    if (minor * view.s >= 14) {
+      ctx.strokeStyle = css("--line-1");
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      const wx0 = -view.tx / view.s, wx1 = (canvas.clientWidth - view.tx) / view.s;
+      const wy1 = view.ty / view.s, wy0 = (view.ty - canvas.clientHeight) / view.s;
+      for (let x = Math.ceil(wx0 / minor) * minor; x <= wx1; x += minor) { const sx = Math.round(view.tx + view.s * x) + 0.5; ctx.moveTo(sx, 0); ctx.lineTo(sx, canvas.clientHeight); }
+      for (let y = Math.ceil(wy0 / minor) * minor; y <= wy1; y += minor) { const sy = Math.round(view.ty - view.s * y) + 0.5; ctx.moveTo(0, sy); ctx.lineTo(canvas.clientWidth, sy); }
+      ctx.stroke();
+    }
     ctx.setTransform(dpr * view.s, 0, 0, -dpr * view.s, dpr * view.tx, dpr * view.ty);
     const px = 1 / view.s;
     for (const layer of [...b.copper].reverse()) {
@@ -667,6 +683,19 @@ function layoutViewer(b, overlay = null, full = false) {
       ctx.fillStyle = css("--ink-1"); ctx.font = "10px ui-monospace, monospace";
       ctx.fillText(scale[0], x, y + 20);
       ctx.textAlign = "right"; ctx.fillText(scale[1], x + w, y + 20); ctx.fillText(scale[2], x + w, y - 6); ctx.textAlign = "left";
+    }
+    {  // the scale bar, bottom left: a round length near 90 px, as it is at this zoom
+      const len = niceLength(90 / view.s), w = len * view.s, hh = canvas.clientHeight;
+      ctx.fillStyle = document.documentElement.dataset.theme === "light" ? "rgba(250,250,250,0.88)" : "rgba(40,44,51,0.88)";
+      ctx.fillRect(10, hh - 34, w + 16, 24);
+      ctx.strokeStyle = css("--ink-1");
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(18, hh - 18); ctx.lineTo(18, hh - 14); ctx.lineTo(18 + w, hh - 14); ctx.lineTo(18 + w, hh - 18); ctx.stroke();
+      ctx.fillStyle = css("--ink-1");
+      ctx.font = "11px ui-monospace, monospace";
+      ctx.textAlign = "center";
+      ctx.fillText(lengthText(len), 18 + w / 2, hh - 20);
+      ctx.textAlign = "left";
     }
     // the violations: boxes in the error colour, at least 8 pixels across (as FRIDA's)
     if (markers.length) {
