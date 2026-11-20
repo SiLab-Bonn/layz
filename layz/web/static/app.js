@@ -198,28 +198,20 @@ function stage(d, t, i) {
     const rows = [["flow", d.flow], ...Object.entries(d.inputs).filter(([k]) => k !== "board")];
     return h("div", {}, h("table", { class: "kvtable" }, rows.map(([k, v]) => h("tr", {}, h("td", {}, k), h("td", {}, d.paths && d.paths[k] ? pathRow(v, d.paths[k], false, k === "flow" ? `/flow?name=${encodeURIComponent(d.name)}` : null) : v)))), inp.layout ? h("div", { class: "facts" }, layoutFacts(inp.layout)) : null);
   }]);
-  if (isBoard) left.push(["board facts", async () => h("div", { class: "facts" }, layoutFacts(await board()))]);
-  // the step's tables, without those another one contains (its columns and rows); up to three
-  // together in one tab, with the violations, else a tab each
+  // the step's results in one tab: the board's facts (the board step), its tables (without those
+  // another contains), the violations; then its files
   const covers = (big, small) => big !== small && small.rows.length === big.rows.length && small.rows[0].every((c) => big.rows[0].includes(c));
   const tables = t.tables.filter((tb) => !t.tables.some((other) => covers(other, tb)));
-  const names = tables.map((tb) => tb.path.split("/").slice(1).join("/").replace(/\.csv$/, ""));
   const pickViolation = (m) => {
     if (sheet && m.names && rightTabs.current() === "schematic · marked") { sheet.mark(t.markers.boxes.flatMap((x) => x.names || []), m.names, unchecked, t.markers.boxes); return; }
     rightTabs.show(`layout · ${t.markers.boxes.length} marked`);
     setTimeout(() => viewer && viewer.setMarkers(t.markers.boxes, m), 50);
   };
   const hasMarks = t.markers && t.markers.boxes.length;
-  const filesLine = () => t.folder && t.files && t.files.length ? h("div", { class: "files" },
-    pathRow(`${t.name}/`, t.folder + "/", true),
-    t.files.map((f) => pathRow(f, `${t.folder}/${f}`))) : null;
-  if (tables.length && tables.length <= 3) left.push(["results", () => h("div", { class: "stacked" },
+  if (isBoard || tables.length || hasMarks) left.push(["results", async () => h("div", { class: "stacked" },
+    isBoard ? h("div", { class: "facts" }, layoutFacts(await board())) : null,
     tables.map((tb) => table(tb, t.markers ? mark : null)),
     hasMarks ? violations(t.markers.boxes, pickViolation) : null)]);
-  else {
-    tables.forEach((tb, k) => left.push([names[k], () => table(tb, t.markers ? mark : null)]));
-    if (hasMarks) left.push(["each violation", () => violations(t.markers.boxes, pickViolation)]);
-  }
   // what the step wrote, its log among them
   if (t.files && t.files.length) left.push(["files", () => filesLine()]);
 
