@@ -38,6 +38,7 @@ them, on every run:
 | `obelix1_ivtx_ladder_with_nets_v3.1.hyp`, his KiCad export (the board for HyperLynx, for now), with its project (`.bud`, `.bbd`, `.pjh`) | `/users/aulm/HyperLynx/simulations/VTX_Obelix_1/v3.1` |
 
 Notes from the first runs (November 2026): the export draws every route as pours, which
-BoardSim cannot simulate as lines, so the `board` target writes the 17 signal nets as traces first; the
-stackup is still the KiCad placeholder (FR4, εr 4.5) and needs the polyimide values; the jittered
-eye takes several minutes on 50 cores.
+BoardSim cannot simulate as lines, so the `board` target writes the 17 signal nets as traces first;
+it also puts the export on the RDL's stack (`tech/uni-bonn-rdl`): its layers named as the GDS's
+(TopPad, M3, M2, ChipPad) and its STACKUP the real polyimide one, not KiCad's FR4 placeholder.
+The jittered eye takes several minutes on 50 cores.

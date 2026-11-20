@@ -8,7 +8,7 @@ A flow.py names its layout (GDS or KiCad board), stack, schematic and limits, an
 targets in order: DRC and LVS, the HyperLynx board, capacitance and fields, DC drop, SI and
 S-parameters, each through layz's Python API (layz.drc.run, layz.lvs.run, layz.gds2hyp,
 layz.pex.run, layz.field.run, layz.hyperlynx.run; see layz/flow.py). Examples:
-designs/ivtx_rdl/flow.py, designs/flex_ivtx/flow.py.
+designs/ivtx_rdl/flow.py, designs/ivtx_flex/flow.py.
 """
 
 from __future__ import annotations

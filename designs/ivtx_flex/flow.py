@@ -1,7 +1,7 @@
 # iVTX flex (Andreas Ulm): the 45 cm flex cable from the RDL ladder (iVTX1) to the DAQ's
 # connector (J1). The full flow, from KiCad's DRC and schematic parity to SI and power.
 #
-#   layz run designs/flex_ivtx         (the HyperLynx targets: on juno or jupiter)
+#   layz run designs/ivtx_flex         (the HyperLynx targets: on juno or jupiter)
 #
 # The targets run in this file's order; setup names the inputs: Andreas' KiCad board and schematic,
 # copied from /users/aulm/ivtx/Flex on every run.
@@ -18,7 +18,7 @@ from layz.hyperlynx import setup as hyperlynx
 from layz.lvs import analysis as lvs_analysis
 from layz.lvs import run as lvs_run
 
-RESULTS = Path("results/flex_ivtx")
+RESULTS = Path("results/ivtx_flex")
 
 
 @target

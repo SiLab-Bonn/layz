@@ -399,7 +399,7 @@ async function view3d(b) {
   const z = {};
   let at = 0;
   for (const l of [...b.stackup].reverse()) { z[l.name] = [at * zs, (at + l.thickness_mm) * zs]; at += l.thickness_mm; }
-  const color = Object.fromEntries(b.copper.map((l, i) => [l, i === b.copper.length - 1 && i > 0 ? BOTTOM : NORD_LAYERS[i % NORD_LAYERS.length]]));
+  const color = layerColors(b.copper);
 
   const scene = new THREE.Scene();
   const group = new THREE.Group();
@@ -496,8 +496,12 @@ async function view3d(b) {
 
 // ---------------------------------------------------------------- layout viewer (GDS or .hyp board)
 
-const NORD_LAYERS = ["#bf616a", "#ebcb8b", "#a3be8c", "#b48ead", "#88c0d0", "#d08770", "#8fbcbb", "#81a1c1"];
-const BOTTOM = "#5e81ac";
+// layers in greys, lighter on top: the board stays neutral, so result maps and markers carry the
+// only colour
+const layerColors = (copper) => {
+  const n = copper.length;
+  return Object.fromEntries(copper.map((l, i) => { const v = Math.round(200 - (n > 1 ? (110 * i) / (n - 1) : 0)); return [l, `rgb(${v},${v + 4},${v + 12})`]; }));
+};
 
 // an overlay's values as an image: log scale, blue (low) to red (high), empty cells clear
 function overlayImage(layer, lo, hi) {
@@ -518,7 +522,7 @@ function overlayImage(layer, lo, hi) {
 }
 
 function layoutViewer(b, overlay = null, full = false) {
-  const color = Object.fromEntries(b.copper.map((l, i) => [l, i === b.copper.length - 1 && i > 0 ? BOTTOM : NORD_LAYERS[i % NORD_LAYERS.length]]));
+  const color = layerColors(b.copper);
   const shown = new Set(b.copper);
   let picked = null, markers = [], focus = null;
   const ring = (path, pts) => { pts.forEach(([x, y], i) => (i ? path.lineTo(x, y) : path.moveTo(x, y))); path.closePath(); };
@@ -568,7 +572,7 @@ function layoutViewer(b, overlay = null, full = false) {
       if (!shown.has(layer)) continue;
       ctx.globalAlpha = ov ? 0.22 : 0.55;
       // with results over it, the copper is one neutral grey: colours are the results' only
-      const base = ov ? css("--ink-4") : color[layer];
+      const base = color[layer];
       for (const p of paths) if (p.layer === layer) { ctx.fillStyle = picked && p.net && p.net === picked ? css("--ink-0") : base; ctx.fill(p.path, "evenodd"); }
       ctx.globalAlpha = 0.9;
       ctx.lineCap = "round";

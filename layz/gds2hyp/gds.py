@@ -24,6 +24,18 @@ RESISTIVITY = 1.724e-8  # copper bulk resistivity, Ω·m (what KiCad's exporter 
 INCH_UM = 25400.0
 
 
+def stackup(process) -> str:
+    """The {STACKUP} section of a stack, by its own layer names."""
+    lines = ["{STACKUP\n"]
+    for l in process.layers:
+        t = l.thickness_um / INCH_UM
+        if l.type == "copper":
+            lines.append('  (SIGNAL T=%g P=%g C=%g L="%.20s" M=COPPER)\n' % (t, 0.0, RESISTIVITY, l.name))
+        else:
+            lines.append('  (DIELECTRIC T=%g C=%g L="%.20s" M="%.20s")\n' % (t, l.k, l.name, l.material or ("Solder Mask" if l.type == "mask" else "FR4")))
+    return "".join(lines) + "}\n\n"
+
+
 def write_hyp(gds: Path, process, hyp: Path, drill_shrink_um: float = 10.0) -> None:
     conn = Connectivity(gds, process)
     names, problems = conn.net_names()
@@ -59,15 +71,7 @@ def write_hyp(gds: Path, process, hyp: Path, drill_shrink_um: float = 10.0) -> N
             out.append("  (PERIMETER_SEGMENT X1=%.9f Y1=%.9f X2=%.9f Y2=%.9f)\n" % (inch(a.x), inch(a.y), inch(b.x), inch(b.y)))
     out.append("}\n\n")
 
-    # stackup, by the stack's names
-    out.append("{STACKUP\n")
-    for l in process.layers:
-        t = l.thickness_um / INCH_UM
-        if l.type == "copper":
-            out.append('  (SIGNAL T=%g P=%g C=%g L="%.20s" M=COPPER)\n' % (t, 0.0, RESISTIVITY, l.name))
-        else:
-            out.append('  (DIELECTRIC T=%g C=%g L="%.20s" M="%.20s")\n' % (t, l.k, l.name, l.material or ("Solder Mask" if l.type == "mask" else "FR4")))
-    out.append("}\n\n")
+    out.append(stackup(process))
 
     # padstacks: a pin's pad is the smallest shape of its copper layer under the pin label;
     # a via is round, as wide as its shape's smaller side, on the two layers it joins

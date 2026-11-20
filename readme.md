@@ -139,7 +139,7 @@ def drc():
     drc_analysis.violations(checked, max_violations=0, out=checked / "violations.csv")
 ```
 
-[designs/flex_ivtx/flow.py](designs/flex_ivtx/flow.py) is the same for a KiCad board.
+[designs/ivtx_flex/flow.py](designs/ivtx_flex/flow.py) is the same for a KiCad board.
 
 ## The log, and `layz web`
 

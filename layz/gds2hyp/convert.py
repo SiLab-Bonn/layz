@@ -438,10 +438,28 @@ def traces_pass(hyp_path: Path, select: str, max_width_mm: float) -> None:
         print("pours -> traces: no net qualified (see traces=, trace_max_width=)")
 
 
+def restack(text: str, process) -> str:
+    """A .hyp exported from KiCad, on ``process``'s stack: its STACKUP replaced by the stack's
+    (real thicknesses and permittivities, not the export's placeholders) and its copper layers
+    renamed as the stack names them (F.Cu, In1.Cu, ... by their order: TopPad, M3, ...)."""
+    import re
+
+    from layz.gds2hyp import gds
+
+    names = {k: name for name, k in process.kicad_names().items()}
+    found = re.findall(r'\(SIGNAL [^)]*L="([^"]+)"', text)
+    if len(found) != len(names):
+        raise ValueError(f"the .hyp has {len(found)} copper layers, the stack {len(names)}")
+    a, b = text.index("{STACKUP"), text.index("}", text.index("{STACKUP")) + 1
+    text = text[:a] + gds.stackup(process).rstrip("\n") + text[b:]
+    return re.sub(r'"([^"]*)"', lambda m: '"' + names.get(m[1], m[1]) + '"', text)
+
+
 def hyp(source: Path, out: Path, *, stack: str | Path | None, refill: bool, traces: str, trace_max_width: float) -> Path:
     """A HyperLynx .hyp at ``out`` from ``source``: a GDS (with its ``stack``: layers, stackup,
     net labels; layz.gds2hyp.gds, no KiCad), a .kicad_pcb (with stack=None: the board carries
-    its own; KiCad's exporter, in layz's KiCad environment), or a .hyp exported elsewhere.
+    its own; KiCad's exporter, in layz's KiCad environment), or a .hyp exported elsewhere (with
+    a stack: put on it, layers renamed and STACKUP replaced, ``restack``; stack=None: as it is).
 
     refill           .kicad_pcb: fill the zones first (else the fills as saved)
     traces           strip-shaped pours written as traces (centreline + width), so HyperLynx
@@ -454,7 +472,8 @@ def hyp(source: Path, out: Path, *, stack: str | Path | None, refill: bool, trac
     if suffix == ".hyp":
         if out.resolve() == source.resolve():
             raise ValueError("a .hyp source needs another output: the source is not overwritten")
-        out.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+        text = source.read_text(encoding="utf-8")
+        out.write_text(restack(text, stackfile.load(stack)) if stack is not None else text, encoding="utf-8")
     elif suffix == ".kicad_pcb":
         board_to_hyp(source, out, refill=refill)
     else:
