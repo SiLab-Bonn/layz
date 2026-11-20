@@ -73,7 +73,9 @@ def kicad_svg(path: Path, out: Path) -> list[Path]:
         raise FileNotFoundError("kicad-cli not found (install/kicad.sh)")
     out.mkdir(parents=True, exist_ok=True)
     if Path(path).suffix == ".kicad_sch":
-        cmd = [cli, "sch", "export", "svg", "-o", str(out), str(path)]
+        for old in out.glob("*.svg"):
+            old.unlink()
+        cmd = [cli, "sch", "export", "svg", "--exclude-drawing-sheet", "--no-background-color", "-o", str(out), str(path)]  # no frame, no background: drawn inline
     else:
         cmd = [cli, "pcb", "export", "svg", "--mode-single", "--fit-page-to-board", "--exclude-drawing-sheet", "-l", "F.Cu,In1.Cu,In2.Cu,B.Cu,Edge.Cuts,F.Silkscreen", "-o", str(out / "board.svg"), str(path)]
     if log.run("kicad-cli", cmd):

@@ -43,6 +43,8 @@ def lvs(layout: Path, out: Path, *, stack: str | Path, schematic: Path) -> Path:
     kinds = ("open", "short", "unknown", "floating")
     summary = {"layout nets": len(nets), **stats, **{k: sum(1 for x in found if x.kind == k) for k in kinds}}
     (out / "summary.json").write_text(json.dumps(summary, indent=1))
+    boxes = [{"rule": x.kind, "what": x.what, "box": [px / 1000 - 0.005, py / 1000 - 0.005, px / 1000 + 0.005, py / 1000 + 0.005]} for x in found for px, py, _ in x.where[:4]]
+    (out / "markers.json").write_text(json.dumps({"on": "layout", "boxes": boxes}))
     ly = kdb.Layout()
     ly.read(str(layout))
     write_report(out / "lvs.lyrdb", ly.top_cell().name, found)
@@ -70,4 +72,6 @@ def board(pcb: Path, out: Path, *, refill_zones: bool) -> Path:
         w.writerow(["kind", "what"])
         w.writerows([p["type"], "; ".join(i["description"] for i in p.get("items", [])) or p["description"]] for p in d["schematic_parity"])
         w.writerows(["unconnected", "; ".join(i["description"] for i in u.get("items", []))] for u in d["unconnected_items"])
+    boxes = [{"rule": kind, "what": v.get("description", ""), "box": [i["pos"]["x"] - 0.05, -i["pos"]["y"] - 0.05, i["pos"]["x"] + 0.05, -i["pos"]["y"] + 0.05]} for kind, vs in (("parity", d["schematic_parity"]), ("unconnected", d["unconnected_items"])) for v in vs for i in v.get("items", [])[:1] if "pos" in i]
+    (out / "markers.json").write_text(json.dumps({"on": "board", "boxes": boxes}))
     return out

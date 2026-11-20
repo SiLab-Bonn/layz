@@ -47,7 +47,8 @@ def design(name: str) -> dict:
                 rows = list(csv.reader(fh))
             if rows and len(rows) <= 400 and len(rows[0]) <= 30:  # tables, not data dumps
                 t["tables"].append({"path": str(f.relative_to(folder)), "rows": rows})
-        t["plots"] = [str(f.relative_to(folder)) for f in sorted(out.rglob("*.png"))]
+        t["plots"] = [{"png": str(f.relative_to(folder)), "data": str(f.with_suffix(".plot.json").relative_to(folder)) if f.with_suffix(".plot.json").exists() else None} for f in sorted(out.rglob("*.png"))]
+        t["markers"] = json.loads((out / "markers.json").read_text()) if (out / "markers.json").exists() else None
     flow = Path(run.get("flow", ""))
     run["source"] = flow.read_text() if flow.is_file() else ""
     return {"name": name, **run}

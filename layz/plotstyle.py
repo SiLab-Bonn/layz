@@ -14,6 +14,8 @@ Used by layz.hyperlynx.plots; any new layz plot should use it too.
 
 from __future__ import annotations
 
+import json
+
 import os
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -200,5 +202,51 @@ def save_figure(fig: plt.Figure, output_path: Path, *, pdf_metadata: Mapping[str
             else:
                 fig.savefig(path)
             paths.append(path)
+    try:  # the figure's data too, for `layz web` to draw interactively; never stops a plot
+        output_path.with_suffix(".plot.json").write_text(json.dumps(figure_data(fig)))
+    except Exception:  # noqa: BLE001
+        pass
     plt.close(fig)
     return tuple(paths)
+
+
+def _list(values, limit: int = 200_000) -> list:
+    a = np.asarray(values, dtype=float).ravel()
+    if a.size > limit:  # long waveforms: every n-th point (the PNG keeps them all)
+        a = a[:: int(np.ceil(a.size / limit))]
+    return [None if not np.isfinite(v) else round(float(v), 9) for v in a]
+
+
+def figure_data(fig: plt.Figure) -> dict:
+    """A figure as data: per axes its place, title, labels, scales and limits, its lines (x, y,
+    label, colour, style) and images (heatmaps: values, extent, colour range). Colour bars are
+    left out (the viewer draws its own)."""
+    from matplotlib.colors import to_hex
+
+    axes = []
+    for ax in fig.axes:
+        if ax.get_label() == "<colorbar>" or not ax.get_visible():
+            continue
+        box = ax.get_position()
+        lines = []
+        for line in ax.get_lines():
+            x, y = line.get_xdata(orig=False), line.get_ydata(orig=False)
+            if len(x) < 2 or not line.get_visible():
+                continue
+            label = line.get_label()
+            lines.append({"x": _list(x), "y": _list(y), "label": "" if label.startswith("_") else label, "color": to_hex(line.get_color()), "dash": line.get_linestyle() not in ("-", "solid"), "width": line.get_linewidth(), "markers": line.get_marker() not in (None, "None", "", " ") and line.get_linestyle() in ("None", "", " ")})
+        images = []
+        for im in ax.get_images():
+            z = np.ma.filled(np.ma.asarray(im.get_array(), dtype=float), np.nan)
+            if z.ndim != 2:
+                continue
+            x0, x1, y0, y1 = im.get_extent()
+            if im.origin == "upper":
+                z = z[::-1]
+            lo, hi = im.get_clim()
+            images.append({"z": [_list(r) for r in z], "x0": x0, "x1": x1, "y0": min(y0, y1), "y1": max(y0, y1), "zmin": lo, "zmax": hi, "log": type(im.norm).__name__ == "LogNorm"})
+        if not lines and not images:
+            continue
+        axes.append({"box": [box.x0, box.y0, box.x1, box.y1], "title": ax.get_title(), "xlabel": ax.get_xlabel(), "ylabel": ax.get_ylabel(), "xlog": ax.get_xscale() == "log", "ylog": ax.get_yscale() == "log", "xlim": list(ax.get_xlim()), "ylim": list(ax.get_ylim()), "lines": lines, "images": images})
+    title = fig._suptitle.get_text() if getattr(fig, "_suptitle", None) else ""
+    return {"title": title, "size": list(fig.get_size_inches()), "axes": axes}

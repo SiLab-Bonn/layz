@@ -48,7 +48,31 @@ def drc(layout: Path, out: Path, *, kit: str, suite: str, topcell: str | None, t
         w = csv.writer(f)
         w.writerow(["rule", "violations"])
         w.writerows(per_rule(report).items())
+    (out / "markers.json").write_text(json.dumps({"on": "layout", "boxes": markers(report)}))
     return out
+
+
+def markers(report: Path) -> list[dict]:
+    """Each violation of a KLayout marker database as a box (mm, the layout's coordinates), with
+    its rule and message: for the viewer to mark on the layout."""
+    import klayout.db  # noqa: F401  (binds the geometry types the values return)
+    import klayout.rdb as krdb
+
+    db = krdb.ReportDatabase("")
+    db.load(str(report))
+    found = []
+    for item in db.each_item():
+        rule = db.category_by_id(item.category_id()).path()
+        box, text = None, ""
+        for v in item.each_value():
+            shape = v.box() if v.is_box() else v.polygon().bbox() if v.is_polygon() else v.edge().bbox() if v.is_edge() else v.edge_pair().bbox() if v.is_edge_pair() else v.path().bbox() if v.is_path() else None
+            if shape is not None:
+                box = shape if box is None else box + shape
+            elif v.is_string():
+                text = v.string()
+        if box is not None:
+            found.append({"rule": rule, "what": text, "box": [box.left / 1000, box.bottom / 1000, box.right / 1000, box.top / 1000]})
+    return found
 
 
 def per_rule(report: Path) -> dict[str, int]:
@@ -95,6 +119,12 @@ def board(pcb: Path, out: Path, *, refill_zones: bool, all_track_errors: bool) -
         key = f"{v['severity']}: {v['type']}"
         counts[key] = counts.get(key, 0) + 1
     counts["unconnected items"] = len(d["unconnected_items"])
+    boxes = []  # on the board's .hyp coordinates (mm, Y up: KiCad's Y negated)
+    for v in d["violations"] + [dict(u, type="unconnected items") for u in d["unconnected_items"]]:
+        for i in v.get("items", [])[:1]:
+            x, y = i["pos"]["x"], -i["pos"]["y"]
+            boxes.append({"rule": f"{v.get('severity', 'error')}: {v['type']}" if v["type"] != "unconnected items" else v["type"], "what": v.get("description", ""), "box": [x - 0.05, y - 0.05, x + 0.05, y + 0.05]})
+    (out / "markers.json").write_text(json.dumps({"on": "board", "boxes": boxes}))
     with open(out / "rules.csv", "w", newline="") as f:
         w = csv.writer(f)
         w.writerow(["rule", "violations"])
