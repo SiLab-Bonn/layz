@@ -146,5 +146,8 @@ def main(argv: list[str]) -> int:
             failed = run_targets(found, record)
         finally:
             log.FILE.update(file=None, lines=0)
-    (log.error if failed else log.info)("flow", f"{flow.resolve().parent.name}: " + (f"stopped at {failed}" if failed else "every target ok") + f"; results in {record.parent}")
+    run = json.loads(record.read_text()) if record.exists() else {"targets": []}
+    tally = {st: [t["name"] for t in run["targets"] if t["status"] == st] for st in ("errors", "warnings")}
+    summary = f"stopped at {failed}" if failed else "every step ran" + "".join(f"; {', '.join(n)} with {st}" for st, n in tally.items() if n)
+    (log.error if failed else log.warn if any(tally.values()) else log.info)("flow", f"{flow.resolve().parent.name}: {summary}; results in {record.parent}")
     return 1 if failed else 0
