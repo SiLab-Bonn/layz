@@ -28,7 +28,10 @@ const state = () => Object.fromEntries(new URLSearchParams(location.hash.slice(1
 const go = (patch) => { location.hash = new URLSearchParams(patch).toString(); };
 const fileUrl = (design, rel) => `/results/${encodeURIComponent(design)}/${rel.split("/").map(encodeURIComponent).join("/")}`;
 const base = (p) => (p || "").split("/").pop();
-const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+// the theme's colours; while a view is exported, the light theme's (for paper and slides)
+const LIGHT = { "--layout-bg": "#fafafa", "--line-1": "#dfdfe0", "--line-2": "#c9c9ca", "--ink-0": "#18191c", "--ink-1": "#242529", "--ink-3": "#58585a", "--ink-4": "#7e8086", "--sem-error": "#d36151", "--sem-warn": "#a48819", "--sem-ok": "#669f59" };
+let exporting = false;
+const css = (name) => (exporting && LIGHT[name]) || getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
 // ---------------------------------------------------------------- theme: the system's
 
@@ -618,7 +621,7 @@ function layoutViewer(b, overlay = null, full = false) {
     view = { s, tx: w / 2 - (s * (a0 + a1)) / 2, ty: hh / 2 + (s * (b0 + b1)) / 2 };
   };
   const draw = () => {
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = exporting ? 2 * (window.devicePixelRatio || 1) : window.devicePixelRatio || 1;
     canvas.width = canvas.clientWidth * dpr;
     canvas.height = canvas.clientHeight * dpr;
     if (!canvas.clientWidth) return;
@@ -628,11 +631,11 @@ function layoutViewer(b, overlay = null, full = false) {
     }
     const ctx = canvas.getContext("2d");
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.fillStyle = css("--layout-bg");
-    ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+    if (exporting) ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);  // transparent
+    else { ctx.fillStyle = css("--layout-bg"); ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight); }
     // a grid at a fifth of the scale bar's length, where its lines are at least 14 px apart (FRIDA's)
     const step = niceLength(110 / view.s), minor = step / 5;
-    if (minor * view.s >= 14) {
+    if (minor * view.s >= 14 && !exporting) {
       ctx.strokeStyle = css("--line-1");
       ctx.lineWidth = 1;
       ctx.beginPath();
@@ -716,17 +719,17 @@ function layoutViewer(b, overlay = null, full = false) {
       } else {
         scale = [`${ov.lo.toPrecision(2)}`, `${ov.hi.toPrecision(3)} ${overlay.unit}`, `current density, ${[...shown].join(", ")} (log)`];
       }
-      const w = 180, x = canvas.clientWidth - w - 12, y = 52;
+      const w = 220, x = (canvas.clientWidth - w) / 2, y = canvas.clientHeight - 30;  // centred below, as the plots' legends
       const grad = ctx.createLinearGradient(x, 0, x + w, 0);
       grad.addColorStop(0, "#5e81ac"); grad.addColorStop(1, "#bf616a");
       ctx.fillStyle = grad; ctx.fillRect(x, y, w, 8);
       ctx.fillStyle = css("--ink-1"); ctx.font = "10px ui-monospace, monospace";
       ctx.fillText(scale[0], x, y + 20);
-      ctx.textAlign = "right"; ctx.fillText(scale[1], x + w, y + 20); ctx.fillText(scale[2], x + w, y - 6); ctx.textAlign = "left";
+      ctx.textAlign = "right"; ctx.fillText(scale[1], x + w, y + 20); ctx.textAlign = "center"; ctx.fillText(scale[2], x + w / 2, y - 6); ctx.textAlign = "left";
     }
     {  // the scale bar, bottom left: a round length near 90 px, as it is at this zoom
       const len = niceLength(90 / view.s), w = len * view.s, hh = canvas.clientHeight;
-      ctx.fillStyle = document.documentElement.dataset.theme === "light" ? "rgba(250,250,250,0.88)" : "rgba(40,44,51,0.88)";
+      ctx.fillStyle = exporting ? "rgba(0,0,0,0)" : document.documentElement.dataset.theme === "light" ? "rgba(250,250,250,0.88)" : "rgba(40,44,51,0.88)";
       ctx.fillRect(10, hh - 34, w + 16, 24);
       ctx.strokeStyle = css("--ink-1");
       ctx.lineWidth = 1.5;
@@ -804,6 +807,18 @@ function layoutViewer(b, overlay = null, full = false) {
   const tools = h("div", { class: "tools" });
   wrap.append(tools);
   tools.append(h("button", { class: "fit", title: "back to the whole layout", onclick: () => { focus = null; view = null; draw(); } }, "fit"));
+  // the view as it is, in the light theme's colours on a transparent background, at twice the
+  // screen's resolution: PNG, or a PDF of it
+  const shot = () => { exporting = true; draw(); const url = canvas.toDataURL("image/png"); const size = [canvas.width, canvas.height]; exporting = false; draw(); return [url, size]; };
+  const stem = () => `${b.name.replace(/\.[^.]+$/, "")}${ov ? "_" + ov.mode.replace(/ /g, "_") : ""}`;
+  tools.append(h("button", { class: "fit", title: "PNG of this view (light, transparent)", onclick: () => { const [url] = shot(); h("a", { href: url, download: `${stem()}.png` }).click(); } }, "png"));
+  tools.append(h("button", { class: "fit", title: "PDF of this view (light, transparent)", onclick: async () => {
+    window.jspdf || (await new Promise((ok, fail) => document.head.append(h("script", { src: "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js", onload: ok, onerror: fail }))));
+    const [url, [w, hh]] = shot();
+    const pdf = new window.jspdf.jsPDF({ orientation: w > hh ? "landscape" : "portrait", unit: "px", format: [w / 2, hh / 2], hotfixes: ["px_scaling"] });
+    pdf.addImage(url, "PNG", 0, 0, w / 2, hh / 2);
+    pdf.save(`${stem()}.pdf`);
+  } }, "pdf"));
   if (ov) tools.prepend(h("select", { class: "panelpick modes", onchange: (e) => {
     const m = e.target.value;
     ov.mode = m;
