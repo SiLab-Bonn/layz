@@ -25,12 +25,17 @@ RESULTS = Path("results/ivtx_rdl")
 
 @target
 def setup():
-    """The inputs: the layout, its stack and schematic, the board HyperLynx simulates, and
-    Andreas' HyperLynx project and models; HyperLynx's writable overlay."""
+    """The inputs: Andreas' latest layout and schematic (copied from /users/aulm/ivtx), the RDL's
+    stack, the board HyperLynx simulates, his HyperLynx project and models; HyperLynx's writable
+    overlay."""
     global LAYOUT, STACK, SCHEMATIC, BOARD_SOURCE, BOARD
-    LAYOUT = HERE / "obelix1_ivtx_ladder_v2.gds"
+    # Andreas' latest layout and schematic, copied in from his folder on every run
+    andreas = Path("/users/aulm/ivtx")
+    inputs = RESULTS / "setup" / "inputs"
+    inputs.mkdir(parents=True, exist_ok=True)
+    LAYOUT = Path(shutil.copy2(andreas / "obelix1_ivtx_ladder_v2.gds", inputs))
+    SCHEMATIC = Path(shutil.copy2(andreas / "obelix1_ivtx_ladder_v2.kicad_sch", inputs))
     STACK = "uni-bonn-rdl"  # tech/uni-bonn-rdl/stack.toml
-    SCHEMATIC = HERE / "obelix1_ivtx_ladder_f.kicad_sch"
     # the board HyperLynx simulates: Andreas' KiCad export, until the GDS has a net label on
     # every net (its labels are on 80/7, the notes layer, today; then: BOARD_SOURCE = LAYOUT)
     BOARD_SOURCE = HERE / "obelix1_ivtx_ladder_with_nets_v3.1.hyp"
