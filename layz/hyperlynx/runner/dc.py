@@ -75,6 +75,21 @@ def swap_to_return(ports):
     return returns
 
 
+# VRMs without a reference: the pin given (HyperLynx needs one even without return nets, and the
+# return run sources the return net at it)
+for vnet, ref in job["vrm_references"].items():
+    pin = d.FindPin(ref)
+    if pin is None:
+        raise SystemExit(f"vrm_references: no pin {ref!r}")
+    phases = [ph for v in d.VRMs for ph in v.VRMPhases if ph.PowerNet == vnet]
+    if not phases:
+        raise SystemExit(f"vrm_references: no VRM on {vnet}")
+    for ph in phases:
+        if not ph.RefPins.Count:
+            ph.SetRefNet(pin.Net.Name)
+            ph.AddRefPin(ref)
+    say(f"{vnet}: VRM referenced to {ref} ({pin.Net.Name})")
+
 if job["return_from"] is not None:
     with open(job["return_from"]) as f:
         nets = swap_to_return(list(csv.DictReader(f)))
@@ -82,18 +97,6 @@ if job["return_from"] is not None:
 else:
     nets = supply_nets()
     include_ref = bool(job["include_ref"])
-    # VRMs without a reference: the pin given (HyperLynx needs one even without return nets)
-    for vnet, ref in job["vrm_references"].items():
-        pin = d.FindPin(ref)
-        if pin is None:
-            raise SystemExit(f"vrm_references: no pin {ref!r}")
-        phases = [ph for v in d.VRMs for ph in v.VRMPhases if ph.PowerNet == vnet]
-        if not phases:
-            raise SystemExit(f"vrm_references: no VRM on {vnet}")
-        for ph in phases:
-            ph.SetRefNet(pin.Net.Name)
-            ph.AddRefPin(ref)
-        say(f"{vnet}: VRM referenced to {ref} ({pin.Net.Name})")
     # the load: a net's total current spread evenly over its sink pins (those with a DC sink in
     # the board's project), each keeping its sink resistance; nets not named keep the project's
     for net, total in job["sink_currents"].items():

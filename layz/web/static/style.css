@@ -55,7 +55,7 @@ header { display: flex; align-items: center; gap: 24px; height: 40px; padding: 0
 .logo { font: 700 14px var(--font-mono); color: var(--accent); letter-spacing: 0.1em; text-decoration: none; }
 nav#crumb a { color: var(--ink-1); font: 12px var(--font-mono); text-transform: uppercase; letter-spacing: 0.08em; }
 main { height: calc(100% - 40px); overflow: auto; }
-.page { padding: 16px 24px 64px; max-width: 1500px; margin: 0 auto; }
+.page { padding: 16px 24px 64px; }
 .empty { color: var(--ink-4); padding: 48px; }
 h1 { font: 600 18px var(--font-mono); margin: 0; }
 h2, h3, h4 { font: 400 11px var(--font-mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-4); }
