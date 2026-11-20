@@ -136,7 +136,7 @@ function lazy(make) {
 function stage(d, t, i) {
   const inputs = () => once(`/api/inputs?name=${encodeURIComponent(d.name)}`);
   const board = () => once(`/api/board?name=${encodeURIComponent(d.name)}`);
-  const isBoard = boardOf(d) && t.status === "ok" && boardTarget(d) === t.name;
+  const isBoard = boardOf(d) && !["failed", "pending", "skipped"].includes(t.status) && boardTarget(d) === t.name;
   let viewer = null; // the layout this stage marks its violations on
 
   // right: pictures
