@@ -77,7 +77,7 @@ def connectivity(hyp: Path, *, tolerance_m: float, nets: list[str] | None, out: 
     return table(f"Connectivity ({Path(hyp).name}): pins farther than {tolerance_m * 1e6:.0f} um from their net's copper; {len(unassigned)} pieces of copper ({area:.1f} mm²) on no net", rows, out)
 
 
-def dctable(supply: Path, ret: Path | None, *, out: Path | None) -> list[dict]:
+def dc_table(supply: Path, ret: Path | None, *, out: Path | None) -> list[dict]:
     """Per net of a DC run, as in a design review: resistance from the VRM to the net's sink pins
     (min, max; HyperLynx's resistance matrix), voltage drop over those pins (min, max: the VRM
     voltage less the pin's on a supply net, the rise on a return net), and current density (the

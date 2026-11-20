@@ -24,7 +24,8 @@ against limits (a table, printed and written as CSV), ``plots`` plots them in la
         \"\"\"DC drop of the 3 V rails.\"\"\"
         run.dc(BOARD, RESULTS / "dc", nets=["/3V_1", "/3V_2"], ...)
 
-The targets run in file order; the run stops at the first that fails.
+The targets run in file order; the run stops at the first that fails. A target that can't run
+with the inputs it has raises ``Skip(why)``: noted as skipped, and the run goes on.
 """
 
 from __future__ import annotations
@@ -61,7 +62,12 @@ def load(flow: Path) -> dict[str, Callable[[], None]]:
     return dict(TARGETS)
 
 
-INPUTS = ("LAYOUT", "STACK", "SCHEMATIC", "BOARD")  # what a flow's setup names, for the viewer
+INPUTS = ("LAYOUT", "STACK", "SCHEMATIC", "BOARD")
+
+
+class Skip(Exception):
+    """Raised by a target that can't run with these inputs (``raise Skip("no KiCad board")``):
+    the run notes it as skipped, and goes on."""  # what a flow's setup names, for the viewer
 
 
 def run_targets(targets: dict[str, Callable[[], None]], record: Path | None = None) -> str | None:
@@ -81,6 +87,8 @@ def run_targets(targets: dict[str, Callable[[], None]], record: Path | None = No
             with log.capture("layz"):
                 function()
             entry["status"] = "ok"
+        except Skip as e:
+            entry["status"], entry["error"] = "skipped", str(e)
         except (Exception, SystemExit) as e:  # a target stops with SystemExit or any error
             entry["status"], entry["error"] = "failed", str(e) or type(e).__name__
             failed = name
@@ -89,6 +97,8 @@ def run_targets(targets: dict[str, Callable[[], None]], record: Path | None = No
             for line in entry["error"].splitlines():
                 log.error("flow", line)
             log.error("flow", f"[{i + 1}/{len(targets)}] {name}: failed after {entry['seconds']:.0f} s")
+        elif entry["status"] == "skipped":
+            log.warn("flow", f"[{i + 1}/{len(targets)}] {name}: skipped: {entry['error']}")
         else:
             log.info("flow", f"[{i + 1}/{len(targets)}] {name}: ok in {entry['seconds']:.0f} s")
         entry["log"] = [first, log.FILE["lines"]]  # its lines in run.log

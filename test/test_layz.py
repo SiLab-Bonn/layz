@@ -420,3 +420,30 @@ def test_flow_targets(tmp_path, capsys, monkeypatch):
     assert [t["status"] for t in run["targets"]] == ["ok", "ok", "failed", "pending"] and run["targets"][2]["error"] == "broken"
     with pytest.raises(TypeError):
         targets.target(lambda x: None)
+
+
+@pytest.mark.parametrize("flow", sorted((ROOT / "designs").glob("*/flow.py")), ids=lambda p: p.parent.name)
+def test_flows_call_existing_api(flow):
+    """Every module.function a design's flow calls exists (a rename elsewhere breaks no flow)."""
+    import ast
+    import importlib
+
+    tree = ast.parse(flow.read_text())
+    modules = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module and node.module.startswith("layz"):
+            for a in node.names:
+                try:
+                    modules[a.asname or a.name] = importlib.import_module(f"{node.module}.{a.name}")
+                except ImportError:
+                    pass
+    missing = [f"{n.value.id}.{n.attr}" for n in ast.walk(tree) if isinstance(n, ast.Attribute) and isinstance(n.value, ast.Name) and n.value.id in modules and not hasattr(modules[n.value.id], n.attr)]
+    assert not missing
+
+
+def test_flow_skip(tmp_path, monkeypatch):
+    from layz import flow as targets
+
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "flow.py").write_text('from layz.flow import Skip, target\n\n@target\ndef a():\n    raise Skip("no board")\n\n@target\ndef b():\n    open("b.ran", "w").write("")\n')
+    assert targets.main([str(tmp_path)]) == 0 and (tmp_path / "b.ran").exists()

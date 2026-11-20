@@ -46,9 +46,10 @@ h2 { margin: 16px 0 10px; } h3 { margin: 18px 0 8px; color: var(--ink-3); } h4 {
 .toc a:hover { color: var(--ink-0); }
 .toc .chip { width: 9px; height: 9px; padding: 0; border-radius: 50%; }
 .chip { font: 10px var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; padding: 1px 7px; border-radius: 3px; color: var(--surface-raised); }
-.chip.ok { background: var(--sem-ok); } .chip.failed { background: var(--sem-error); } .chip.pending { background: var(--nord3); color: var(--ink-1); }
+.chip.ok { background: var(--sem-ok); } .chip.failed { background: var(--sem-error); } .chip.pending { background: var(--nord3); color: var(--ink-1); } .chip.skipped { background: var(--sem-warn); }
 section.target { background: var(--surface-panel); border: 1px solid var(--line-1); border-radius: 7px; margin: 14px 0; scroll-margin-top: 50px; }
 section.target.failed { border-color: var(--sem-error); }
+section.target.skipped .error { color: var(--sem-warn); }
 section.target > .head { display: flex; gap: 12px; align-items: baseline; padding: 10px 14px; border-bottom: 1px solid var(--line-1); }
 .head .step { font: 11px var(--font-mono); color: var(--ink-4); }
 .head .name { font: 700 13px var(--font-mono); min-width: 90px; }
@@ -99,3 +100,6 @@ aside { width: 290px; border-left: 1px solid var(--line-1); overflow-y: auto; pa
 .kv span:nth-child(odd) { color: var(--ink-4); }
 .zoom { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.8); display: flex; align-items: center; justify-content: center; cursor: zoom-out; z-index: 10; }
 .zoom img { max-width: 95vw; max-height: 95vh; background: #fff; }
+details.flowsrc { margin: 0 0 12px; }
+details.flowsrc summary { cursor: pointer; color: var(--ink-3); font: 12px var(--font-mono); }
+details.flowsrc pre { background: var(--surface-sunken); border: 1px solid var(--line-1); border-radius: 4px; padding: 10px; font: 12px/1.45 var(--font-mono); max-height: 600px; overflow: auto; color: var(--ink-1); }

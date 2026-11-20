@@ -48,6 +48,8 @@ def design(name: str) -> dict:
             if rows and len(rows) <= 400 and len(rows[0]) <= 30:  # tables, not data dumps
                 t["tables"].append({"path": str(f.relative_to(folder)), "rows": rows})
         t["plots"] = [str(f.relative_to(folder)) for f in sorted(out.rglob("*.png"))]
+    flow = Path(run.get("flow", ""))
+    run["source"] = flow.read_text() if flow.is_file() else ""
     return {"name": name, **run}
 
 

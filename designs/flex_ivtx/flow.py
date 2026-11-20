@@ -10,7 +10,7 @@ from pathlib import Path
 
 from layz.drc import analysis as drc_analysis
 from layz.drc import run as drc_run
-from layz.flow import target
+from layz.flow import Skip, target
 from layz.gds2hyp import convert as gds2hyp
 from layz.hyperlynx import analysis, plots, run
 from layz.hyperlynx import setup as hyperlynx
@@ -26,16 +26,17 @@ def setup():
     """The inputs: the KiCad board (its stackup inside) with its schematic, and Andreas'
     HyperLynx project and models; HyperLynx's writable overlay."""
     global LAYOUT, BOARD
-    # Andreas' KiCad project, flexv2.2: flex.kicad_pcb, with flex.kicad_sch next to it
+    # Andreas' KiCad project, flexv2.2: flex.kicad_pcb, with flex.kicad_sch next to it; until it
+    # is here, his KiCad export of it (DRC and LVS then wait for the board)
+    project = Path("/users/aulm/HyperLynx/simulations/Flex")
     LAYOUT = HERE / "flex.kicad_pcb"
     if not LAYOUT.exists():
-        raise SystemExit(f"no {LAYOUT}: put Andreas' flex KiCad project (flex.kicad_pcb, flex.kicad_sch) there")
+        LAYOUT = project / "flex_45cm_v2.2.hyp"
     BOARD = RESULTS / "board" / "flex_45cm_v2.2.hyp"  # the name his HyperLynx project goes with
 
     # his HyperLynx project next to the board: VRMs, DC sinks, pin models set in the GUI; the
     # SPICE driver and receiver of the data links (the ladder's)
     BOARD.parent.mkdir(parents=True, exist_ok=True)
-    project = Path("/users/aulm/HyperLynx/simulations/Flex")
     for suffix in (".bud", ".bbd", ".pjh"):
         if (project / f"flex_45cm_v2.2{suffix}").exists():
             shutil.copy2(project / f"flex_45cm_v2.2{suffix}", BOARD.parent)
@@ -47,6 +48,8 @@ def setup():
 @target
 def drc():
     """KiCad's DRC of the flex, with the rules in its board."""
+    if LAYOUT.suffix != ".kicad_pcb":
+        raise Skip(f"needs the KiCad board (flex.kicad_pcb in {HERE}); the layout is {LAYOUT.name}")
     checked = drc_run.board(LAYOUT, RESULTS / "drc", refill_zones=True, all_track_errors=False)
     drc_analysis.violations(checked, max_violations=0, out=checked / "violations.csv")
 
@@ -55,6 +58,8 @@ def drc():
 def lvs():
     """KiCad's schematic parity of the flex: footprints and nets against flex.kicad_sch, and
     unconnected copper."""
+    if LAYOUT.suffix != ".kicad_pcb":
+        raise Skip(f"needs the KiCad board and schematic (flex.kicad_pcb, flex.kicad_sch in {HERE})")
     checked = lvs_run.board(LAYOUT, RESULTS / "lvs", refill_zones=True)
     lvs_analysis.parity(checked, out=checked / "summary.csv")
 
@@ -63,7 +68,7 @@ def lvs():
 def board():
     """The board for HyperLynx (KiCad's exporter), its signal nets (up to 0.3 mm wide) as traces;
     GND and +3V0 stay pours."""
-    gds2hyp.hyp(LAYOUT, BOARD, stack=None, refill=True, traces="auto", trace_max_width=0.3)
+    gds2hyp.hyp(LAYOUT, BOARD, stack=None, refill=True, traces="auto", trace_max_width=0.3)  # a .hyp: copied, then the traces
 
 
 @target

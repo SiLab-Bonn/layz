@@ -47,7 +47,7 @@ async function homePage() {
   if (!designs.length) return h("div", { class: "empty" }, "No runs yet: layz run designs/NAME records one in results/NAME/.");
   const status = (d) => {
     const failed = d.targets.find((t) => t.status === "failed");
-    return failed ? chip("failed", `stopped at ${failed.name}`) : d.targets.every((t) => t.status === "ok") ? chip("ok") : chip("pending", "running");
+    return failed ? chip("failed", `stopped at ${failed.name}`) : d.targets.every((t) => t.status === "ok" || t.status === "skipped") ? chip("ok") : chip("pending", "running");
   };
   return h("div", { class: "page" },
     h("h2", {}, "designs: click one to open its run"),
@@ -63,11 +63,12 @@ async function homePage() {
 
 async function designPage(name) {
   const d = await getJSON(`/api/design?name=${encodeURIComponent(name)}`);
-  const ok = d.targets.filter((t) => t.status === "ok").length;
+  const ok = d.targets.filter((t) => t.status === "ok" || t.status === "skipped").length;
   const jump = (t) => (e) => { e.preventDefault(); document.getElementById(`t-${t.name}`)?.scrollIntoView({ behavior: "smooth" }); };
   return h("div", { class: "page" },
-    h("div", { class: "title" }, h("h1", {}, d.name), chip(d.targets.some((t) => t.status === "failed") ? "failed" : ok === d.targets.length ? "ok" : "pending", `${ok} of ${d.targets.length} targets ok`), h("span", { class: "caption" }, `run ${d.started} · ${d.flow}`)),
+    h("div", { class: "title" }, h("h1", {}, d.name), chip(d.targets.some((t) => t.status === "failed") ? "failed" : ok === d.targets.length ? "ok" : "pending", `${ok} of ${d.targets.length} targets done`), h("span", { class: "caption" }, `run ${d.started} · ${d.flow}`)),
     h("nav", { class: "toc" }, d.targets.map((t) => h("a", { onclick: jump(t) }, chip(t.status, ""), t.name))),
+    d.source ? h("details", { class: "flowsrc" }, h("summary", {}, `flow.py: the flow as it ran (${d.source.split("\n").length} lines)`), h("pre", {}, d.source)) : null,
     d.targets.map((t, i) => targetSection(d, t, i)));
 }
 
