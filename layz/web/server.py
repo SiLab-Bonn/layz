@@ -45,6 +45,8 @@ def files(folder: Path, *suffixes: str) -> list[Path]:
 
 def design(name: str) -> dict:
     folder = RESULTS / name
+    if not (folder / "run.json").is_file():
+        raise FileNotFoundError(f"{name}: not run yet (layz run designs/{name})")
     run = json.loads((folder / "run.json").read_text())
     logged = (folder / "run.log").read_text(errors="replace").splitlines() if (folder / "run.log").exists() else []
     for t in run["targets"]:

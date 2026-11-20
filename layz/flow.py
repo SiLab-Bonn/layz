@@ -77,6 +77,9 @@ def run_targets(targets: dict[str, Callable[[], None]], record: Path | None = No
     run = {"flow": "", "started": time.strftime("%Y-%m-%d %H:%M:%S"), "inputs": {}, "targets": [{"name": n, "doc": " ".join((f.__doc__ or "").split()), "status": "pending", "seconds": None, "error": None} for n, f in targets.items()]}
     if record is not None:
         run["flow"] = str(next(iter(targets.values())).__globals__.get("__file__", ""))
+    if record is not None:  # recorded from the start: every step pending, then each as it ends
+        record.parent.mkdir(parents=True, exist_ok=True)
+        record.write_text(json.dumps(run, indent=1))
     failed = None
     for i, (name, function) in enumerate(targets.items()):
         entry = run["targets"][i]
