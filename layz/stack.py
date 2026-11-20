@@ -20,24 +20,25 @@ directly.
     loss_tangent = 0.02              # optional (Df), written to KiCad
 
     [[layer]]
-    name = "F.Cu"                    # KiCad layer name: F.Cu, In1.Cu, In2.Cu, ..., B.Cu
+    name = "M3"                      # free: the process's own name for this metal
     type = "copper"
-    thickness_um = 0.5
-    gds = "8/0"                      # GDS layer/datatype drawn on this copper layer
+    thickness_um = 6.0
+    gds = "6/0"                      # GDS layer/datatype drawn on this copper layer
     pads = true                      # layz gds2pcb: shapes in sub-cells become footprint pads
     zones = false                    # layz gds2pcb: top-level shapes become copper zones (default true)
-    labels = ["8/1"]                 # layz lvs: text layers naming this copper's nets; default:
-                                     # the drawing layer's datatype 1 (8/0 -> 8/1), [] for none;
+    labels = ["6/1"]                 # layz lvs: text layers naming this copper's nets; default:
+                                     # the drawing layer's datatype 1 (6/0 -> 6/1), [] for none;
                                      # texts on the drawing layer itself always count
 
     [[via]]
-    gds = "7/0"
-    top = "F.Cu"
-    bottom = "In1.Cu"
+    gds = "4/0"
+    top = "M3"
+    bottom = "M2"
 
-Units are µm throughout. Masks may only be the first and last layers. The copper layers must
-be KiCad's names, in order (F.Cu, In1.Cu, ..., B.Cu), wherever the stack goes to KiCad or
-HyperLynx; a stack used only by `layz pex` on a GDS may name them freely.
+Units are µm throughout. Masks may only be the first and last layers. Where the stack goes to
+KiCad (`layz gds2pcb`, `layz gds2hyp`), the copper layers become KiCad's in order, top to
+bottom: F.Cu, In1.Cu, ..., B.Cu (`Process.kicad_names`); a .hyp from a GDS names them as the
+stack does again. Stacks of real PCBs (tech/multicb) simply use KiCad's names.
 
 This module also reads the stackup out of a .kicad_pcb (the reverse direction), which is how
 `layz pex` and `layz gds2hyp` get the stack of a KiCad board.
@@ -114,16 +115,18 @@ class Process:
 
     # ----------------------------------------------------------------- KiCad
 
-    def check_kicad(self) -> None:
-        names = [l.name for l in self.copper]
-        n = len(names)
-        want = ["F.Cu", *[f"In{i}.Cu" for i in range(1, n - 1)], "B.Cu"] if n >= 2 else ["F.Cu"]
-        if names != want:
-            raise ValueError(f"for KiCad the copper layers must be {want} in order, not {names}")
+    def kicad_names(self) -> dict[str, str]:
+        """Each copper layer's KiCad layer, by its place top to bottom: F.Cu, In1.Cu, ..., B.Cu."""
+        n = len(self.copper)
+        names = {l.name: "F.Cu" if i == 0 else "B.Cu" if i == n - 1 else f"In{i}.Cu" for i, l in enumerate(self.copper)}
+        for name, kicad in names.items():  # a stack in KiCad's names must have them in KiCad's order
+            if re.fullmatch(r"F\.Cu|B\.Cu|In\d+\.Cu", name) and name != kicad:
+                raise ValueError(f"copper layer {name} is KiCad's name for another place in the stack (here it is {kicad})")
+        return names
 
     def kicad_stackup(self) -> str:
         """The (stackup ...) block of a .kicad_pcb (KiCad lengths in mm)."""
-        self.check_kicad()
+        kicad = self.kicad_names()
         out = ["\t\t(stackup"]
         n_diel = 0
         for i, l in enumerate(self.layers):
@@ -134,7 +137,7 @@ class Process:
                 kind = "Top Solder Mask" if side == "F" else "Bottom Solder Mask"
                 out.append(f'\t\t\t(layer "{side}.Mask" (type "{kind}") (thickness {mm}){mat} (epsilon_r {l.k:g}))')
             elif l.type == "copper":
-                out.append(f'\t\t\t(layer "{l.name}" (type "copper") (thickness {mm}))')
+                out.append(f'\t\t\t(layer "{kicad[l.name]}" (type "copper") (thickness {mm}))')
             else:
                 n_diel += 1
                 out.append(f'\t\t\t(layer "dielectric {n_diel}" (type "core") (thickness {mm}){mat} (epsilon_r {l.k:g}) (loss_tangent {l.loss_tangent or 0:g}))')
@@ -142,11 +145,12 @@ class Process:
         return "\n".join(out) + "\n"
 
     def gds_layer_maps(self):
-        """layz gds2pcb's maps: zones {gds: copper}, vias {gds: (a, b)}, pads {gds: copper}."""
+        """layz gds2pcb's maps, in KiCad layers: zones {gds: copper}, vias {gds: (a, b)}, pads {gds: copper}."""
         key = lambda s: tuple(int(x) for x in s.split("/"))
-        zones = {key(l.gds): l.name for l in self.copper if l.gds and l.zones}
-        pads = {key(l.gds): l.name for l in self.copper if l.gds and l.pads}
-        vias = {key(v.gds): (v.top, v.bottom) for v in self.vias}
+        kicad = self.kicad_names()
+        zones = {key(l.gds): kicad[l.name] for l in self.copper if l.gds and l.zones}
+        pads = {key(l.gds): kicad[l.name] for l in self.copper if l.gds and l.pads}
+        vias = {key(v.gds): (kicad[v.top], kicad[v.bottom]) for v in self.vias}
         return zones, vias, pads
 
 

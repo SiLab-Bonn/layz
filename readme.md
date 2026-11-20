@@ -125,8 +125,7 @@ layz view lvs.lyrdb --lay design.gds
 
 They go on each metal's **pin layer: the same layer number, datatype 1** (M3 drawn on 6/0 is
 labelled on 6/1, M2 3/0 on 3/1, pads 8/0 on 8/1). Texts on the drawing layer itself count too;
-a stack can name other label layers (`labels = [...]`), and `--labels 80/7:6/0` ties a generic
-label layer to one metal.
+a stack can name other label layers (`labels = [...]`).
 
 **Reported:** open (one schematic net on several layout nets), short (one layout net carrying
 several schematic nets), unknown (a label naming nothing in the schematic), floating (a label on

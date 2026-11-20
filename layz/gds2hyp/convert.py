@@ -29,6 +29,7 @@ centreline as SEG records, as wide as the strip (layz.gds2hyp.traces). Supplies 
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 import tempfile
 from dataclasses import dataclass
@@ -425,6 +426,20 @@ def write_hyp(pcb_path: Path, hyp_path: Path, refill: bool = False) -> None:
         HypWriter(board, f, warn=lambda m: print(f"warning: {m}", file=sys.stderr)).run(process)
 
 
+def stack_layer_names(hyp_path: Path, process) -> None:
+    """Name the .hyp's layers as the stack does, not KiCad's F.Cu, In1.Cu, ... and DE_F.Cu, ...
+    (the dielectric under each copper): HyperLynx's results and layz's plots then say M3, P3, ..."""
+    kicad = process.kicad_names()
+    if all(name == k for name, k in kicad.items()):
+        return
+    names = {k: name for name, k in kicad.items()}
+    for above, l in zip(process.layers, process.layers[1:]):
+        if above.type == "copper" and l.type == "dielectric":
+            names[f"DE_{kicad[above.name]}"] = l.name
+    text = re.sub(r'"([^"]*)"', lambda m: f'"{names.get(m[1], m[1])}"', hyp_path.read_text(encoding="utf-8"))
+    hyp_path.write_text(text, encoding="utf-8")
+
+
 def traces_pass(hyp_path: Path, select: str, max_width_mm: float) -> None:
     """Rewrite ``hyp_path`` in place with its strip-shaped pours as traces, and say what changed."""
     if select == "none":  # nothing to do (and no shapely needed: layz's KiCad environment has none)
@@ -467,6 +482,7 @@ def main(argv: list[str] | None = None) -> int:
             pcb = out.with_suffix(".kicad_pcb") if args.keep_pcb else Path(tmp) / (out.stem + ".kicad_pcb")
             gds2pcb.main(["--lay", str(args.input), "-o", str(pcb), "--stack", str(args.stack)])
             board_to_hyp(pcb, out, refill=args.refill)
+        stack_layer_names(out, stackfile.load(args.stack))
     traces_pass(out, args.traces, args.trace_max_width)
     print(f"wrote {out}")
     return 0

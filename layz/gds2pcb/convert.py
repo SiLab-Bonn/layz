@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
 """Prototype GDS -> KiCad .kicad_pcb converter, v3.
 
-v3 process mapping (4 copper layers):
+KiCad needs its own layer names, so the RDL's layers go to KiCad's by their order top to
+bottom (with --stack, from the stack file; without, this default for uni-bonn-rdl):
 
-    GDS 68/0 -> B.Cu      (also the back-side footprint pad layer)
-    GDS 3/0  -> In2.Cu
-    GDS 6/0  -> In1.Cu
-    GDS 8/0  -> F.Cu      (also the front-side footprint pad layer)
-    GDS 7/0  -> blind via F.Cu <-> In1.Cu
-    GDS 2/0  -> blind via B.Cu <-> In2.Cu   (baseline pair, new copper names)
-    GDS 4/0  -> blind via In2.Cu <-> F.Cu   (baseline pair, new copper names)
-    GDS 70/0 -> Edge.Cuts board outline (closed loops of segments)
+    8/0  top pads  -> F.Cu    (also the front-side footprint pad layer)
+    6/0  M3        -> In1.Cu
+    3/0  M2        -> In2.Cu
+    68/0 ChipPad   -> B.Cu    (also the back-side footprint pad layer)
+    7/0  P3 opening (top pads to M3), 4/0 V2 (M3 to M2), 2/0 V1 (M2 to ChipPad): blind vias
+    70/0 outline   -> Edge.Cuts (closed loops of segments)
 
 v3 additions compared to gds2pcb_v2.py:
 - Degenerate (zero-area) GDS shapes are ignored. Some cells carry zero-length
@@ -527,7 +526,6 @@ def main(argv: list[str] | None = None) -> None:
         from layz import stack as stackfile
 
         process = stackfile.load(args.stack)
-        process.check_kicad()
         if len(process.copper) != 4:
             parser.error(f"gds2pcb writes 4-copper boards (F.Cu, In1.Cu, In2.Cu, B.Cu) for now; {args.stack} has {len(process.copper)} copper layers")
         zones, vias, pads = process.gds_layer_maps()

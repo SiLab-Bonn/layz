@@ -31,12 +31,29 @@ def test_cli_lists_commands(capsys):
 
 def test_stack_heights_from_order():
     p = stack.load(RDL)
-    assert [l.name for l in p.copper] == ["F.Cu", "In1.Cu", "In2.Cu", "B.Cu"]
+    assert [l.name for l in p.copper] == ["TopPad", "M3", "M2", "ChipPad"]
+    assert list(p.kicad_names().values()) == ["F.Cu", "In1.Cu", "In2.Cu", "B.Cu"]
     # asiclab's z: chip pad top at 0 (here 1), M2 7..13, M3 25..31, P3 to 36 (here 37)
     assert p.thickness_um == pytest.approx(37.5)
-    assert p.by_name("B.Cu").z_um == 0
-    assert p.by_name("In2.Cu").z_um == pytest.approx(8)
-    assert p.by_name("In1.Cu").z_um == pytest.approx(26)
+    assert p.by_name("ChipPad").z_um == 0
+    assert p.by_name("M2").z_um == pytest.approx(8)
+    assert p.by_name("M3").z_um == pytest.approx(26)
+
+
+def test_hyp_from_gds_names_layers_as_the_stack(tmp_path):
+    from layz.gds2hyp.convert import stack_layer_names
+
+    hyp = tmp_path / "b.hyp"
+    hyp.write_text('(SIGNAL T=1 L="In1.Cu" M=COPPER)\n(DIELECTRIC T=1 L="DE_In1.Cu")\n("B.Cu", 1, 2)\n(? REF="U1" L="F.Cu")\n')
+    stack_layer_names(hyp, stack.load(RDL))
+    assert hyp.read_text() == '(SIGNAL T=1 L="M3" M=COPPER)\n(DIELECTRIC T=1 L="P2+P2.5")\n("ChipPad", 1, 2)\n(? REF="U1" L="TopPad")\n'
+
+
+def test_stack_in_kicad_names_keeps_their_order(tmp_path):
+    bad = tmp_path / "bad.toml"
+    bad.write_text('[[layer]]\nname="B.Cu"\ntype="copper"\nthickness_um=1\n[[layer]]\nname="D"\ntype="dielectric"\nthickness_um=1\n[[layer]]\nname="F.Cu"\ntype="copper"\nthickness_um=1\n')
+    with pytest.raises(ValueError, match="another place"):
+        stack.load(bad).kicad_names()
 
 
 def test_stack_rejects_bad_files(tmp_path):
@@ -58,7 +75,7 @@ def test_kicad_stackup_round_trip(tmp_path):
 def test_every_stack_file(path, tmp_path):
     """Each stack loads, is valid for KiCad, and survives the KiCad stackup round trip."""
     p = stack.load(path)
-    p.check_kicad()
+    p.kicad_names()
     pcb = tmp_path / "s.kicad_pcb"
     pcb.write_text("(kicad_pcb\n    (setup\n" + p.kicad_stackup() + "    )\n)\n")
     back = stack.from_kicad_pcb(pcb)
@@ -173,7 +190,7 @@ def test_lvs_finds_open_short_unknown(tmp_path):
 
     from layz.lvs import compare as lvs
 
-    (tmp_path / "stack.toml").write_text('name = "t"\n[[layer]]\nname = "F.Cu"\ntype = "copper"\nthickness_um = 1\ngds = "6/0"\n[[layer]]\nname = "D"\ntype = "dielectric"\nthickness_um = 5\n[[layer]]\nname = "B.Cu"\ntype = "copper"\nthickness_um = 1\ngds = "3/0"\n[[via]]\ngds = "4/0"\ntop = "F.Cu"\nbottom = "B.Cu"\n')
+    (tmp_path / "stack.toml").write_text('name = "t"\n[[layer]]\nname = "M3"\ntype = "copper"\nthickness_um = 1\ngds = "6/0"\n[[layer]]\nname = "D"\ntype = "dielectric"\nthickness_um = 5\n[[layer]]\nname = "M2"\ntype = "copper"\nthickness_um = 1\ngds = "3/0"\n[[via]]\ngds = "4/0"\ntop = "M3"\nbottom = "M2"\n')
     (tmp_path / "sch.net").write_text('(export (nets (net (code "1") (name "/A") (node (ref "U1") (pin "1")) (node (ref "U2") (pin "1"))) (net (code "2") (name "/B") (node (ref "U1") (pin "2")) (node (ref "U2") (pin "2"))) (net (code "3") (name "/C") (node (ref "U1") (pin "3"))) (net (code "4") (name "/D") (node (ref "U2") (pin "3")))))')
     ly = kdb.Layout()
     ly.dbu = 0.001
@@ -195,7 +212,7 @@ def test_lvs_finds_open_short_unknown(tmp_path):
     top.shapes(l3).insert(kdb.Text("NOPE", kdb.Trans(100000, 5000)))
     ly.write(str(tmp_path / "t.gds"))
     rc = lvs.main(["--lay", str(tmp_path / "t.gds"), "--stack", str(tmp_path / "stack.toml"), "--sch", str(tmp_path / "sch.net"), "--report", str(tmp_path / "r.lyrdb")])
-    nets, labels, _ = lvs.extract(tmp_path / "t.gds", stack.load(tmp_path / "stack.toml"), [])
+    nets, labels, _ = lvs.extract(tmp_path / "t.gds", stack.load(tmp_path / "stack.toml"))
     findings, stats = lvs.compare(lvs.read_netlist((tmp_path / "sch.net").read_text()), labels)
     kinds = sorted(f.kind for f in findings)
     assert rc == 1 and kinds == ["open", "short", "unknown"]

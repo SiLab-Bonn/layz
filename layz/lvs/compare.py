@@ -11,8 +11,7 @@ A label names the net whose copper its origin lies on. Labels are read from
 
     * each copper layer's label layer: its datatype 1 (6/0 -> 6/1), or what the stack lists as
       labels = [...] for that layer,
-    * the copper drawing layers themselves (a text on 6/0 names the 6/0 net under it),
-    * --labels L/D:COPPER, a label layer tied to one copper layer (e.g. 80/7:6/0).
+    * the copper drawing layers themselves (a text on 6/0 names the 6/0 net under it).
 
 Checks (each listed with where it is, also as a KLayout marker database with --report):
 
@@ -21,8 +20,7 @@ Checks (each listed with where it is, also as a KLayout marker database with --r
     unknown     a label naming no schematic net or pin
     unlabelled  schematic nets no label checks (info: add labels to cover them)
 
-    layz lvs --lay design.gds --stack uni-bonn-rdl --sch design.kicad_sch
-             [--labels 80/7:6/0] [--report lvs.lyrdb]
+    layz lvs --lay design.gds --stack uni-bonn-rdl --sch design.kicad_sch [--report lvs.lyrdb]
 Exit status 0 when there are no opens, shorts or unknown labels, 1 otherwise.
 """
 
@@ -103,7 +101,7 @@ def _ld(s: str) -> tuple[int, int]:
     return int(a), int(b)
 
 
-def extract(gds: Path, process, extra_labels: list[str]) -> tuple[dict[int, str], list[Label]]:
+def extract(gds: Path, process) -> tuple[dict[int, str], list[Label]]:
     """Layout nets (cluster id -> KLayout's name for it) and every label, probed onto its net."""
     ly = kdb.Layout()
     ly.read(str(gds))
@@ -132,18 +130,11 @@ def extract(gds: Path, process, extra_labels: list[str]) -> tuple[dict[int, str]
             if g in copper:
                 l2n.connect(v, copper[g])
 
-    # label layers: each copper drawing layer, the stack's label purposes, --labels
+    # label layers: each copper drawing layer and the stack's label layers
     label_map: list[tuple[str, str]] = [(g, g) for g in copper]
     for layer in process.copper:
         for lab in getattr(layer, "labels", []) or []:
             label_map.append((lab, layer.gds))
-    for spec in extra_labels:
-        lab, _, cu = spec.partition(":")
-        if not cu:
-            raise SystemExit(f"--labels {spec}: give the copper layer it names, as L/D:COPPER (e.g. 80/7:6/0)")
-        if cu not in copper:
-            raise SystemExit(f"--labels {spec}: {cu} is not a copper layer of the stack ({', '.join(copper)})")
-        label_map.append((lab, cu))
 
     l2n.extract_netlist()
     circuit = l2n.netlist().circuit_by_name(top.name) or next(l2n.netlist().each_circuit_top_down())
@@ -228,13 +219,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--lay", type=Path, required=True, help="layout (GDS/OASIS)")
     ap.add_argument("--stack", type=Path, required=True, help="layz stack (.toml): copper, vias, label layers")
     ap.add_argument("--sch", type=Path, required=True, help="KiCad schematic (.kicad_sch, via kicad-cli) or its netlist (.net, kicadsexpr)")
-    ap.add_argument("--labels", action="append", default=[], metavar="L/D:COPPER", help="a label layer and the copper layer its texts name, e.g. 80/7:6/0 (repeatable)")
     ap.add_argument("--report", type=Path, help="write a KLayout marker database (.lyrdb) of the findings")
     a = ap.parse_args(argv)
 
     process = stackfile.load(a.stack)
     sch = schematic_netlist(a.sch)
-    nets, labels, _ = extract(a.lay, process, a.labels)
+    nets, labels, _ = extract(a.lay, process)
     findings, stats = compare(sch, labels)
 
     print(f"layout: {len(nets)} nets, {stats['labels']} labels; schematic: {stats['schematic nets']} nets")

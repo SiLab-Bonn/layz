@@ -2,9 +2,9 @@
 
 The in-house RDL of Uni Bonn: Al on polyimide, as on obelix1 (M2 + M3 on the chip pads).
 
-- `stack.toml`: layer heights, εr and GDS mapping (`--stack uni-bonn-rdl`). Thicknesses from
-  asiclab's `tech/uni-bonn-rdl`, obelix1's KiCad mapping; the polyimide εr and 8/0 are still to
-  confirm.
+- `stack.toml`: layers (TopPad 8/0, M3 6/0, M2 3/0, ChipPad 68/0), heights, εr
+  (`--stack uni-bonn-rdl`). Thicknesses from asiclab's `tech/uni-bonn-rdl`; the polyimide εr and
+  8/0 are still to confirm.
 - `pdk.yml`, `decks/`, `suites/`: the DRC deck (`--kit uni-bonn-rdl`), below.
 
 ## DRC
