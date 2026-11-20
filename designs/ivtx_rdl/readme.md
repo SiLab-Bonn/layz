@@ -21,8 +21,7 @@ Each target names its inputs and limits itself, runs, checks and plots into its 
 | `setup` | the inputs (layout, stack, schematic, the board's source); Andreas' HyperLynx project (VRMs, DC sinks, driver models) from `/users/aulm`; HyperLynx's overlay | |
 | `drc` | the layout against the Uni Bonn RDL's rules (gdscheck) | no violations |
 | `lvs` | the layout's labelled nets against the schematic | no opens, shorts or unknown labels |
-| `board` | the HyperLynx board, its 17 signal routes as traces | |
-| `info` | stackup, nets with their lengths, VRMs, modelled pins | |
+| `board` | the HyperLynx board, its 17 signal routes as traces; then what HyperLynx sees in it (stackup, nets, VRMs, pins) and the pins their copper doesn't reach |
 | `dc` | DC drop of the four 3 V rails with their returns; the return re-solved as a supply for its loss map | drop + return rise ≤ 5 % (the HyperLynx constraint) |
 | `si` | D4 eye at 160 Mb/s PRBS7, ideal and with loss, roughness, crosstalk and jitter (RJ 100 ps, SJ 300 ps at 5 MHz); D4 held low while ADC_4 and rst switch at 80 MHz | eye ≥ 200 mV, ≥ 0.7 UI; crosstalk ≤ 100 mV p-p |
 | `sparams` | 4-port S-parameters of the D4 pair | SDD21 ≥ −3 dB, SDD11 ≤ −10 dB at 80 MHz |

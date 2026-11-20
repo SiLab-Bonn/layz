@@ -65,19 +65,15 @@ def lvs():
 @target
 def board():
     """The board for HyperLynx, its signal nets (40 um wide) as traces: BoardSim simulates
-    pours as no line; supplies stay pours."""
+    pours as no line; supplies stay pours. Then what HyperLynx sees in it (stackup, nets and
+    lengths, VRMs, modelled pins), and the pins their net's copper doesn't reach."""
     gds2hyp.hyp(BOARD_SOURCE, BOARD, stack=STACK, refill=False, traces="auto", trace_max_width=0.08)
 
-
-@target
-def info():
-    """Stackup, nets with their lengths, VRMs and modelled pins (info/info.json); pins their
-    net's copper doesn't reach, and copper on no net."""
-    board = BOARD
-    run.info(board, Path("results/ivtx_rdl/info"), license="HyperLynx SI/PI")
-
-    # pins their net's copper doesn't reach (more than 25 um away), and copper on no net
-    analysis.connectivity(board, tolerance_m=25e-6, nets=None, out=Path("results/ivtx_rdl/info/connectivity.csv"))
+    # what HyperLynx sees in it: stackup, nets with their lengths, VRMs, modelled pins
+    # (info/info.json); pins their net's copper doesn't reach (more than 25 um away), and copper
+    # on no net
+    run.info(BOARD, RESULTS / "board" / "info", license="HyperLynx SI/PI")
+    analysis.connectivity(BOARD, tolerance_m=25e-6, nets=None, out=RESULTS / "board" / "connectivity.csv")
 
 
 @target

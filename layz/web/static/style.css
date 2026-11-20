@@ -149,3 +149,9 @@ section.target > .error { margin: 8px 14px 0; }
 .layers a.off { opacity: 0.4; }
 .canvas .picked { max-width: 60%; white-space: normal; }
 .canvas .picked strong { color: var(--sem-error); font-weight: 600; }
+.view3d { position: relative; height: 520px; border: 1px solid var(--line-1); border-radius: 4px; overflow: hidden; }
+.view3d canvas { width: 100%; height: 100%; display: block; }
+.view3d .hint { position: absolute; left: 10px; bottom: 8px; color: var(--ink-4); font-size: 11px; pointer-events: none; }
+.facts { max-width: 420px; }
+.facts h4:first-child { margin-top: 4px; }
+aside { width: 220px; }

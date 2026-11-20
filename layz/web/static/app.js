@@ -136,6 +136,10 @@ function stage(d, t, i) {
       if (inp.layout_svgs) return svgViewer(inp.layout_svgs);
       return h("div", { class: "caption" }, "no layout");
     }]);
+    right.push(["3D", async () => {
+      const inp = await inputs();
+      return inp.layout ? view3d(inp.layout) : h("div", { class: "caption" }, "3D: with the board, below");
+    }]);
     right.push(["schematic", async () => {
       const inp = await inputs();
       if (inp.schematic_svgs) return svgViewer(inp.schematic_svgs);
@@ -154,6 +158,7 @@ function stage(d, t, i) {
   }
   for (const o of t.overlays || []) right.push([`board · ${overlayName(o)}`, async () => layoutViewer(await board(), await once(fileUrl(d.name, o))).el]);
   if (isBoard) right.push(["board", async () => layoutViewer(await board()).el]);
+  if (isBoard) right.push(["board 3D", async () => view3d(await board())]);
   for (const p of t.plots) right.push([plotLabel(p.png), async () => plotPane(d.name, p)]);
 
   // left: numbers
@@ -166,6 +171,8 @@ function stage(d, t, i) {
   };
   const left = [];
   if (t.name === "setup") left.push(["inputs", () => h("table", { class: "kvtable" }, h("tr", {}, h("td", {}, "flow"), h("td", {}, d.flow)), Object.entries(d.inputs).map(([k, v]) => h("tr", {}, h("td", {}, k), h("td", {}, v))))]);
+  if (t.name === "setup") left.push(["layout facts", async () => { const inp = await inputs(); return inp.layout ? h("div", { class: "facts" }, layoutFacts(inp.layout)) : h("div", { class: "caption" }, "the board's facts: with the board, below"); }]);
+  if (isBoard) left.push(["board facts", async () => h("div", { class: "facts" }, layoutFacts(await board()))]);
   for (const tb of t.tables) left.push([base(tb.path).replace(/\.csv$/, ""), () => table(tb, t.markers ? mark : null)]);
   if (t.markers && t.markers.boxes.length) left.push(["each violation", () => violations(t.markers.boxes, (m) => { rightTabs.show(`layout · ${t.markers.boxes.length} marked`); setTimeout(() => viewer && viewer.setMarkers(t.markers.boxes, m), 50); })]);
   if (t.lines.length) left.push([`log${countLevels(t.lines)}`, () => h("pre", { class: "log" }, t.lines.map(logLine))]);
@@ -304,6 +311,113 @@ async function svgViewer(themes) {
   themeListeners.add(show);
   await show();
   return h("div", {}, bar, holder, h("div", { class: "caption" }, "drag to pan · wheel to zoom"));
+}
+
+// ---------------------------------------------------------------- 3D (three.js, WebGL)
+
+let three = null;
+async function view3d(b) {
+  three ||= Promise.all([
+    import("three"),
+    import("three/addons/controls/OrbitControls.js"),
+    import("three/addons/utils/BufferGeometryUtils.js"),
+  ]);
+  const [THREE, { OrbitControls }, { mergeGeometries }] = await three;
+  const host = h("div", { class: "view3d" });
+  const [x0, y0, x1, y1] = b.bbox;
+  const size = Math.max(x1 - x0, y1 - y0);
+  const total = b.stackup.reduce((a, l) => a + l.thickness_mm, 0) || 0.1;
+  const zs = Math.max(1, (0.04 * size) / total);  // height exaggerated: a thin stack stays visible
+  // each layer's bottom and top (mm, z up from the bottom of the stack), exaggerated
+  const z = {};
+  let at = 0;
+  for (const l of [...b.stackup].reverse()) { z[l.name] = [at * zs, (at + l.thickness_mm) * zs]; at += l.thickness_mm; }
+  const color = Object.fromEntries(b.copper.map((l, i) => [l, i === b.copper.length - 1 && i > 0 ? BOTTOM : NORD_LAYERS[i % NORD_LAYERS.length]]));
+
+  const scene = new THREE.Scene();
+  const group = new THREE.Group();
+  group.position.set(-(x0 + x1) / 2, -(y0 + y1) / 2, 0);
+  scene.add(group);
+  const shape = (pts, holes) => {
+    const s = new THREE.Shape(pts.map(([x, y]) => new THREE.Vector2(x, y)));
+    for (const hole of holes || []) s.holes.push(new THREE.Path(hole.map(([x, y]) => new THREE.Vector2(x, y))));
+    return s;
+  };
+  for (const layer of b.copper) {  // copper: the layer's polygons, extruded to its thickness
+    const [zb, zt] = z[layer] || [0, 0.01];
+    const geos = [];
+    for (const p of b.polys) if (p.layer === layer && p.pts.length > 2) {
+      const g = new THREE.ExtrudeGeometry(shape(p.pts, p.holes), { depth: Math.max(zt - zb, 1e-4), bevelEnabled: false });
+      g.translate(0, 0, zb);
+      geos.push(g);
+    }
+    for (const sg of b.segs) if (sg.layer === layer) {  // traces: boxes along their centreline
+      const len = Math.hypot(sg.x2 - sg.x1, sg.y2 - sg.y1);
+      if (!len) continue;
+      const g = new THREE.BoxGeometry(len + sg.w, sg.w, Math.max(zt - zb, 1e-4));
+      g.rotateZ(Math.atan2(sg.y2 - sg.y1, sg.x2 - sg.x1));
+      g.translate((sg.x1 + sg.x2) / 2, (sg.y1 + sg.y2) / 2, (zb + zt) / 2);
+      geos.push(g);
+    }
+    if (geos.length) group.add(new THREE.Mesh(mergeGeometries(geos, false), new THREE.MeshStandardMaterial({ color: color[layer], metalness: 0.3, roughness: 0.55 })));
+  }
+  const viaGeos = [];
+  for (const c of b.cuts || []) {  // GDS via cuts: from the lower layer's bottom to the upper's top
+    const zz = c.layers.map((l) => z[l]).filter(Boolean);
+    if (zz.length < 2) continue;
+    const lo = Math.min(...zz.map((q) => q[0])), hi = Math.max(...zz.map((q) => q[1]));
+    const g = new THREE.ExtrudeGeometry(shape(c.pts), { depth: hi - lo, bevelEnabled: false });
+    g.translate(0, 0, lo);
+    viaGeos.push(g);
+  }
+  for (const v of b.vias) {  // board vias: cylinders between their outer layers
+    const zz = v.layers.map((l) => z[l]).filter(Boolean);
+    if (zz.length < 1) continue;
+    const lo = Math.min(...zz.map((q) => q[0])), hi = Math.max(...zz.map((q) => q[1]));
+    const g = new THREE.CylinderGeometry(v.d / 2, v.d / 2, Math.max(hi - lo, 1e-4), 10);
+    g.rotateX(Math.PI / 2);
+    g.translate(v.x, v.y, (lo + hi) / 2);
+    viaGeos.push(g);
+  }
+  if (viaGeos.length) group.add(new THREE.Mesh(mergeGeometries(viaGeos, false), new THREE.MeshStandardMaterial({ color: "#d8dee9", metalness: 0.5, roughness: 0.4 })));
+  for (const l of b.stackup) if (l.type !== "copper" && z[l.name]) {  // dielectrics: translucent slabs
+    const [zb, zt] = z[l.name];
+    const g = new THREE.BoxGeometry(x1 - x0, y1 - y0, Math.max(zt - zb, 1e-4));
+    g.translate((x0 + x1) / 2, (y0 + y1) / 2, (zb + zt) / 2);
+    group.add(new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: l.type === "mask" ? "#4c566a" : "#8fbcbb", transparent: true, opacity: 0.12, depthWrite: false })));
+  }
+  scene.add(new THREE.AmbientLight(0xffffff, 0.75));
+  const sun = new THREE.DirectionalLight(0xffffff, 1.6);
+  sun.position.set(size, -size, size);
+  scene.add(sun);
+
+  let renderer;
+  try {
+    renderer = new THREE.WebGLRenderer({ antialias: true });
+  } catch {
+    return h("div", { class: "caption" }, "3D needs WebGL, which this browser doesn't offer (in Firefox or Chrome: hardware acceleration on)");
+  }
+  renderer.setPixelRatio(window.devicePixelRatio || 1);
+  host.append(renderer.domElement, h("div", { class: "hint" }, `drag to orbit · right-drag to pan · wheel to zoom · height ×${zs.toFixed(0)}`));
+  const camera = new THREE.PerspectiveCamera(35, 1, size / 1000, size * 20);
+  camera.up.set(0, 0, 1);
+  camera.position.set(0, -size * 1.1, size * 0.8);
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  const theme = () => { scene.background = new THREE.Color(css("--layout-bg")); };
+  theme();
+  themeListeners.add(theme);
+  const resize = () => {
+    const w = host.clientWidth, hh = host.clientHeight;
+    if (!w || !hh) return;
+    renderer.setSize(w, hh, false);
+    camera.aspect = w / hh;
+    camera.updateProjectionMatrix();
+  };
+  new ResizeObserver(resize).observe(host);
+  const loop = () => { if (!host.isConnected && host.dataset.started) return; host.dataset.started = "1"; controls.update(); renderer.render(scene, camera); requestAnimationFrame(loop); };
+  requestAnimationFrame(() => { resize(); loop(); });
+  return host;
 }
 
 // ---------------------------------------------------------------- layout viewer (GDS or .hyp board)
@@ -499,7 +613,7 @@ function layoutViewer(b, overlay = null, full = false) {
     return a;
   }));
   if (!full) wrap.append(toggles);
-  const el = h("div", { class: "layout" + (full ? "" : " bare") }, wrap, full ? h("aside", {}, sidePanel(b, color, shown, draw)) : null);
+  const el = h("div", { class: "layout" + (full ? "" : " bare") }, wrap, full ? h("aside", {}, stackPanel(b, color, shown, draw)) : null);
   return { el, setMarkers: (boxes, at = null) => { markers = boxes; focus = at ? at.box || at : null; view = null; draw(); if (at && at.rule) say(at); } };
 }
 
@@ -516,21 +630,25 @@ function bars(rows, colour, label) {
     h("span", {}, label(k)), h("div", { class: "bar" }, h("span", { style: `width:${(100 * n) / max}%;background:${colour}` })), h("span", { class: "n" }, n))));
 }
 
-function sidePanel(b, color, shown, draw) {
+// the stackup, top to bottom: click a copper layer to hide or show it
+function stackPanel(b, color, shown, draw) {
   const total = b.stackup.reduce((a, l) => a + l.thickness_mm, 0) || 1;
   const um = (mm) => `${(mm * 1000).toFixed(mm < 0.01 ? 1 : 0)} µm`;
-  const stack = h("div", { class: "stack" }, b.stackup.map((l) => {
+  return [h("h4", {}, "stackup (click copper to hide)"), h("div", { class: "stack" }, b.stackup.map((l) => {
     const el = h("div", { class: l.type, style: `height:${Math.max(16, Math.min(64, (300 * l.thickness_mm) / total))}px` + (l.type === "copper" ? `;box-shadow: inset 5px 0 0 ${color[l.name]}` : ""), title: `${l.name}: ${l.material || l.type}, ${um(l.thickness_mm)}` + (l.er ? `, εr ${l.er}` : "") },
       l.name, h("span", { class: "t" }, um(l.thickness_mm)));
     if (l.type === "copper") el.onclick = () => { shown.has(l.name) ? shown.delete(l.name) : shown.add(l.name); el.classList.toggle("off"); draw(); };
     return el;
-  }));
+  }))];
+}
+
+// a layout's counts: shapes per layer (GDS), trace widths and vias (board), and its facts
+function layoutFacts(b) {
   const s = b.stats;
   const mm = (x) => `${x.toFixed(x < 1 ? 3 : 2)} mm`;
   const facts = [["thickness", mm(s.thickness_mm)], ["size", `${s.size_mm[0].toFixed(2)} × ${s.size_mm[1].toFixed(2)} mm`], ["copper layers", s.copper_layers]];
   for (const k of ["nets", "pours", "tracks", "vias", "pins", "components", "via cuts", "labels"]) if (s[k] != null) facts.push([k, s[k]]);
   return [
-    h("h4", {}, "stackup (click copper to hide)"), stack,
     b.kind === "gds"
       ? [h("h4", {}, "shapes per layer"), bars(Object.entries(s["shapes per layer"]), "var(--nord8)", (k) => k)]
       : [h("h4", {}, "trace widths"), bars(s.trace_widths, "var(--nord14)", (w) => mm(w)),

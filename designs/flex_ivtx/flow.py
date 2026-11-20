@@ -84,16 +84,15 @@ def lvs():
 @target
 def board():
     """The board for HyperLynx (KiCad's exporter), its signal nets (up to 0.3 mm wide) as traces;
-    GND and +3V0 stay pours."""
+    GND and +3V0 stay pours. Then what HyperLynx sees in it (stackup, nets and
+    lengths, VRMs, modelled pins), and the pins their net's copper doesn't reach."""
     gds2hyp.hyp(LAYOUT, BOARD, stack=None, refill=True, traces="auto", trace_max_width=0.3)  # a .hyp: copied, then the traces
 
-
-@target
-def info():
-    """Stackup, nets with their lengths, VRMs and modelled pins (info/info.json); pins their
-    net's copper doesn't reach, and copper on no net."""
-    run.info(BOARD, RESULTS / "info", license="HyperLynx SI/PI")
-    analysis.connectivity(BOARD, tolerance_m=25e-6, nets=None, out=RESULTS / "info" / "connectivity.csv")
+    # what HyperLynx sees in it: stackup, nets with their lengths, VRMs, modelled pins
+    # (info/info.json); pins their net's copper doesn't reach (more than 25 um away), and copper
+    # on no net
+    run.info(BOARD, RESULTS / "board" / "info", license="HyperLynx SI/PI")
+    analysis.connectivity(BOARD, tolerance_m=25e-6, nets=None, out=RESULTS / "board" / "connectivity.csv")
 
 
 @target

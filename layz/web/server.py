@@ -129,6 +129,11 @@ class Handler(SimpleHTTPRequestHandler):
     def log_message(self, *args):  # quiet
         pass
 
+    def end_headers(self):  # the page's own files too: a new layz shows at the next reload
+        if "Cache-Control" not in "".join(h.decode(errors="replace") for h in getattr(self, "_headers_buffer", [])):
+            self.send_header("Cache-Control", "no-cache")
+        super().end_headers()
+
     def send(self, code: int, body: bytes, kind: str) -> None:
         self.send_response(code)
         self.send_header("Content-Type", kind)
