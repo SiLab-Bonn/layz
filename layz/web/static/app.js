@@ -166,7 +166,7 @@ function stage(d, t, i) {
     const inp = await inputs();
     if (!inp.schematic_svgs || !inp.schematic_index) return h("div", { class: "caption" }, "no KiCad schematic to mark");
     sheet = await svgViewer(inp.schematic_svgs, inp.schematic_index);
-    sheet.mark(t.markers.boxes.flatMap((m) => m.names || []), [], unchecked);
+    sheet.mark(t.markers.boxes.flatMap((m) => m.names || []), [], unchecked, t.markers.boxes);
     return sheet.el;
   }]);
   if (isBoard) right.push(["board", async () => layoutViewer(await board()).el]);
@@ -190,7 +190,7 @@ function stage(d, t, i) {
   const names = t.tables.map((tb) => tb.path.split("/").slice(1).join("/").replace(/\.csv$/, ""));
   t.tables.forEach((tb, k) => left.push([names[k], () => table(tb, t.markers ? mark : null)]));
   if (t.markers && t.markers.boxes.length) left.push(["each violation", () => violations(t.markers.boxes, (m) => {
-    if (sheet && m.names && rightTabs.current() === "schematic · marked") { sheet.mark(t.markers.boxes.flatMap((x) => x.names || []), m.names, unchecked); return; }
+    if (sheet && m.names && rightTabs.current() === "schematic · marked") { sheet.mark(t.markers.boxes.flatMap((x) => x.names || []), m.names, unchecked, t.markers.boxes); return; }
     rightTabs.show(`layout · ${t.markers.boxes.length} marked`);
     setTimeout(() => viewer && viewer.setMarkers(t.markers.boxes, m), 50);
   })]);
@@ -315,6 +315,10 @@ async function svgViewer(themes, index = null) {
     const ref = index.refs[name.split(".")[0]];
     return ref ? [ref] : [];
   };
+  const info = h("div", { class: "picked", style: "display:none" });
+  const say = (name, note, colour) => { info.style.display = ""; info.replaceChildren(h("strong", { style: `color:${colour}` }, name), note ? h("div", {}, note) : null); };
+  let findings = [];
+  const findingOf = (name) => findings.filter((m) => (m.names || []).includes(name)).map((m) => `${m.rule}: ${m.what}`).join("\n");
   const drawMarks = () => {
     if (!svgNow) return;
     svgNow.querySelector("g.marks")?.remove();
@@ -323,14 +327,13 @@ async function svgViewer(themes, index = null) {
     const err = css("--sem-error"), warn = css("--sem-warn");
     const all = [...warned.map((n) => [n, warn, "not checked by any layout label"]), ...marked.map((n) => [n, err, ""])];
     for (const [name, colour, note] of all) for (const [x, y] of places(name)) {
-      const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-      const hot = picked.includes(name);
-      c.setAttribute("cx", x); c.setAttribute("cy", y); c.setAttribute("r", hot ? 3.2 : 2.2);
-      c.setAttribute("fill", colour); c.setAttribute("fill-opacity", hot ? 0.35 : 0.18); c.setAttribute("stroke", colour); c.setAttribute("stroke-width", hot ? 0.6 : 0.35);
-      const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
-      title.textContent = note ? `${name}: ${note}` : name;
-      c.append(title);
-      g.append(c);
+      const hot = picked.includes(name), r = hot ? 3.2 : 2.4;  // a box around it, as the layout's markers
+      const box = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+      box.setAttribute("x", x - r); box.setAttribute("y", y - r); box.setAttribute("width", 2 * r); box.setAttribute("height", 2 * r);
+      box.setAttribute("fill", colour); box.setAttribute("fill-opacity", hot ? 0.4 : 0.25); box.setAttribute("stroke", colour); box.setAttribute("stroke-width", hot ? 0.7 : 0.45);
+      box.style.cursor = "pointer";
+      box.addEventListener("click", (e) => { e.stopPropagation(); say(name, note || findingOf(name), colour); });
+      g.append(box);
     }
     svgNow.append(g);
   };
@@ -342,6 +345,7 @@ async function svgViewer(themes, index = null) {
     svg.removeAttribute("width"); svg.removeAttribute("height");
     holder.querySelector("svg")?.remove();
     holder.prepend(svg);
+    svg.addEventListener("click", () => { info.style.display = "none"; });
     svgNow = svg;
     drawMarks();
     requestAnimationFrame(() => {
@@ -366,12 +370,14 @@ async function svgViewer(themes, index = null) {
   };
   themeListeners.add(show);
   await show();
+  holder.append(info);
   holder.append(h("div", { class: "tools" }, h("button", { class: "fit", title: "back to the whole sheet", onclick: () => { vb = null; show(); } }, "fit")));
   const el = h("div", {}, bar, holder);
   return {
     el,
-    mark: (names, focus = [], warn = []) => {
-      marked = names; picked = focus; warned = warn; drawMarks();
+    mark: (names, focus = [], warn = [], all = null) => {
+      marked = names; picked = focus; warned = warn; if (all) findings = all; drawMarks();
+      if (focus.length) say(focus.join(", "), findingOf(focus[0]), css("--sem-error"));
       const pts = focus.flatMap(places);
       if (pts.length && svgNow) {  // zoom to the picked ones
         const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
