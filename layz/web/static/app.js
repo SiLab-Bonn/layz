@@ -259,9 +259,13 @@ async function plotPane(design, p) {
   const fig = await once(fileUrl(design, p.data));
   const el = h("div", { class: "plotly" });
   // a figure of several panels: one at a time, full size, picked from a list (nets, runs)
-  let pick = 0;
-  const label = (ax, k) => ax.title || [ax.ylabel, ax.xlabel].filter(Boolean).join(" vs ") || `panel ${k + 1}`;
-  const select = fig.axes.length > 1 ? h("select", { class: "panelpick", onchange: (e) => { pick = Number(e.target.value); draw(); } }, fig.axes.map((ax, k) => h("option", { value: k }, label(ax, k)))) : null;
+  // the last panel first (the realistic eye, the victim's noise); each named by its y axis where
+  // those differ, else by its title without the details in brackets
+  let pick = fig.axes.length - 1;
+  const ys = fig.axes.map((ax) => ax.ylabel);
+  const byY = new Set(ys).size === ys.length && ys.every(Boolean);
+  const label = (ax, k) => (byY ? ax.ylabel : (ax.title || "").replace(/\s*\(.*$/, "")) || `panel ${k + 1}`;
+  const select = fig.axes.length > 1 ? h("select", { class: "panelpick", onchange: (e) => { pick = Number(e.target.value); draw(); } }, fig.axes.map((ax, k) => h("option", { value: k, selected: k === pick ? "" : null }, label(ax, k)))) : null;
   const draw = () => {
     const axesShown = select ? [{ ...fig.axes[pick], box: [0, 0, 1, 1], title: "" }] : fig.axes;
     const ink = css("--ink-1"), grid = css("--line-2"), dim = css("--ink-4");
@@ -288,7 +292,14 @@ async function plotPane(design, p) {
       }
       for (const t of ax.texts || []) layout.annotations.push(t.data ? { text: t.text.replace(/\n/g, "<br>"), x: t.x, y: t.y, xref: `x${n}`, yref: `y${n}`, showarrow: false, font: { size: 10 } } : { text: t.text.replace(/\n/g, "<br>"), x: ax.box[0] + t.x * (ax.box[2] - ax.box[0]), y: ax.box[1] + t.y * (ax.box[3] - ax.box[1]), xref: "paper", yref: "paper", showarrow: false, font: { size: 10 } });
       if (ax.equal) layout[`yaxis${n}`].scaleanchor = `x${n}`;
-      for (const l of ax.lines) traces.push({ type: "scattergl", mode: l.markers ? "markers" : "lines", xaxis: `x${n}`, yaxis: `y${n}`, x: l.x, y: l.y, name: l.label || undefined, showlegend: !!l.label, line: { color: l.color, width: Math.max(1, l.width), dash: l.dash ? "dash" : "solid" }, marker: { color: l.color, size: 4 } });
+      // lines in the theme's palette (the PNG's is for white paper), in the order drawn
+      const palette = document.documentElement.dataset.theme === "light" ? ["#5e81ac", "#d08770", "#a3be8c", "#b48ead", "#bf616a", "#8fbcbb"] : ["#88c0d0", "#ebcb8b", "#a3be8c", "#b48ead", "#d08770", "#8fbcbb"];
+      const seen = new Map();  // the PNG's colours, one palette colour each
+      for (const l of ax.lines) {
+        if (!seen.has(l.color)) seen.set(l.color, palette[seen.size % palette.length]);
+        const c = seen.get(l.color);
+        traces.push({ type: "scattergl", mode: l.markers ? "markers" : "lines", xaxis: `x${n}`, yaxis: `y${n}`, x: l.x, y: l.y, name: l.label || undefined, showlegend: !!l.label, line: { color: c, width: Math.max(1.2, l.width), dash: l.dash ? "dash" : "solid" }, marker: { color: c, size: 4 } });
+      }
     });
     window.Plotly.react(el, traces, layout, { responsive: true, displaylogo: false, modeBarButtonsToRemove: ["select2d", "lasso2d"] });
   };
