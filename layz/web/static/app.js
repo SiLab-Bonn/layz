@@ -168,7 +168,8 @@ function stage(d, t, i) {
       return viewer.el;
     }]);
   }
-  for (const o of t.overlays || []) right.push([`on the board`, async () => layoutViewer(await board(), await once(fileUrl(d.name, o))).el]);
+  // a result drawn on the board: a tab per kind (for DC: current density, pin voltage, via current)
+  for (const o of t.overlays || []) for (const mode of ["current density", "pin voltage", "via current"]) right.push([mode, async () => layoutViewer(await board(), await once(fileUrl(d.name, o)), false, mode).el]);
   let sheet = null; // the schematic this stage marks its findings on
   const unchecked = (t.summary && t.summary["unchecked nets"]) || [];
   if (t.name.includes("lvs") && t.markers && (t.markers.boxes.some((m) => m.names) || unchecked.length)) right.push([`schematic · marked`, async () => {
@@ -179,7 +180,7 @@ function stage(d, t, i) {
     return sheet.el;
   }]);
   if (isBoard) right.push(["board", async () => layoutViewer(await board()).el]);
-  if (isBoard) right.push(["board 3D", async () => view3d(await board())]);
+  if (isBoard) right.push(["3D", async () => view3d(await board())]);
   const REPLACES = { dc: ["dc_current_density", "dc_loss_map", "dc_pin_voltage", "dc_via_current"] };  // maps an overlay draws on the board
   const replaced = new Set((t.overlays || []).flatMap((o) => REPLACES[base(o).split("_")[0]] || []));
   for (const p of t.plots) if (!replaced.has(base(p.png).replace(/\.png$/, ""))) right.push([plotLabel(p.png), async () => plotPane(d.name, p)]);
@@ -598,7 +599,7 @@ function overlayImage(layer, lo, hi) {
 const niceLength = (target) => { const e = 10 ** Math.floor(Math.log10(target)); return [1, 2, 5, 10].map((m) => m * e).find((v) => v >= target) || 10 * e; };
 const lengthText = (mm) => (mm >= 1 ? `${+mm.toPrecision(3)} mm` : `${+(mm * 1000).toPrecision(3)} µm`);
 
-function layoutViewer(b, overlay = null, full = false) {
+function layoutViewer(b, overlay = null, full = false, mode = "current density") {
   const color = layerColors(b.copper, full && !overlay);
   const shown = new Set(b.copper);
   let picked = null, markers = [], focus = null;
@@ -614,10 +615,10 @@ function layoutViewer(b, overlay = null, full = false) {
     const supply = overlay.pins[0]?.run;
     const pins = overlay.pins.filter((p) => p.run === supply);
     const vs = pins.map((p) => p.v), is = (overlay.vias || []).map((v) => v.i).filter((i) => i > 0);
-    ov = { mode: "current density", lo, hi, pins, vmin: Math.min(...vs), vmax: Math.max(...vs), imin: Math.min(...is), imax: Math.max(...is), images: Object.fromEntries(Object.entries(overlay.layers).map(([n, l]) => [n, { img: overlayImage(l, lo, hi), ext: l.extent }])) };
+    ov = { mode, lo, hi, pins, vmin: Math.min(...vs), vmax: Math.max(...vs), imin: Math.min(...is), imax: Math.max(...is), images: Object.fromEntries(Object.entries(overlay.layers).map(([n, l]) => [n, { img: overlayImage(l, lo, hi), ext: l.extent }])) };
     // current density: the layer carrying the most, alone
     const top = Object.entries(overlay.layers).map(([n, l]) => [n, Math.max(0, ...l.z.flat().filter((v) => v > 0))]).sort((a2, b2) => b2[1] - a2[1])[0];
-    if (top) { shown.clear(); shown.add(top[0]); ov.top = top[0]; }
+    if (top) { ov.top = top[0]; if (mode === "current density") { shown.clear(); shown.add(top[0]); } }
   }
   const canvas = h("canvas");
   const pickedBox = h("div", { class: "picked", style: "display:none" });
@@ -829,14 +830,7 @@ function layoutViewer(b, overlay = null, full = false) {
     pdf.addImage(url, "PNG", 0, 0, w / 2, hh / 2);
     pdf.save(`${stem()}.pdf`);
   } }, "pdf"));
-  if (ov) tools.prepend(h("select", { class: "panelpick modes", onchange: (e) => {
-    const m = e.target.value;
-    ov.mode = m;
-    if (m !== "current density") b.copper.forEach((l) => shown.add(l));
-    else { shown.clear(); shown.add(ov.top); }  // one layer's map at a time
-    toggles.querySelectorAll("a").forEach((x) => x.classList.toggle("off", !shown.has(x.textContent)));
-    draw();
-  } }, ["current density", "pin voltage", "via current"].map((m) => h("option", { value: m }, m))));
+
   if (full) wrap.append(h("div", { class: "stackover" }, stackPanel(b, color, shown, draw)));  // on the grid itself
   const el = h("div", { class: "layout" + (full ? "" : " bare") }, wrap);
   return { el, setMarkers: (boxes, at = null) => { markers = boxes; focus = at ? at.box || at : null; view = null; draw(); if (at && at.rule) say(at); } };
