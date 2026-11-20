@@ -65,7 +65,7 @@ def design(name: str) -> dict:
                 rows = list(csv.reader(fh))
             if rows and len(rows) <= 400 and len(rows[0]) <= 30:  # tables, not data dumps
                 t["tables"].append({"path": str(f.relative_to(folder)), "rows": rows})
-        t["plots"] = [{"png": str(f.relative_to(folder)), "data": str(f.with_suffix(".plot.json").relative_to(folder)) if f.with_suffix(".plot.json").exists() else None} for f in found if f.suffix == ".png"]
+        t["plots"] = [{"png": str(f.relative_to(folder)), "data": str(f.with_suffix(".plot.json").relative_to(folder)) if f.with_suffix(".plot.json").exists() else None} for f in sorted((f for f in found if f.suffix == ".png"), key=lambda f: f.stat().st_mtime)]  # in the order the flow made them
         t["markers"] = json.loads((out / "markers.json").read_text()) if (out / "markers.json").exists() else None
         t["overlays"] = [str(f.relative_to(folder)) for f in found if f.name.endswith(".overlay.json")]
         # what the step wrote, for sftp:// links (its own files, not HyperLynx's board copies)

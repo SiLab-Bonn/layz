@@ -334,9 +334,9 @@ def test_hyperlynx_touchstone_and_plots(tmp_path):
     dc, si, sp = _hyperlynx_runs(tmp_path)
     f, S = plots.read_touchstone(sp / "sparams.s2p")
     assert f.tolist() == [1e6, 1e9] and np.isclose(S[0, 1, 0], 0.9) and np.isclose(S[1, 0, 0], 0.3)
-    paths = plots.plot_dc(dc, tmp_path / "plots") + plots.plot_si([si], tmp_path / "plots", skip_ui=4, centre_window=0.05, edge_levels=(0.2, 0.8), settle=0.1) + plots.plot_sparam(sp, tmp_path / "plots")
+    paths = plots.plot_dc(dc, tmp_path / "plots") + plots.plot_si([si], tmp_path / "plots", at=None, skip_ui=4, centre_window=0.05, edge_levels=(0.2, 0.8), settle=0.1) + plots.plot_sparam(sp, tmp_path / "plots")
     names = {p.stem for p in paths}
-    assert {"dc_pin_voltage", "dc_via_current", "dc_loss_map", "si_waveforms", "si_eye", "sparams_sp"} <= names
+    assert {"dc_pin_voltage", "dc_via_current", "dc_loss_map", "waveforms", "eye", "sparams"} <= names
     assert all(p.exists() for p in paths)
 
 

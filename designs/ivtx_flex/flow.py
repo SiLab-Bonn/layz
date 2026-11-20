@@ -210,7 +210,7 @@ def si():
     # rise and fall 20-80 %; crosstalk after the first 10 % of the run
     analysis.eyes([ideal, real], min_height=0.2, min_width_ui=0.7, at="J1", skip_ui=4, centre_window=0.05, edge_levels=(0.2, 0.8), out=out / "eyes.csv")
     analysis.crosstalk(xt, max_noise=0.1, at="J1", settle=0.1, out=out / "crosstalk.csv")
-    plots.plot_si([ideal, real, xt], out, skip_ui=4, centre_window=0.05, edge_levels=(0.2, 0.8), settle=0.1)
+    plots.plot_si([ideal, real, xt], out, at="J1", skip_ui=4, centre_window=0.05, edge_levels=(0.2, 0.8), settle=0.1)
 
 
 @target

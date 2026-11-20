@@ -428,10 +428,11 @@ def _label(run: Path) -> str:
 
 
 @mpl.rc_context(PLOT_STYLE)
-def plot_si(runs: list[Path], out: Path, *, skip_ui: float, centre_window: float, edge_levels: tuple[float, float], settle: float) -> list[Path]:
-    """Waveforms and eyes of SI runs, and crosstalk runs (those with aggressors) on their own.
+def plot_si(runs: list[Path], out: Path, *, at: str | None, skip_ui: float, centre_window: float, edge_levels: tuple[float, float], settle: float) -> list[Path]:
+    """The eyes at the receiver (waveforms naming ``at``; None: every one), one per eye run, side by
+    side; crosstalk runs (those with aggressors) on their own; every run's waveforms, per pair.
     skip_ui, centre_window, edge_levels: as for eye(); settle: share of a crosstalk run's time
-    left out as start-up."""
+    left out as start-up. Written in that order: eye, crosstalk, waveforms."""
     paths: list[Path] = []
     # runs with aggressors (a quiet victim, another stimulus) get their own crosstalk plot
     signal = [r for r in runs if not json.loads((r / "si.json").read_text()).get("aggressors")]
@@ -439,6 +440,58 @@ def plot_si(runs: list[Path], out: Path, *, skip_ui: float, centre_window: float
     names = [w["name"] for w in waves[signal[0]]] if signal else []
     if not names:
         return paths + [p for r in runs for p in _plot_crosstalk(r, json.loads((r / "si.json").read_text()), out, settle)]
+
+    eyes = [r for r in signal if json.loads((r / "si.json").read_text()).get("mode") == "eye"]
+    if eyes:
+        first = eyes[0]
+        here = [n for n in names if at is None or at in n] or names
+        panels = [(r, name) for name in here for r in eyes]  # each eye run at the receiver, side by side
+        fig, axes = plt.subplots(1, len(panels), figsize=(4.8 * len(panels), 3.8), squeeze=False, sharex=True, sharey=True)
+        t0, v0 = wave(first / waves[first][0]["file"])
+        ui = run_ui(first, t0, v0)
+        mesh = None
+        for j, (r, name) in enumerate(panels):
+            w = next((w for w in waves[r] if w["name"] == name), None)
+            ax = axes[0, j]
+            if w is None:
+                ax.set_visible(False)
+                continue
+            t, v = wave(r / w["file"])
+            e = eye(t, v, ui, skip_ui=skip_ui, centre_window=centre_window, edge_levels=edge_levels)
+            span = max(abs(v).max(), 1e-3) * 1.1
+            nx, ny = 400, 240
+            td, vd = densify(t, v, dv=span / ny, dt=ui / (nx / 2))  # a point in every bin it crosses
+            keep = td > td[0] + skip_ui * ui
+            # each eye centred at 1 UI, its crossings near 0.5 and 1.5
+            x = ((td[keep] - t[0]) / ui - e["centre"] + 1) % 2
+            hist, xe, ye = np.histogram2d(x, vd[keep], bins=(nx, ny), range=((0, 2), (-span, span)))
+            if not (hist > 0).any() or np.ptp(v) == 0:  # no signal there (an unconnected pin, no driver)
+                ax.text(0.5, 0.5, f"{name}: no signal", transform=ax.transAxes, ha="center", va="center")
+                ax.set_title(_label(r) + ("" if len(here) == 1 else f", {name}"), fontsize=9)
+                continue
+            mesh = ax.pcolormesh(xe, ye, np.ma.masked_less_equal(hist.T, 0), cmap=DENSITY_COLOR_MAP, norm=LogNorm(), shading="flat", rasterized=True)
+            if e["hexagon"]:
+                hx = [1 + p[0] for p in e["hexagon"]] + [1 + e["hexagon"][0][0]]
+                hy = [p[1] for p in e["hexagon"]] + [e["hexagon"][0][1]]
+                ax.plot(hx, hy, color=SPINE_COLOR, lw=1.0, linestyle="--")  # the opening, outlined
+                # the values inside the opening, at its middle
+                cx = float(np.mean(hx[1:3] + hx[4:6]))  # the middle of the flat edges
+                cy = 0.5 * (max(hy) + min(hy))
+                ax.text(cx, cy, f"height {e['height'] * 1e3:.0f} mV\nwidth {e['width'] * 1e9:.2f} ns\n= {e['width'] / ui:.2f} UI\nrise {e['rise'] * 1e12:.0f} ps\nfall {e['fall'] * 1e12:.0f} ps\n({edge_levels[0]:.0%}-{edge_levels[1]:.0%})", ha="center", va="center", fontsize=7, color=SPINE_COLOR, linespacing=1.4)
+            ax.set_xlim(0, 2)
+            ax.set_title(_label(r) + ("" if len(here) == 1 else f", {name}"), fontsize=9)
+            ax.set_xlabel(f"Time (UI, {ui * 1e9:.3g} ns, {1 / ui / 1e6:.0f} Mb/s)")
+            ax.set_ylabel("V (V)")
+        if mesh is not None:
+            fig.colorbar(mesh, ax=axes, label="Samples")
+        if len(here) == 1:
+            fig.suptitle(f"Eye at {here[0]}", fontsize=10)
+        paths += save_figure(fig, out / "eye")
+
+    for r in runs:
+        si = json.loads((r / "si.json").read_text())
+        if si.get("aggressors"):
+            paths += _plot_crosstalk(r, si, out, settle)
     fig, axes = plt.subplots(len(names), 1, figsize=(9.6, 2.6 * len(names) + 0.6), sharex=True, squeeze=False)
     for ax, name in zip(axes[:, 0], names):
         for (r, ws), c in zip(waves.items(), CURVE_COLORS):
@@ -453,58 +506,7 @@ def plot_si(runs: list[Path], out: Path, *, skip_ui: float, centre_window: float
         style_grid(ax)
     axes[0, 0].legend(loc="upper right", fontsize=8)
     axes[-1, 0].set_xlabel("Time (ns)")
-    paths += save_figure(fig, out / "si_waveforms")
-
-    eyes = [r for r in signal if json.loads((r / "si.json").read_text()).get("mode") == "eye"]
-    if eyes:
-        first = eyes[0]
-        fig, axes = plt.subplots(len(eyes), len(names), figsize=(4.8 * len(names), 3.2 * len(eyes) + 0.6), squeeze=False, sharex=True)
-        t0, v0 = wave(first / waves[first][0]["file"])
-        ui = run_ui(first, t0, v0)
-        mesh = None
-        for i, r in enumerate(eyes):
-            for j, name in enumerate(names):
-                w = next((w for w in waves[r] if w["name"] == name), None)
-                ax = axes[i, j]
-                if w is None:
-                    ax.set_visible(False)
-                    continue
-                t, v = wave(r / w["file"])
-                e = eye(t, v, ui, skip_ui=skip_ui, centre_window=centre_window, edge_levels=edge_levels)
-                span = max(abs(v).max(), 1e-3) * 1.1
-                nx, ny = 400, 240
-                td, vd = densify(t, v, dv=span / ny, dt=ui / (nx / 2))  # a point in every bin it crosses
-                keep = td > td[0] + skip_ui * ui
-                # each eye centred at 1 UI, its crossings near 0.5 and 1.5
-                x = ((td[keep] - t[0]) / ui - e["centre"] + 1) % 2
-                hist, xe, ye = np.histogram2d(x, vd[keep], bins=(nx, ny), range=((0, 2), (-span, span)))
-                if not (hist > 0).any() or np.ptp(v) == 0:  # no signal there (an unconnected pin, no driver)
-                    ax.text(0.5, 0.5, f"{name}: no signal", transform=ax.transAxes, ha="center", va="center")
-                    ax.set_title(f"{_label(r)}, {name}", fontsize=9)
-                    continue
-                mesh = ax.pcolormesh(xe, ye, np.ma.masked_less_equal(hist.T, 0), cmap=DENSITY_COLOR_MAP, norm=LogNorm(), shading="flat", rasterized=True)
-                if e["hexagon"]:
-                    hx = [1 + p[0] for p in e["hexagon"]] + [1 + e["hexagon"][0][0]]
-                    hy = [p[1] for p in e["hexagon"]] + [e["hexagon"][0][1]]
-                    ax.plot(hx, hy, color=SPINE_COLOR, lw=1.0, linestyle="--")  # the opening, outlined
-                    # the values inside the opening, at its middle
-                    cx = float(np.mean(hx[1:3] + hx[4:6]))  # the middle of the flat edges
-                    cy = 0.5 * (max(hy) + min(hy))
-                    ax.text(cx, cy, f"height {e['height'] * 1e3:.0f} mV\nwidth {e['width'] * 1e9:.2f} ns\n= {e['width'] / ui:.2f} UI\nrise {e['rise'] * 1e12:.0f} ps\nfall {e['fall'] * 1e12:.0f} ps\n({edge_levels[0]:.0%}-{edge_levels[1]:.0%})", ha="center", va="center", fontsize=7, color=SPINE_COLOR, linespacing=1.4)
-                ax.set_xlim(0, 2)
-                ax.set_title(f"{name}\n{_label(r)}", fontsize=8)
-                if i == len(eyes) - 1:
-                    ax.set_xlabel(f"Time (UI, {ui * 1e9:.3g} ns, {1 / ui / 1e6:.0f} Mb/s)")
-                if j == 0:
-                    ax.set_ylabel("V (V)")
-        if mesh is not None:
-            fig.colorbar(mesh, ax=axes, label="Samples")
-        paths += save_figure(fig, out / "si_eye")
-
-    for r in runs:
-        si = json.loads((r / "si.json").read_text())
-        if si.get("aggressors"):
-            paths += _plot_crosstalk(r, si, out, settle)
+    paths += save_figure(fig, out / "waveforms")
     return paths
 
 
@@ -528,7 +530,7 @@ def _plot_crosstalk(run: Path, si: dict, out: Path, settle: float) -> list[Path]
     axes[1].set_xlabel("Time (ns)")
     for ax in axes:
         style_grid(ax)
-    return list(save_figure(fig, out / f"crosstalk_{run.name}"))
+    return list(save_figure(fig, out / ("crosstalk" if run.name == "crosstalk" else f"crosstalk_{run.name}")))
 
 
 # ------------------------------------------------------------------------------------- S-parameters
@@ -574,7 +576,7 @@ def plot_sparam(run: Path, out: Path) -> list[Path]:
     style_grid(ax)
     ax.legend(loc="lower left", fontsize=8)
     style_info_box(ax, [f"max singular value {np.linalg.svd(S, compute_uv=False).max():.3f}"], location="lower right")
-    return list(save_figure(fig, out / f"sparams_{run.name}"))
+    return list(save_figure(fig, out / "sparams"))
 
 
 # ------------------------------------------------------------------------------------------ all
