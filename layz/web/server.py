@@ -120,7 +120,12 @@ def inputs(name: str) -> dict:
             cache.write_text(json.dumps(draw.gds(lay, i["stack"])))
         out["layout"] = json.loads(cache.read_text())
     elif lay.is_file() and lay.suffix == ".kicad_pcb":
-        out["layout_svgs"] = drawings(lay, web / "board")
+        # a KiCad board: drawn from the run's HyperLynx board of it (copper per layer, vias, its
+        # stackup), as a GDS is; KiCad's own drawing until there is one
+        if Path(i.get("board", "")).is_file():
+            out["layout"] = board(name)
+        else:
+            out["layout_svgs"] = drawings(lay, web / "board")
     sch = Path(i.get("schematic", "")) if i.get("schematic") else (lay.with_suffix(".kicad_sch") if lay.suffix == ".kicad_pcb" else Path())
     if sch.is_file() and sch.suffix == ".kicad_sch":
         out["schematic_svgs"] = drawings(sch, web / "schematic")
