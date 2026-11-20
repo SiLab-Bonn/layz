@@ -1,6 +1,7 @@
 """layz: layout tools for SiLab's FR4 PCBs, RDL chips and flex PCBs.
 
     layz run FLOW      a design's flow: FLOW is its flow.py, or the folder with it
+    layz run FLOW drc lvs   only those steps (after setup); the run's page: results/NAME/report.html
     layz web           the runs in a browser: http://HOST:8003/
     layz doctor        which external tools this machine has, then the tests
 
@@ -34,7 +35,7 @@ def find_klayout() -> str | None:
 
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
-    if argv[:1] == ["run"] and len(argv) == 2:
+    if argv[:1] == ["run"] and len(argv) >= 2:
         from layz import flow
 
         return flow.main(argv[1:])

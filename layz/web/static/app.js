@@ -16,7 +16,27 @@ const h = (tag, attrs = {}, ...kids) => {
   for (const k of kids.flat(Infinity)) if (k != null && k !== false) el.append(k instanceof Node ? k : document.createTextNode(String(k)));
   return el;
 };
+// a report page (layz.web.report: opened as a file, no server): its run is in the page, the rest
+// in scripts next to it, each loaded the first time it is asked for
+const STATIC = window.LAYZ_STATIC || null;
+const got = {};
+window.LAYZ_PUT = (key, value) => { got[key] = value; };
+const staticGet = (key) => new Promise((ok, no) => {
+  if (key in got) return ok(got[key]);
+  if (!(key in STATIC.files)) return no(new Error(`${key}: not in this report`));
+  const s = document.createElement("script");
+  s.src = STATIC.files[key];
+  s.onload = () => ok(got[key]);
+  s.onerror = () => no(new Error(`${STATIC.files[key]}: could not be read`));
+  document.head.append(s);
+});
 const getJSON = async (url) => {
+  if (STATIC) {
+    const path = url.split("?")[0];
+    if (path === "/api/designs") return [STATIC.design];
+    if (path === "/api/design") return STATIC.design;
+    return staticGet(path.startsWith("/api/") ? path.slice(1) : decodeURIComponent(url));
+  }
   const r = await fetch(url);
   const body = await r.json();
   if (!r.ok) throw new Error(body.error || r.statusText);
@@ -26,7 +46,7 @@ const memo = new Map();
 const once = (url) => { if (!memo.has(url)) memo.set(url, getJSON(url)); return memo.get(url); };
 const state = () => Object.fromEntries(new URLSearchParams(location.hash.slice(1)));
 const go = (patch) => { location.hash = new URLSearchParams(patch).toString(); };
-const fileUrl = (design, rel) => `/results/${encodeURIComponent(design)}/${rel.split("/").map(encodeURIComponent).join("/")}`;
+const fileUrl = (design, rel) => (STATIC ? "" : `/results/${encodeURIComponent(design)}/`) + rel.split("/").map(encodeURIComponent).join("/");
 const base = (p) => (p || "").split("/").pop();
 // the theme's colours; while a view is exported, the light theme's (for paper and slides)
 const LIGHT = { "--layout-bg": "#fafafa", "--line-1": "#dfdfe0", "--line-2": "#c9c9ca", "--ink-0": "#18191c", "--ink-1": "#242529", "--ink-3": "#58585a", "--ink-4": "#7e8086", "--sem-error": "#d36151", "--sem-warn": "#a48819", "--sem-ok": "#669f59" };
@@ -47,7 +67,7 @@ function initTheme() {
 }
 
 async function render() {
-  const { design } = state();
+  const design = state().design || STATIC?.design.name;
   themeListeners.clear();
   const main = $("#main");
   try {
@@ -197,7 +217,7 @@ function stage(d, t, i) {
   if (t.name === "setup") left.push(["inputs", async () => {  // what setup named, and the layout's counts
     const inp = await inputs();
     const rows = [["flow", d.flow], ...Object.entries(d.inputs).filter(([k]) => k !== "board")];
-    return h("div", {}, h("table", { class: "kvtable" }, rows.map(([k, v]) => h("tr", {}, h("td", {}, k), h("td", {}, d.paths && d.paths[k] ? pathRow(v, d.paths[k], false, k === "flow" ? `/flow?name=${encodeURIComponent(d.name)}` : null) : v)))), inp.layout ? h("div", { class: "facts" }, layoutFacts(inp.layout)) : null);
+    return h("div", {}, h("table", { class: "kvtable" }, rows.map(([k, v]) => h("tr", {}, h("td", {}, k), h("td", {}, d.paths && d.paths[k] ? pathRow(v, d.paths[k], false, k === "flow" ? (STATIC ? "web/flow.html" : `/flow?name=${encodeURIComponent(d.name)}`) : null) : v)))), inp.layout ? h("div", { class: "facts" }, layoutFacts(inp.layout)) : null);
   }]);
   // the step's results in one tab: the board's facts (the board step), its tables (without those
   // another contains), the violations; then its files
@@ -237,14 +257,17 @@ const overlayName = (o) => ({ dc: "current density" })[base(o).split("_")[0]] ||
 const firstSentence = (text) => { const m = (text || "").match(/^.*?[.:;](\s|$)/); return m ? m[0].trim().replace(/[:;]$/, "") : text; };
 // a file: its name opens a preview in a new tab; ↗ follows its sftp:// link (the file manager, with
 // the machine mounted over SFTP); ⧉ copies that link
-const sftp = (path) => `sftp://${location.hostname}${path}`;
+const sftp = (path) => `sftp://${STATIC ? STATIC.host : location.hostname}${path}`;
+// in a report, a run's file opens as itself (the page's neighbour); others only over sftp
+const local = (abs) => (STATIC && abs.startsWith(STATIC.design.root + "/") ? abs.slice(STATIC.design.root.length + 1).split("/").map(encodeURIComponent).join("/") : null);
 function pathRow(label, abs, folder = false, preview = null) {
   const copy = h("button", { class: "pathbtn", title: "copy the sftp:// path", onclick: async () => {
     try { await navigator.clipboard.writeText(sftp(abs)); } catch { const ta = h("textarea", {}, sftp(abs)); document.body.append(ta); ta.select(); document.execCommand("copy"); ta.remove(); }
     copy.textContent = "✓"; setTimeout(() => (copy.textContent = "⧉"), 1200);
   } }, "⧉");
+  const href = preview || (STATIC ? local(abs) : `/file?path=${encodeURIComponent(abs)}`);
   return h("span", { class: "pathrow" },
-    folder ? h("span", { class: "pathname" }, label) : h("a", { class: "pathname", href: preview || `/file?path=${encodeURIComponent(abs)}`, target: "_blank", title: abs }, label),
+    folder || !href ? h("span", { class: "pathname", title: abs }, label) : h("a", { class: "pathname", href, target: "_blank", title: abs }, label),
     h("a", { class: "pathbtn", href: sftp(abs), title: "open (sftp://)" }, "↗"), copy);
 }
 
@@ -392,7 +415,7 @@ async function svgViewer(themes, index = null, grey = false) {
     }
     svgNow.append(g);
   };
-  const fetchSvg = async (u) => { if (!cache.has(u)) cache.set(u, (await fetch(u)).text()); return cache.get(u); };
+  const fetchSvg = async (u) => { if (!cache.has(u)) cache.set(u, STATIC ? staticGet(u) : (await fetch(u)).text()); return cache.get(u); };
   const show = async () => {
     const urls = themes[document.documentElement.dataset.theme] || themes.dark;
     bar.replaceChildren(...(urls.length > 1 ? urls.map((u, j) => h("a", { class: j === k ? "on" : null, onclick: () => { k = j; vb = null; show(); } }, base(u).replace(/\.svg$/, ""))) : []));

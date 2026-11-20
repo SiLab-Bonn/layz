@@ -1,7 +1,12 @@
 """`layz run FLOW`: a design's flow, its @target functions run in order.
 
-    layz run designs/ivtx_rdl                     the flow.py in that folder
+    layz run designs/ivtx_rdl                     the flow.py in that folder, every step
     layz run designs/ivtx_rdl/flow.py             the same
+    layz run designs/ivtx_rdl drc lvs             only these steps (and setup, first: the inputs);
+                                                  the others keep their last run's results
+
+At the end, the run's page is written as a file, results/NAME/report.html: open it in a browser
+as it is (`layz web` shows the same page served).
 
 A design's flow.py defines each step as a function without arguments or return value,
 decorated with ``@target``; the function names its own inputs (layout, stack, schematic) and
@@ -70,11 +75,15 @@ class Skip(Exception):
     the run notes it as skipped, and goes on."""  # what a flow's setup names, for the viewer
 
 
-def run_targets(targets: dict[str, Callable[[], None]], record: Path | None = None) -> str | None:
-    """Run every target in order; the name of the one that failed, if one did. With ``record``,
-    write the run there as it goes (run.json: the targets with status and time, the inputs
-    setup named), which `layz web` shows."""
-    run = {"flow": "", "started": time.strftime("%Y-%m-%d %H:%M:%S"), "inputs": {}, "targets": [{"name": n, "doc": " ".join((f.__doc__ or "").split()), "status": "pending", "seconds": None, "error": None} for n, f in targets.items()]}
+def run_targets(targets: dict[str, Callable[[], None]], record: Path | None = None, only: set[str] | None = None) -> str | None:
+    """Run every target in order (with ``only``, those of them); the name of the one that failed,
+    if one did. With ``record``, write the run there as it goes (run.json: the targets with status
+    and time, the inputs setup named), which `layz web` shows; targets not run keep what the last
+    run recorded of them."""
+    last = {}
+    if only is not None and record is not None and record.exists():
+        last = {t["name"]: t for t in json.loads(record.read_text()).get("targets", [])}
+    run = {"flow": "", "started": time.strftime("%Y-%m-%d %H:%M:%S"), "inputs": {}, "targets": [last.get(n) if only is not None and n not in only and n in last else {"name": n, "doc": " ".join((f.__doc__ or "").split()), "status": "pending", "seconds": None, "error": None} for n, f in targets.items()]}
     if record is not None:
         run["flow"] = str(next(iter(targets.values())).__globals__.get("__file__", ""))
     if record is not None:  # recorded from the start: every step pending, then each as it ends
@@ -82,6 +91,8 @@ def run_targets(targets: dict[str, Callable[[], None]], record: Path | None = No
         record.write_text(json.dumps(run, indent=1))
     failed = None
     for i, (name, function) in enumerate(targets.items()):
+        if only is not None and name not in only:
+            continue
         entry = run["targets"][i]
         start = time.monotonic()
         first = log.FILE["lines"]
@@ -129,8 +140,9 @@ def run_targets(targets: dict[str, Callable[[], None]], record: Path | None = No
 
 
 def main(argv: list[str]) -> int:
-    """`layz run FLOW`: FLOW is a flow.py, or the folder with it. The run is recorded in
-    results/<the flow's folder>/run.json."""
+    """`layz run FLOW [TARGET ...]`: FLOW is a flow.py, or the folder with it; TARGETs, the steps to
+    run (setup, the first, always), else all. The run is recorded in results/<the flow's
+    folder>/run.json, and written as a page, report.html, next to it."""
     flow = Path(argv[0])
     if flow.is_dir():
         flow = flow / "flow.py"
@@ -138,16 +150,30 @@ def main(argv: list[str]) -> int:
         raise SystemExit(f"no flow file {flow}")
     found = load(flow)
     log.info("flow", f"{flow}: {len(found)} targets: {', '.join(found)}")
+    only = None
+    if argv[1:]:
+        unknown = [n for n in argv[1:] if n not in found]
+        if unknown:
+            raise SystemExit(f"{flow}: no target {', '.join(unknown)} (its targets: {', '.join(found)})")
+        only = {next(iter(found)), *argv[1:]}  # the first (setup: the inputs) always
+        log.info("flow", f"running {', '.join(n for n in found if n in only)}; the others keep their last results")
     record = Path("results") / flow.resolve().parent.name / "run.json"
     record.parent.mkdir(parents=True, exist_ok=True)
     with open(record.parent / "run.log", "w") as f:
         log.FILE.update(file=f, lines=0)
         try:
-            failed = run_targets(found, record)
+            failed = run_targets(found, record, only)
         finally:
             log.FILE.update(file=None, lines=0)
     run = json.loads(record.read_text()) if record.exists() else {"targets": []}
-    tally = {st: [t["name"] for t in run["targets"] if t["status"] == st] for st in ("errors", "warnings")}
+    ran = [t for t in run["targets"] if only is None or t["name"] in only]
+    tally = {st: [t["name"] for t in ran if t["status"] == st] for st in ("errors", "warnings")}
     summary = f"stopped at {failed}" if failed else "every step ran" + "".join(f"; {', '.join(n)} with {st}" for st, n in tally.items() if n)
     (log.error if failed else log.warn if any(tally.values()) else log.info)("flow", f"{flow.resolve().parent.name}: {summary}; results in {record.parent}")
+    try:  # the run as a page to open from the file manager, without `layz web`
+        from layz.web import report
+
+        log.info("flow", f"report: {report.write(record.parent.name).resolve()}")
+    except Exception as e:  # noqa: BLE001 (the run is done; only its page is missing)
+        log.warn("flow", f"no report page: {e}")
     return 1 if failed else 0

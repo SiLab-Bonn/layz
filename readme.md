@@ -5,6 +5,7 @@ that connect them, as one command line tool. Install: [docs/install.md](docs/ins
 
 ```
 layz run FLOW    a design's flow (its flow.py, or the folder with it): its targets, in order
+layz run FLOW drc lvs    only those targets (after setup); the others keep their last results
 layz web         the runs in a browser, on port 8003: http://HOST:8003/
 layz doctor      which external tools this machine has, then the tests
 ```
@@ -168,6 +169,11 @@ last run; click one to open it as one page, top to bottom in the flow's order:
   DC drop, eyes, ...), plots and log; the board target with the board HyperLynx simulates
   (copper by layer: click a layer in the stackup to hide it, click copper for its net and pins;
   trace widths, via sizes and spans).
+
+Without the server: every `layz run` also writes the same page as files,
+`results/<design>/report.html` (its data in `results/<design>/web/report/`, read as views open),
+its path the run's last line. Open it in a browser as it is, from a machine that mounts juno over
+SFTP too (Nautilus: `sftp://juno.physik.uni-bonn.de/...`, then the file in Firefox).
 
 ## The API
 
