@@ -86,10 +86,14 @@ def run_targets(targets: dict[str, Callable[[], None]], record: Path | None = No
         start = time.monotonic()
         first = log.FILE["lines"]
         log.info("flow", f"[{i + 1}/{len(targets)}] {name}: {entry['doc'].split('. ')[0]}")
+        log.COUNTS.update(INFO=0, WARN=0, ERROR=0, fail=0)
         try:
             with log.capture("layz"):
                 function()
-            entry["status"] = "ok"
+            # it ran: ok, or with warnings (its tools warned), or with errors (checks failed,
+            # its tools reported errors); a crash is "failed"
+            entry["errors"], entry["warnings"] = log.COUNTS["fail"] + log.COUNTS["ERROR"], log.COUNTS["WARN"]
+            entry["status"] = "errors" if entry["errors"] else "warnings" if entry["warnings"] else "ok"
         except Skip as e:
             entry["status"], entry["error"] = "skipped", str(e)
         except (Exception, SystemExit) as e:  # a target stops with SystemExit or any error
@@ -103,7 +107,8 @@ def run_targets(targets: dict[str, Callable[[], None]], record: Path | None = No
         elif entry["status"] == "skipped":
             log.warn("flow", f"[{i + 1}/{len(targets)}] {name}: skipped: {entry['error']}")
         else:
-            log.info("flow", f"[{i + 1}/{len(targets)}] {name}: ok in {entry['seconds']:.0f} s")
+            say = log.warn if entry["status"] != "ok" else log.info
+            say("flow", f"[{i + 1}/{len(targets)}] {name}: {entry['status']} in {entry['seconds']:.0f} s" + (f" ({entry['errors']} errors, {entry['warnings']} warnings)" if entry["status"] != "ok" else ""))
         entry["log"] = [first, log.FILE["lines"]]  # its lines in run.log
         if record is not None:
             g = function.__globals__

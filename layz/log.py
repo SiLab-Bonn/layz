@@ -28,6 +28,7 @@ _TAG = re.compile(r"^\s*\[?(INFO|INFORMATION|NOTE|WARN|WARNING|ERROR|FATAL|CRITI
 _ERROR = re.compile(r"\b(error|errors|fail|failed|failure|fatal|traceback|exception)\b", re.I)
 _WARN = re.compile(r"\b(warn|warning|warnings)\b", re.I)
 _REAL: list = []  # the stdout capture() replaced: where the log goes meanwhile
+COUNTS: dict = {"INFO": 0, "WARN": 0, "ERROR": 0, "fail": 0}  # this step's lines per level, failed checks
 FILE: dict = {"file": None, "lines": 0}  # a copy of the log, plain (layz.flow: results/<design>/run.log)
 
 
@@ -60,6 +61,8 @@ def emit(tool: str, line: str, level: str | None = None) -> None:
         return
     if level is None:
         level, line = level_of(line)
+    if tool != "flow":
+        COUNTS[level] += 1
     stamp = time.strftime("%H:%M:%S")
     tag = f"[{tool}]"
     out = _out()

@@ -7,8 +7,13 @@ from pathlib import Path
 
 
 def table(title: str, rows: list[dict], out: Path | None) -> list[dict]:
+    """Print a check's table and write it as CSV; rows that fail (pass False) count as the
+    step's errors (layz.log.COUNTS: the flow marks the step)."""
+    from layz import log
+
     if not rows:
         return rows
+    log.COUNTS["fail"] += sum(1 for r in rows if r.get("pass") is False)
     keys = list(rows[0])
     fmt = lambda v: f"{v:.4g}" if isinstance(v, float) else str(v)
     width = {k: max(len(k), *(len(fmt(r[k])) for r in rows)) for k in keys}

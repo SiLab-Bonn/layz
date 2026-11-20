@@ -60,7 +60,7 @@ async function render() {
 // ---------------------------------------------------------------- home: every design's last run
 
 const boardOf = (d) => d.board || d.inputs.board;  // the board a run made for HyperLynx (older runs: among the inputs)
-const done = (t) => t.status === "ok" || t.status === "skipped";
+const done = (t) => ["ok", "warnings", "errors", "skipped"].includes(t.status);
 const chip = (status, text) => h("span", { class: `chip ${status}` }, text ?? status);
 
 async function homePage() {
@@ -68,7 +68,10 @@ async function homePage() {
   if (!designs.length) return h("div", { class: "empty" }, "No runs yet: layz run designs/NAME records one in results/NAME/.");
   const status = (d) => {
     const failed = d.targets.find((t) => t.status === "failed");
-    return failed ? chip("failed", `stopped at ${failed.name}`) : d.targets.every(done) ? chip("ok") : chip("pending", "running");
+    if (failed) return chip("failed", `stopped at ${failed.name}`);
+    if (!d.targets.every(done)) return chip("pending", "running");
+    const worst = ["errors", "warnings"].find((st) => d.targets.some((t) => t.status === st));
+    return worst ? chip(worst, `${d.targets.filter((t) => t.status === worst).length} with ${worst}`) : chip("ok");
   };
   return h("div", { class: "page" },
     h("h2", {}, "designs: click one to open its run"),
@@ -90,7 +93,7 @@ async function designPage(name) {
   return h("div", { class: "page" },
     h("div", { class: "title" },
       h("a", { class: "home", href: "#", title: "every design" }, d.name),
-      h("span", { class: d.targets.some((t) => t.status === "failed") ? "bad" : n === d.targets.length ? "good" : "dim" }, `${n}/${d.targets.length} steps`),
+      h("span", { class: d.targets.some((t) => t.status === "failed") ? "bad" : d.targets.some((t) => t.status === "errors") ? "errs" : d.targets.some((t) => t.status === "warnings") ? "warns" : n === d.targets.length ? "good" : "dim" }, `${n}/${d.targets.length} steps`),
       h("span", { class: "dim" }, d.started),
       h("a", { href: `/flow?name=${encodeURIComponent(d.name)}`, target: "_blank" }, "flow.py")),
     h("nav", { class: "toc" }, d.targets.map((t) => h("a", { onclick: jump(t) }, chip(t.status, ""), t.name))),
