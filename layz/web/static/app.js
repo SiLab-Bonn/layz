@@ -105,22 +105,27 @@ function tabs(entries) {
     if (!panes[i]) { panes[i] = h("div", { class: "pane" }, lazy(entries[i][1])); body.append(panes[i]); }
     panes.forEach((p, k) => p && (p.style.display = k === i ? "" : "none"));
   };
-  entries.forEach(([label], i) => bar.append(h("a", { onclick: () => show(i) }, label)));
+  entries.forEach(([label], i) => bar.append(h("a", { onclick: () => { show(i); panes[i].querySelector(".lazy")?.load(); } }, label)));
   show(0);
   const box = h("div", { class: "tabbox" }, bar, body);
-  box.show = (label) => show(Math.max(0, entries.findIndex(([l]) => l === label)));
+  box.show = (label) => { const i = Math.max(0, entries.findIndex(([l]) => l === label)); show(i); panes[i].querySelector(".lazy")?.load(); };
   box.current = () => entries[[...bar.querySelectorAll("a")].findIndex((a) => a.classList.contains("on"))]?.[0];
   return box;
 }
 
 function lazy(make) {
-  // heavy panes (layouts, plots, drawings) are built when they scroll into view
+  // heavy panes (layouts, plots, drawings) are built when they scroll into view, or at once when
+  // asked (a tab clicked open)
   const slot = h("div", { class: "lazy" }, h("div", { class: "caption" }, "loading…"));
-  new IntersectionObserver(async (entries, obs) => {
-    if (!entries.some((e) => e.isIntersecting)) return;
+  let started = false;
+  const obs = new IntersectionObserver((entries) => { if (entries.some((e) => e.isIntersecting)) slot.load(); }, { rootMargin: "300px" });
+  slot.load = async () => {
+    if (started) return;
+    started = true;
     obs.disconnect();
     try { slot.replaceChildren(await make()); } catch (e) { slot.replaceChildren(h("div", { class: "caption" }, String(e.message || e))); }
-  }, { rootMargin: "300px" }).observe(slot);
+  };
+  obs.observe(slot);
   return slot;
 }
 
