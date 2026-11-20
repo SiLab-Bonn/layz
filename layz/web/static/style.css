@@ -230,3 +230,6 @@ button.fit.on { border-color: var(--accent); color: var(--ink-0); }
 .split > .tabbox:last-child > .tabbody > .pane > .lazy > div:has(> .plotly) { height: 100%; display: flex; flex-direction: column; }
 .split > .tabbox:last-child > .tabbody > .pane > .lazy > div > .plotly { flex: 1; height: auto; min-height: 0; }
 .stacked > .tablewrap + .tablewrap { margin-top: 14px; }
+.tools.row { position: static; margin: 0 0 6px; }
+.tools.row select.panelpick { margin: 0; }
+a.fit { text-decoration: none; display: inline-block; line-height: 1.5; }

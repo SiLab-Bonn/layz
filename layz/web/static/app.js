@@ -331,11 +331,16 @@ async function plotPane(design, p) {
         traces.push({ type: "scattergl", mode: l.markers ? "markers" : "lines", xaxis: `x${n}`, yaxis: `y${n}`, x: l.x, y: l.y, name: l.label || undefined, showlegend: !!l.label, line: { color: c, width: Math.max(1.2, l.width), dash: l.dash ? "dash" : "solid" }, marker: { color: c, size: 4 } });
       }
     });
-    window.Plotly.react(el, traces, layout, { responsive: true, displaylogo: false, modeBarButtonsToRemove: ["select2d", "lasso2d"] });
+    window.Plotly.react(el, traces, layout, { responsive: true, displaylogo: false, displayModeBar: false });
   };
   themeListeners.add(draw);
   requestAnimationFrame(draw);
-  return h("div", {}, select, el, h("div", { class: "caption" }, h("a", { href: png, target: "_blank" }, "PNG"), " · ", h("a", { href: png.replace(/\.png$/, ".pdf"), target: "_blank" }, "PDF")));
+  // the same controls as the layout views: fit, and the flow's own PNG and PDF of the figure
+  const tools = h("div", { class: "tools row" }, select,
+    h("button", { class: "fit", title: "back to the whole plot", onclick: () => window.Plotly.relayout(el, Object.fromEntries(Object.keys(el.layout || {}).filter((k) => /^[xy]axis\d*$/.test(k)).map((k) => [`${k}.autorange`, true]))) }, "fit"),
+    h("a", { class: "fit", href: png, target: "_blank", title: "the figure as PNG" }, "png"),
+    h("a", { class: "fit", href: png.replace(/\.png$/, ".pdf"), target: "_blank", title: "the figure as PDF" }, "pdf"));
+  return h("div", {}, tools, el);
 }
 
 // ---------------------------------------------------------------- KiCad drawings, inline
