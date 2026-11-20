@@ -567,11 +567,13 @@ function layoutViewer(b, overlay = null, full = false) {
     for (const layer of [...b.copper].reverse()) {
       if (!shown.has(layer)) continue;
       ctx.globalAlpha = ov ? 0.22 : 0.55;
-      for (const p of paths) if (p.layer === layer) { ctx.fillStyle = picked && p.net && p.net === picked ? css("--ink-0") : color[layer]; ctx.fill(p.path, "evenodd"); }
+      // with results over it, the copper is one neutral grey: colours are the results' only
+      const base = ov ? css("--ink-4") : color[layer];
+      for (const p of paths) if (p.layer === layer) { ctx.fillStyle = picked && p.net && p.net === picked ? css("--ink-0") : base; ctx.fill(p.path, "evenodd"); }
       ctx.globalAlpha = 0.9;
       ctx.lineCap = "round";
       for (const s of b.segs) if (s.layer === layer) {
-        ctx.strokeStyle = picked && s.net === picked ? css("--ink-0") : color[layer];
+        ctx.strokeStyle = picked && s.net === picked ? css("--ink-0") : base;
         ctx.lineWidth = Math.max(s.w, px);
         ctx.beginPath(); ctx.moveTo(s.x1, s.y1); ctx.lineTo(s.x2, s.y2); ctx.stroke();
       }
