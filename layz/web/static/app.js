@@ -273,7 +273,7 @@ async function plotPane(design, p) {
         const mid = (e) => e.slice(1).map((v, j) => (v + e[j]) / 2);
         traces.push({ type: "heatmap", xaxis: `x${n}`, yaxis: `y${n}`, x: mid(m.x), y: mid(m.y), z: m.log ? m.z.map((r) => r.map((v) => (v > 0 ? Math.log10(v) : null))) : m.z, colorscale: scale(false), showscale: false, hoverongaps: false });
       }
-      for (const f of ax.fills || []) traces.push({ type: "scatter", mode: "lines", xaxis: `x${n}`, yaxis: `y${n}`, x: [...f.x, f.x[0]], y: [...f.y, f.y[0]], fill: "toself", fillcolor: f.color, opacity: Math.max(0.25, f.alpha), line: { width: 0 }, hoverinfo: "skip", showlegend: false });
+      for (const f of ax.fills || []) traces.push({ type: "scatter", mode: "lines", xaxis: `x${n}`, yaxis: `y${n}`, x: [...f.x, f.x[0]], y: [...f.y, f.y[0]], fill: "toself", fillcolor: f.color, opacity: Math.min(0.25, f.alpha), line: { width: 0 }, hoverinfo: "skip", showlegend: false });
       for (const p of ax.points || []) {
         const c = p.c && (p.log ? p.c.map((v) => (v > 0 ? Math.log10(v) : null)) : p.c);
         traces.push({ type: "scattergl", mode: "markers", xaxis: `x${n}`, yaxis: `y${n}`, x: p.x, y: p.y, name: p.label || undefined, showlegend: !!p.label, marker: c ? { color: c, colorscale: scale(p.reversed), size: Math.max(3, Math.min(9, p.size)), showscale: true, colorbar: { thickness: 10, len: 0.45, title: { text: p.log ? "log10" : "" } } } : { color: css("--ink-4"), size: Math.max(2, Math.min(6, p.size)) } });
@@ -522,7 +522,7 @@ function layoutViewer(b, overlay = null, full = false) {
     ov = { mode: "current density", lo, hi, pins, vmin: Math.min(...vs), vmax: Math.max(...vs), imin: Math.min(...is), imax: Math.max(...is), images: Object.fromEntries(Object.entries(overlay.layers).map(([n, l]) => [n, { img: overlayImage(l, lo, hi), ext: l.extent }])) };
     // current density: the layer carrying the most, alone
     const top = Object.entries(overlay.layers).map(([n, l]) => [n, Math.max(0, ...l.z.flat().filter((v) => v > 0))]).sort((a2, b2) => b2[1] - a2[1])[0];
-    if (top) { shown.clear(); shown.add(top[0]); }
+    if (top) { shown.clear(); shown.add(top[0]); ov.top = top[0]; }
   }
   const canvas = h("canvas");
   const pickedBox = h("div", { class: "picked", style: "display:none" });
@@ -695,7 +695,9 @@ function layoutViewer(b, overlay = null, full = false) {
   if (ov) wrap.append(h("div", { class: "modes" }, ["current density", "pin voltage", "via current"].map((m) => h("a", { class: m === ov.mode ? "on" : null, onclick: (e) => {
     ov.mode = m;
     e.target.parentNode.querySelectorAll("a").forEach((x) => x.classList.toggle("on", x.textContent === m));
-    if (m !== "current density") { b.copper.forEach((l) => shown.add(l)); toggles.querySelectorAll("a").forEach((x) => x.classList.remove("off")); }
+    if (m !== "current density") b.copper.forEach((l) => shown.add(l));
+    else { shown.clear(); shown.add(ov.top); }  // one layer's map at a time
+    toggles.querySelectorAll("a").forEach((x) => x.classList.toggle("off", !shown.has(x.textContent)));
     draw();
   } }, m))));
   const el = h("div", { class: "layout" + (full ? "" : " bare") }, wrap, full ? h("aside", {}, stackPanel(b, color, shown, draw)) : null);
