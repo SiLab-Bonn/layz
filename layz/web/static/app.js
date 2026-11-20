@@ -46,7 +46,6 @@ function initTheme() {
 async function render() {
   const { design } = state();
   themeListeners.clear();
-  $("#crumb").replaceChildren(design ? h("a", { class: "on" }, design) : "");
   const main = $("#main");
   try {
     main.replaceChildren(design ? await designPage(design) : await homePage());
@@ -85,9 +84,12 @@ async function designPage(name) {
   const n = d.targets.filter(done).length;
   const jump = (t) => (e) => { e.preventDefault(); document.getElementById(`t-${t.name}`)?.scrollIntoView({ behavior: "smooth" }); };
   return h("div", { class: "page" },
-    h("div", { class: "title" }, h("h1", {}, d.name), chip(d.targets.some((t) => t.status === "failed") ? "failed" : n === d.targets.length ? "ok" : "pending", `${n} of ${d.targets.length} targets done`), h("span", { class: "caption" }, `run ${d.started} · ${d.flow}`)),
+    h("div", { class: "title" },
+      h("a", { class: "home", href: "#", title: "every design" }, d.name),
+      h("span", { class: d.targets.some((t) => t.status === "failed") ? "bad" : n === d.targets.length ? "good" : "dim" }, `${n}/${d.targets.length} steps`),
+      h("span", { class: "dim" }, d.started),
+      h("a", { href: `/flow?name=${encodeURIComponent(d.name)}`, target: "_blank" }, "flow.py")),
     h("nav", { class: "toc" }, d.targets.map((t) => h("a", { onclick: jump(t) }, chip(t.status, ""), t.name))),
-    d.source ? h("details", { class: "flowsrc" }, h("summary", {}, `flow.py: the flow as it ran (${d.source.split("\n").length} lines)`), h("pre", {}, d.source)) : null,
     d.targets.map((t, i) => stage(d, t, i)));
 }
 

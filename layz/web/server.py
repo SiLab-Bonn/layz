@@ -124,6 +124,25 @@ def inputs(name: str) -> dict:
     return out
 
 
+def flow_page(name: str) -> str:
+    """The flow.py a design's last run ran, syntax-highlighted (highlight.js), dark or light as the
+    system's."""
+    import html
+
+    run = json.loads((RESULTS / name / "run.json").read_text())
+    flow = Path(run.get("flow", ""))
+    code = html.escape(flow.read_text()) if flow.is_file() else "(not found)"
+    hl = "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0"
+    return f"""<!doctype html><html><head><meta charset="utf-8"><title>{html.escape(name)}: flow.py</title>
+<link rel="stylesheet" href="{hl}/styles/nord.min.css" media="(prefers-color-scheme: dark)">
+<link rel="stylesheet" href="{hl}/styles/github.min.css" media="(prefers-color-scheme: light)">
+<script src="{hl}/highlight.min.js"></script>
+<style>body {{ margin: 0; font: 13px/1.5 ui-monospace, "SF Mono", "Cascadia Mono", "DejaVu Sans Mono", Menlo, monospace; background: #2e3440; color: #d8dee9; }}
+@media (prefers-color-scheme: light) {{ body {{ background: #fafafa; color: #242529; }} }}
+header {{ padding: 12px 20px 0; opacity: 0.7; }} pre {{ margin: 0; }} code.hljs {{ padding: 12px 20px 40px; background: none; font: inherit; }}</style>
+</head><body><header>{html.escape(str(flow))}</header><pre><code class="language-python">{code}</code></pre><script>hljs.highlightAll();</script></body></html>"""
+
+
 class Handler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(STATIC), **kwargs)
@@ -152,6 +171,8 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.send(200, json.dumps(designs()).encode(), "application/json")
             if url.path == "/api/design":
                 return self.send(200, json.dumps(design(q["name"])).encode(), "application/json")
+            if url.path == "/flow":  # a design's flow.py, highlighted, in a page of its own
+                return self.send(200, flow_page(q["name"]).encode(), "text/html; charset=utf-8")
             if url.path == "/api/inputs":
                 return self.send(200, json.dumps(inputs(q["name"])).encode(), "application/json")
             if url.path == "/api/board":

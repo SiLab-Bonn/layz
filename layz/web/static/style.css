@@ -50,11 +50,11 @@ html[data-theme="light"] {
   --mask: #c9ccd3;
 }
 * { box-sizing: border-box; }
-html, body { margin: 0; height: 100%; background: var(--surface-ground); color: var(--ink-1); font: 13px/1.45 var(--font-sans); }
+html, body { margin: 0; height: 100%; background: var(--surface-ground); color: var(--ink-1); font: 12px/1.45 var(--font-mono); }
 header { display: flex; align-items: center; gap: 24px; height: 40px; padding: 0 16px; background: var(--surface-raised); border-bottom: 1px solid var(--line-1); position: sticky; top: 0; z-index: 5; }
 .logo { font: 700 14px var(--font-mono); color: var(--accent); letter-spacing: 0.1em; text-decoration: none; }
 nav#crumb a { color: var(--ink-1); font: 12px var(--font-mono); text-transform: uppercase; letter-spacing: 0.08em; }
-main { height: calc(100% - 40px); overflow: auto; }
+main { height: 100%; overflow: auto; }
 .page { padding: 16px 24px 64px; }
 .empty { color: var(--ink-4); padding: 48px; }
 h1 { font: 600 18px var(--font-mono); margin: 0; }
@@ -164,3 +164,10 @@ button.fit { position: absolute; left: 10px; bottom: 28px; font: 11px var(--font
 button.fit:hover { border-color: var(--accent); }
 .schematic { position: relative; }
 select.modes { position: absolute; left: 10px; top: 8px; z-index: 2; }
+* { font-family: var(--font-mono) !important; }
+.title { gap: 18px; align-items: baseline; font-size: 13px; }
+.title a { color: var(--accent); text-decoration: none; } .title a:hover { text-decoration: underline; }
+.title a.home { color: var(--ink-0); font-weight: 600; font-size: 15px; }
+.title .good { color: var(--sem-ok); } .title .bad { color: var(--sem-error); } .title .dim { color: var(--ink-4); }
+.head .doc { font-size: 12px; }
+section.target { scroll-margin-top: 10px; }
