@@ -459,6 +459,7 @@ def plot_si(runs: list[Path], out: Path, *, skip_ui: float, centre_window: float
         fig, axes = plt.subplots(len(eyes), len(names), figsize=(4.8 * len(names), 3.2 * len(eyes) + 0.6), squeeze=False, sharex=True)
         t0, v0 = wave(first / waves[first][0]["file"])
         ui = run_ui(first, t0, v0)
+        mesh = None
         for i, r in enumerate(eyes):
             for j, name in enumerate(names):
                 w = next((w for w in waves[r] if w["name"] == name), None)
@@ -475,6 +476,10 @@ def plot_si(runs: list[Path], out: Path, *, skip_ui: float, centre_window: float
                 # each eye centred at 1 UI, its crossings near 0.5 and 1.5
                 x = ((td[keep] - t[0]) / ui - e["centre"] + 1) % 2
                 hist, xe, ye = np.histogram2d(x, vd[keep], bins=(nx, ny), range=((0, 2), (-span, span)))
+                if not (hist > 0).any() or np.ptp(v) == 0:  # no signal there (an unconnected pin, no driver)
+                    ax.text(0.5, 0.5, f"{name}: no signal", transform=ax.transAxes, ha="center", va="center")
+                    ax.set_title(f"{_label(r)}, {name}", fontsize=9)
+                    continue
                 mesh = ax.pcolormesh(xe, ye, np.ma.masked_less_equal(hist.T, 0), cmap=DENSITY_COLOR_MAP, norm=LogNorm(), shading="flat", rasterized=True)
                 if e["hexagon"]:
                     hx = [1 + p[0] for p in e["hexagon"]] + [1 + e["hexagon"][0][0]]
@@ -491,7 +496,8 @@ def plot_si(runs: list[Path], out: Path, *, skip_ui: float, centre_window: float
                     ax.set_xlabel(f"Time (UI, {ui * 1e9:.3g} ns, {1 / ui / 1e6:.0f} Mb/s)")
                 if j == 0:
                     ax.set_ylabel("V (V)")
-        fig.colorbar(mesh, ax=axes, label="Samples")
+        if mesh is not None:
+            fig.colorbar(mesh, ax=axes, label="Samples")
         paths += save_figure(fig, out / "si_eye")
 
     for r in runs:
