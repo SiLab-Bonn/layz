@@ -26,6 +26,7 @@ layz.lvs.analysis.findings fails on opens, shorts or unknown labels.
 
 from __future__ import annotations
 
+import difflib
 import re
 import tempfile
 from collections import defaultdict
@@ -119,7 +120,9 @@ def compare(sch: Schematic, labels: list[Label]) -> tuple[list[Finding], dict]:
             sn = by_name[norm(lab.text)]
             named.add(sn)
         else:
-            findings.append(Finding("unknown", f"label {lab.text!r} names no schematic net or pin", [(lab.x, lab.y, lab.text)]))
+            near = difflib.get_close_matches(norm(lab.text), list(by_name), n=1, cutoff=0.6)
+            hint = f"; did you mean {by_name[near[0]]}?" if near else ""
+            findings.append(Finding("unknown", f"label {lab.text!r} names no schematic net or pin{hint}", [(lab.x, lab.y, lab.text)]))
             continue
         if lab.net is None:
             findings.append(Finding("floating", f"label {lab.text!r} ({sn}) is not on {lab.copper} copper", [(lab.x, lab.y, lab.text)]))

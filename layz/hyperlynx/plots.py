@@ -162,6 +162,7 @@ def plot_dc(run: Path, out: Path, ret: Path | None = None) -> list[Path]:
     if len(cur) and cur.max() > 0:
         norm = LogNorm(vmin=max(1e-6, cur[cur > 0].min()), vmax=cur.max())
         fig, axes = plt.subplots(2, 1, figsize=(12.8, 4.6), sharex=True)
+        sc = None  # a side may have no vias (a board's return run of a supply without any)
         for ax, side, name in ((axes[0], sup, "supply"), (axes[1], ref, "return")):
             sel = sorted((k for k, c in enumerate(vias) if c["net"] in side), key=lambda k: cur[k])
             if not sel:
@@ -172,7 +173,8 @@ def plot_dc(run: Path, out: Path, ret: Path | None = None) -> list[Path]:
             ax.set_ylabel("y (mm)")
             ax.set_title(f"Via current, {name}: {len(sel)} vias, max {cur[sel].max() * 1e3:.0f} mA", fontsize=10)
         axes[-1].set_xlabel("x (mm)")
-        fig.colorbar(sc, ax=axes, label="Via current (A)")
+        if sc is not None:
+            fig.colorbar(sc, ax=axes, label="Via current (A)")
         paths += save_figure(fig, out / "dc_via_current")
 
     maps = []
