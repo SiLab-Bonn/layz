@@ -19,6 +19,7 @@ from __future__ import annotations
 import csv
 import json
 import mimetypes
+import shutil
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
@@ -90,6 +91,16 @@ def inputs(name: str) -> dict:
         pages = sorted((web / "board").glob("*.svg")) if fresh(web / "board" / "board.svg", lay) else draw.kicad_svg(lay, web / "board")
         out["layout_svgs"] = [url(f) for f in pages]
     sch = Path(i.get("schematic", "")) if i.get("schematic") else (lay.with_suffix(".kicad_sch") if lay.suffix == ".kicad_pcb" else Path())
+    # the KiCad files themselves, for KiCanvas in the page: the schematic with every sheet beside
+    # it, the board with its project
+    kicad = web / "kicad"
+    for src in [f for f in (sch, lay) if f.is_file() and f.suffix in (".kicad_sch", ".kicad_pcb")]:
+        kicad.mkdir(exist_ok=True)
+        for f in src.parent.glob("*.kicad_sch" if src.suffix == ".kicad_sch" else src.stem + ".kicad_p*"):
+            if not (kicad / f.name).exists() or (kicad / f.name).stat().st_mtime < f.stat().st_mtime:
+                shutil.copy2(f, kicad / f.name)
+        key = "kicad_schematic" if src.suffix == ".kicad_sch" else "kicad_board"
+        out[key] = [url(kicad / src.name)] + ([url(f) for f in sorted(kicad.glob("*.kicad_sch")) if f.name != src.name] if key == "kicad_schematic" else [])
     if sch.is_file() and sch.suffix == ".kicad_sch":
         folder = web / "schematic-inline"  # without the drawing sheet and background
         pages = sorted(folder.glob("*.svg"))

@@ -144,3 +144,4 @@ html[data-theme="dark"] .schematic svg { filter: invert(0.88) hue-rotate(180deg)
 .pages { display: flex; gap: 10px; margin-bottom: 6px; font: 11px var(--font-mono); }
 .pages a { color: var(--ink-4); cursor: pointer; } .pages a.on { color: var(--ink-0); }
 section.target > .error { margin: 8px 14px 0; }
+.kicanvas kicanvas-embed { display: block; height: 520px; border: 1px solid var(--line-1); border-radius: 4px; overflow: hidden; }

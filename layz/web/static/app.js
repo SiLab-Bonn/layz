@@ -133,11 +133,13 @@ function stage(d, t, i) {
     right.push(["layout", async () => {
       const inp = await inputs();
       if (inp.layout) return layoutViewer(inp.layout).el;
+      if (inp.kicad_board) return kicanvas(inp.kicad_board);
       if (inp.layout_svgs) return h("div", { class: "svgs" }, inp.layout_svgs.map((u) => h("img", { src: u, class: "svg board" })));
       return h("div", { class: "caption" }, "no layout");
     }]);
     right.push(["schematic", async () => {
       const inp = await inputs();
+      if (inp.kicad_schematic) return kicanvas(inp.kicad_schematic);
       if (inp.schematic_svgs) return schematicViewer(inp.schematic_svgs);
       if (inp.netlist) return table({ path: "", rows: [["net", "pins"], ...inp.netlist.map((n) => [n.net, n.pins.join(" ")])] });
       return h("div", { class: "caption" }, "no schematic");
@@ -265,7 +267,18 @@ async function plotPane(design, p) {
   return h("div", {}, el, h("div", { class: "caption" }, h("a", { href: png, target: "_blank" }, "PNG"), " · ", h("a", { href: png.replace(/\.png$/, ".pdf"), target: "_blank" }, "PDF")));
 }
 
-// ---------------------------------------------------------------- schematic, inline
+// ---------------------------------------------------------------- KiCad files, with KiCanvas
+
+let kicanvasLoaded = null;
+async function kicanvas(urls) {
+  // https://kicanvas.org: KiCad schematics and boards drawn in the page (loaded the first time)
+  kicanvasLoaded ||= new Promise((ok, fail) => document.head.append(h("script", { type: "module", src: "https://kicanvas.org/kicanvas/kicanvas.js", onload: ok, onerror: () => fail(new Error("KiCanvas didn't load (kicanvas.org)")) })));
+  await kicanvasLoaded;
+  const embed = h("kicanvas-embed", { controls: "full", theme: document.documentElement.dataset.theme === "light" ? "kicad" : "witchhazel" }, urls.map((u) => h("kicanvas-source", { src: u })));
+  return h("div", { class: "kicanvas" }, embed, h("div", { class: "caption" }, urls.map((u, k) => [k ? " · " : "", h("a", { href: u, download: "" }, base(u))])));
+}
+
+// ---------------------------------------------------------------- schematic, inline (SVG)
 
 async function schematicViewer(urls) {
   const pages = await Promise.all(urls.map(async (u) => [u, await (await fetch(u)).text()]));
