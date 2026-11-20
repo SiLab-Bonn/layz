@@ -484,8 +484,7 @@ def plot_si(runs: list[Path], out: Path, *, skip_ui: float, centre_window: float
                 if e["hexagon"]:
                     hx = [1 + p[0] for p in e["hexagon"]] + [1 + e["hexagon"][0][0]]
                     hy = [p[1] for p in e["hexagon"]] + [e["hexagon"][0][1]]
-                    ax.fill(hx, hy, color=GRID_MAJOR_COLOR, alpha=0.6, lw=0)
-                    ax.plot(hx, hy, color=SPINE_COLOR, lw=1.0)
+                    ax.plot(hx, hy, color=SPINE_COLOR, lw=1.0, linestyle="--")  # the opening, outlined
                     # the values inside the opening, at its middle
                     cx = float(np.mean(hx[1:3] + hx[4:6]))  # the middle of the flat edges
                     cy = 0.5 * (max(hy) + min(hy))
