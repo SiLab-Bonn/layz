@@ -160,3 +160,6 @@ aside { width: 220px; }
 .modes a.on { color: var(--ink-0); border-color: var(--accent); }
 .canvas .picked { top: 36px; }
 select.panelpick { font: 12px var(--font-mono); background: var(--surface-raised); color: var(--ink-1); border: 1px solid var(--line-2); border-radius: 4px; padding: 3px 6px; margin-bottom: 6px; max-width: 100%; }
+button.fit { position: absolute; left: 10px; bottom: 28px; font: 11px var(--font-mono); padding: 2px 8px; border-radius: 3px; background: var(--surface-raised); color: var(--ink-1); border: 1px solid var(--line-2); cursor: pointer; z-index: 2; }
+button.fit:hover { border-color: var(--accent); }
+.schematic { position: relative; }

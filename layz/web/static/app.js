@@ -337,7 +337,8 @@ async function svgViewer(themes, index = null) {
     bar.replaceChildren(...(urls.length > 1 ? urls.map((u, j) => h("a", { class: j === k ? "on" : null, onclick: () => { k = j; vb = null; show(); } }, base(u).replace(/\.svg$/, ""))) : []));
     const svg = new DOMParser().parseFromString(await fetchSvg(urls[k]), "image/svg+xml").documentElement;
     svg.removeAttribute("width"); svg.removeAttribute("height");
-    holder.replaceChildren(svg);
+    holder.querySelector("svg")?.remove();
+    holder.prepend(svg);
     svgNow = svg;
     drawMarks();
     requestAnimationFrame(() => {
@@ -362,6 +363,7 @@ async function svgViewer(themes, index = null) {
   };
   themeListeners.add(show);
   await show();
+  holder.append(h("button", { class: "fit", title: "back to the whole sheet", onclick: () => { vb = null; show(); } }, "fit"));
   const el = h("div", {}, bar, holder, h("div", { class: "caption" }, "drag to pan · wheel to zoom" + (index ? " · red: LVS findings, yellow: nets no layout label checks (hover for the name)" : "")));
   return {
     el,
@@ -403,6 +405,9 @@ async function view3d(b) {
   const group = new THREE.Group();
   group.position.set(-(x0 + x1) / 2, -(y0 + y1) / 2, 0);
   scene.add(group);
+  // merged geometries must match: all non-indexed, positions and normals only, no groups
+  const plain = (g) => { const n = g.index ? g.toNonIndexed() : g; for (const k of Object.keys(n.attributes)) if (k !== "position" && k !== "normal") n.deleteAttribute(k); n.clearGroups(); return n; };
+  const merge = (geos) => (geos.length ? mergeGeometries(geos.map(plain), false) : null);
   const shape = (pts, holes) => {
     const s = new THREE.Shape(pts.map(([x, y]) => new THREE.Vector2(x, y)));
     for (const hole of holes || []) s.holes.push(new THREE.Path(hole.map(([x, y]) => new THREE.Vector2(x, y))));
@@ -424,7 +429,8 @@ async function view3d(b) {
       g.translate((sg.x1 + sg.x2) / 2, (sg.y1 + sg.y2) / 2, (zb + zt) / 2);
       geos.push(g);
     }
-    if (geos.length) group.add(new THREE.Mesh(mergeGeometries(geos, false), new THREE.MeshStandardMaterial({ color: color[layer], metalness: 0.3, roughness: 0.55 })));
+    const merged = merge(geos);
+    if (merged) group.add(new THREE.Mesh(merged, new THREE.MeshStandardMaterial({ color: color[layer], metalness: 0.3, roughness: 0.55 })));
   }
   const viaGeos = [];
   for (const c of b.cuts || []) {  // GDS via cuts: from the lower layer's bottom to the upper's top
@@ -444,7 +450,8 @@ async function view3d(b) {
     g.translate(v.x, v.y, (lo + hi) / 2);
     viaGeos.push(g);
   }
-  if (viaGeos.length) group.add(new THREE.Mesh(mergeGeometries(viaGeos, false), new THREE.MeshStandardMaterial({ color: "#d8dee9", metalness: 0.5, roughness: 0.4 })));
+  const vias = merge(viaGeos);
+  if (vias) group.add(new THREE.Mesh(vias, new THREE.MeshStandardMaterial({ color: "#d8dee9", metalness: 0.5, roughness: 0.4 })));
   for (const l of b.stackup) if (l.type !== "copper" && z[l.name]) {  // dielectrics: translucent slabs
     const [zb, zt] = z[l.name];
     const g = new THREE.BoxGeometry(x1 - x0, y1 - y0, Math.max(zt - zb, 1e-4));
@@ -469,6 +476,8 @@ async function view3d(b) {
   camera.position.set(0, -size * 1.1, size * 0.8);
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
+  controls.saveState();
+  host.append(h("button", { class: "fit", title: "back to the whole board", onclick: () => controls.reset() }, "fit"));
   const theme = () => { scene.background = new THREE.Color(css("--layout-bg")); };
   theme();
   themeListeners.add(theme);
@@ -697,6 +706,7 @@ function layoutViewer(b, overlay = null, full = false) {
     draw();
   } }, l)));
   if (!full) wrap.append(toggles);
+  wrap.append(h("button", { class: "fit", title: "back to the whole layout", onclick: () => { focus = null; view = null; draw(); } }, "fit"));
   if (ov) wrap.append(h("div", { class: "modes" }, ["current density", "pin voltage", "via current"].map((m) => h("a", { class: m === ov.mode ? "on" : null, onclick: (e) => {
     ov.mode = m;
     e.target.parentNode.querySelectorAll("a").forEach((x) => x.classList.toggle("on", x.textContent === m));
