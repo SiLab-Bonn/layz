@@ -163,3 +163,4 @@ select.panelpick { font: 12px var(--font-mono); background: var(--surface-raised
 button.fit { position: absolute; left: 10px; bottom: 28px; font: 11px var(--font-mono); padding: 2px 8px; border-radius: 3px; background: var(--surface-raised); color: var(--ink-1); border: 1px solid var(--line-2); cursor: pointer; z-index: 2; }
 button.fit:hover { border-color: var(--accent); }
 .schematic { position: relative; }
+select.modes { position: absolute; left: 10px; top: 8px; z-index: 2; }

@@ -707,14 +707,14 @@ function layoutViewer(b, overlay = null, full = false) {
   } }, l)));
   if (!full) wrap.append(toggles);
   wrap.append(h("button", { class: "fit", title: "back to the whole layout", onclick: () => { focus = null; view = null; draw(); } }, "fit"));
-  if (ov) wrap.append(h("div", { class: "modes" }, ["current density", "pin voltage", "via current"].map((m) => h("a", { class: m === ov.mode ? "on" : null, onclick: (e) => {
+  if (ov) wrap.append(h("select", { class: "panelpick modes", onchange: (e) => {
+    const m = e.target.value;
     ov.mode = m;
-    e.target.parentNode.querySelectorAll("a").forEach((x) => x.classList.toggle("on", x.textContent === m));
     if (m !== "current density") b.copper.forEach((l) => shown.add(l));
     else { shown.clear(); shown.add(ov.top); }  // one layer's map at a time
     toggles.querySelectorAll("a").forEach((x) => x.classList.toggle("off", !shown.has(x.textContent)));
     draw();
-  } }, m))));
+  } }, ["current density", "pin voltage", "via current"].map((m) => h("option", { value: m }, m))));
   const el = h("div", { class: "layout" + (full ? "" : " bare") }, wrap, full ? h("aside", {}, stackPanel(b, color, shown, draw)) : null);
   return { el, setMarkers: (boxes, at = null) => { markers = boxes; focus = at ? at.box || at : null; view = null; draw(); if (at && at.rule) say(at); } };
 }
