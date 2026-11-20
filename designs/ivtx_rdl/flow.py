@@ -92,11 +92,11 @@ def dc():
 
     # the four 3 V rails, one per chip, at 3 A each, with their returns; HyperLynx's report flags
     # more than 5 % drop, 1.5e7 A/m^2 and 1 A per via
-    supply = run.dc(board, out / "supply", license="HyperLynx SI/PI", nets=["/3V_1", "/3V_2", "/3V_3", "/3V_4"], include_ref=True, vrm_references={}, sink_currents={"/3V_1": 3.0, "/3V_2": 3.0, "/3V_3": 3.0, "/3V_4": 3.0}, max_voltage_drop=5.0, max_current_density=1.5e7, max_via_current=1.0, return_from=None, return_vrm_type="simple", return_sink_resistance=1e6)
+    supply = run.dc(board, out / "supply", license="HyperLynx SI/PI", nets=["/3V_1", "/3V_2", "/3V_3", "/3V_4"], include_ref=True, vrms={}, sinks={}, vrm_references={}, sink_currents={"/3V_1": 3.0, "/3V_2": 3.0, "/3V_3": 3.0, "/3V_4": 3.0}, max_voltage_drop=5.0, max_current_density=1.5e7, max_via_current=1.0, return_from=None, return_vrm_type="simple", return_sink_resistance=1e6)
 
     # HyperLynx maps the loss of supply nets only: the returns, re-solved as the supply with the
     # currents the first run measured as sinks (1 Mohm across each), give theirs
-    ret = run.dc(board, out / "return", license="HyperLynx SI/PI", nets=["/3V_1", "/3V_2", "/3V_3", "/3V_4"], include_ref=True, vrm_references={}, sink_currents={}, max_voltage_drop=5.0, max_current_density=1.5e7, max_via_current=1.0, return_from=supply / "ports.csv", return_vrm_type="simple", return_sink_resistance=1e6)
+    ret = run.dc(board, out / "return", license="HyperLynx SI/PI", nets=["/3V_1", "/3V_2", "/3V_3", "/3V_4"], include_ref=True, vrms={}, sinks={}, vrm_references={}, sink_currents={}, max_voltage_drop=5.0, max_current_density=1.5e7, max_via_current=1.0, return_from=supply / "ports.csv", return_vrm_type="simple", return_sink_resistance=1e6)
 
     # per chip and net: resistance VRM -> sink pins, drop over them, current density (median, max)
     analysis.dc_table(supply, ret, out=out / "dc_table.csv")

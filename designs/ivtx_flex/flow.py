@@ -85,11 +85,12 @@ def dc():
     """DC of the ladder's 3 V supply over the flex: +3V0 from the connector to the ladder at 12 A
     (four chips at 3 A), and its GND return; resistance, drop, current density; drop against 5 %."""
     out = RESULTS / "dc"
-    # the connector's +3V0 VRM (J1.10) referenced to a GND pin beside it (J1.9): HyperLynx needs one
-    supply = run.dc(BOARD, out / "supply", license="HyperLynx SI/PI", nets=["+3V0"], include_ref=True, vrm_references={"+3V0": "J1.9"}, sink_currents={"+3V0": 12.0}, max_voltage_drop=5.0, max_current_density=1.5e7, max_via_current=1.0, return_from=None, return_vrm_type="simple", return_sink_resistance=1e6)
+    # the supply, defined here (the board's HyperLynx project has none): 3.0 V at the connector's
+    # +3V0 pins, referenced to GND beside them; the load at the ladder's supply pin
+    supply = run.dc(BOARD, out / "supply", license="HyperLynx SI/PI", nets=["+3V0"], include_ref=True, vrms={"+3V0": {"voltage": 3.0, "pins": ["J1.2", "J1.4", "J1.6", "J1.8", "J1.10"], "ref": ["J1.9"]}}, sinks={"+3V0": {"pins": ["iVTX1.1"], "resistance": 1e6}}, vrm_references={}, sink_currents={"+3V0": 12.0}, max_voltage_drop=5.0, max_current_density=1.5e7, max_via_current=1.0, return_from=None, return_vrm_type="simple", return_sink_resistance=1e6)
     # the return, re-solved as the supply with the currents the first run measured (HyperLynx
     # maps the loss of supply nets only)
-    ret = run.dc(BOARD, out / "return", license="HyperLynx SI/PI", nets=["+3V0"], include_ref=True, vrm_references={"+3V0": "J1.9"}, sink_currents={}, max_voltage_drop=5.0, max_current_density=1.5e7, max_via_current=1.0, return_from=supply / "ports.csv", return_vrm_type="simple", return_sink_resistance=1e6)
+    ret = run.dc(BOARD, out / "return", license="HyperLynx SI/PI", nets=["+3V0"], include_ref=True, vrms={"+3V0": {"voltage": 3.0, "pins": ["J1.2", "J1.4", "J1.6", "J1.8", "J1.10"], "ref": ["J1.9"]}}, sinks={"+3V0": {"pins": ["iVTX1.1"], "resistance": 1e6}}, vrm_references={}, sink_currents={}, max_voltage_drop=5.0, max_current_density=1.5e7, max_via_current=1.0, return_from=supply / "ports.csv", return_vrm_type="simple", return_sink_resistance=1e6)
     analysis.dc_table(supply, ret, out=out / "dc_table.csv")
     analysis.dc_drop(supply, max_drop=0.05, out=out / "dc_drop.csv")
     analysis.current_density(supply, max_density=1.5e7, out=out / "current_density_supply.csv")

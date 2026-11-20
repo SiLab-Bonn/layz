@@ -74,12 +74,16 @@ def info(board, out, *, license: str) -> Path:
     return _run("info", board, out, options)
 
 
-def dc(board, out, *, license: str, nets: list[str], include_ref: bool, vrm_references: dict, sink_currents: dict, max_voltage_drop: float, max_current_density: float, max_via_current: float, return_from, return_vrm_type: str, return_sink_resistance: float) -> Path:
+def dc(board, out, *, license: str, nets: list[str], include_ref: bool, vrms: dict, sinks: dict, vrm_references: dict, sink_currents: dict, max_voltage_drop: float, max_current_density: float, max_via_current: float, return_from, return_vrm_type: str, return_sink_resistance: float) -> Path:
     """DC drop (PowerSI DC) of supply nets: pin voltages and currents, via currents, HyperLynx's
     report and PowerScope file, the loss map of each supply net.
 
     nets                    supply nets to solve
     include_ref             also solve their reference (return) nets
+    vrms                    {net: {"voltage": V, "pins": [power pins], "ref": [reference pins]}}:
+                            a VRM made where the board's project has none on that net; {} for none
+    sinks                   {net: {"pins": [pins], "resistance": ohm}}: DC sinks put on those pins
+                            where they have none (sink_currents then sets their current); {}
     vrm_references          {net: pin}: a reference pin for VRMs that have none (HyperLynx needs
                             one, also when the reference nets aren't solved); {} for none
     sink_currents           {net: A}: the net's total load, spread evenly over its sink pins (those

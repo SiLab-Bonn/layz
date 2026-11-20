@@ -75,6 +75,33 @@ def swap_to_return(ports):
     return returns
 
 
+# VRMs and DC sinks the flow defines, where the board's project has none
+for vnet, v in job.get("vrms", {}).items():
+    if any(ph.PowerNet == vnet for vr in d.VRMs for ph in vr.VRMPhases):
+        continue
+    refs = [d.FindPin(r) for r in v["ref"]]
+    if any(r is None for r in refs) or any(d.FindPin(p) is None for p in v["pins"]):
+        raise SystemExit(f"vrms: {vnet}: a pin of {v['pins'] + v['ref']} is not on the board")
+    nv = d.CreateVRM(float(v["voltage"]), enum("vrm_type", "simple"), "vrm_" + vnet.strip("/+"))
+    if nv.VRMPhases.Count == 0:
+        nv.SetPhaseCount(1)
+    ph = next(iter(nv.VRMPhases))
+    for p in v["pins"]:
+        ph.AddPowerPin(p)
+    ph.SetRefNet(refs[0].Net.Name)
+    for r in v["ref"]:
+        ph.AddRefPin(r)
+    d.AddNewVRM(nv)
+    say(f"{vnet}: VRM of {v['voltage']} V at {', '.join(v['pins'])}, referenced to {', '.join(v['ref'])}")
+for snet, sk in job.get("sinks", {}).items():
+    for name in sk["pins"]:
+        pin = d.FindPin(name)
+        if pin is None:
+            raise SystemExit(f"sinks: no pin {name!r}")
+        if pin.DCSink is None:
+            pin.AssignDCSink(0.0, float(sk["resistance"]))
+    say(f"{snet}: DC sinks at {', '.join(sk['pins'])}")
+
 # VRMs without a reference: the pin given (HyperLynx needs one even without return nets, and the
 # return run sources the return net at it)
 for vnet, ref in job["vrm_references"].items():
