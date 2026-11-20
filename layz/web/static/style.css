@@ -185,3 +185,4 @@ html[data-theme="light"] .schematic .picked, html[data-theme="light"] .canvas .p
 .plotly { height: 520px; }
 .chip.timed { min-width: 92px; text-align: left; font-size: 11px; padding: 1px 8px; }
 .head .name { min-width: 80px; }
+button.fit.on { border-color: var(--accent); color: var(--ink-0); }

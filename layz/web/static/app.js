@@ -420,7 +420,7 @@ async function view3d(b) {
   const z = {};
   let at = 0;
   for (const l of [...b.stackup].reverse()) { z[l.name] = [at * zs, (at + l.thickness_mm) * zs]; at += l.thickness_mm; }
-  const color = layerColors(b.copper);
+  const color = layerColors(b.copper, true);
 
   const scene = new THREE.Scene();
   const group = new THREE.Group();
@@ -429,6 +429,15 @@ async function view3d(b) {
   // merged geometries must match: all non-indexed, positions and normals only, no groups
   const plain = (g) => { const n = g.index ? g.toNonIndexed() : g; for (const k of Object.keys(n.attributes)) if (k !== "position" && k !== "normal") n.deleteAttribute(k); n.clearGroups(); return n; };
   const merge = (geos) => (geos.length ? mergeGeometries(geos.map(plain), false) : null);
+  // a solid with its outline, as FRIDA's: the edges sharper than 25° in the colour at 45 %
+  const outlines = [];
+  const addSolid = (geometry, colour, roughness, metalness) => {
+    const c = new THREE.Color(colour);
+    group.add(new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ color: c, roughness, metalness, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 })));
+    const lines = new THREE.LineSegments(new THREE.EdgesGeometry(geometry, 25), new THREE.LineBasicMaterial({ color: c.clone().multiplyScalar(0.45), transparent: true, opacity: 0.6 }));
+    outlines.push(lines);
+    group.add(lines);
+  };
   const shape = (pts, holes) => {
     const s = new THREE.Shape(pts.map(([x, y]) => new THREE.Vector2(x, y)));
     for (const hole of holes || []) s.holes.push(new THREE.Path(hole.map(([x, y]) => new THREE.Vector2(x, y))));
@@ -451,7 +460,7 @@ async function view3d(b) {
       geos.push(g);
     }
     const merged = merge(geos);
-    if (merged) group.add(new THREE.Mesh(merged, new THREE.MeshStandardMaterial({ color: color[layer], metalness: 0.3, roughness: 0.55 })));
+    if (merged) addSolid(merged, color[layer], 0.5, 0.1);
   }
   const viaGeos = [];
   for (const c of b.cuts || []) {  // GDS via cuts: from the lower layer's bottom to the upper's top
@@ -472,17 +481,21 @@ async function view3d(b) {
     viaGeos.push(g);
   }
   const vias = merge(viaGeos);
-  if (vias) group.add(new THREE.Mesh(vias, new THREE.MeshStandardMaterial({ color: "#d8dee9", metalness: 0.5, roughness: 0.4 })));
+  if (vias) addSolid(vias, "#d8dee9", 0.5, 0.1);
   for (const l of b.stackup) if (l.type !== "copper" && z[l.name]) {  // dielectrics: translucent slabs
     const [zb, zt] = z[l.name];
     const g = new THREE.BoxGeometry(x1 - x0, y1 - y0, Math.max(zt - zb, 1e-4));
     g.translate((x0 + x1) / 2, (y0 + y1) / 2, (zb + zt) / 2);
     group.add(new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: l.type === "mask" ? "#4c566a" : "#8fbcbb", transparent: true, opacity: 0.12, depthWrite: false })));
   }
-  scene.add(new THREE.AmbientLight(0xffffff, 0.75));
-  const sun = new THREE.DirectionalLight(0xffffff, 1.6);
-  sun.position.set(size, -size, size);
+  // FRIDA's lights (physical units: an intensity of pi lights as 1 did)
+  scene.add(new THREE.HemisphereLight(0xeceff4, 0x2e3440, 1.1 * Math.PI));
+  const sun = new THREE.DirectionalLight(0xffffff, 1.6 * Math.PI);
+  sun.position.set(0.6, -1, 1.4);
   scene.add(sun);
+  const fill = new THREE.DirectionalLight(0x88c0d0, 0.5 * Math.PI);
+  fill.position.set(-1, 0.8, 0.6);
+  scene.add(fill);
 
   let renderer;
   try {
@@ -498,7 +511,8 @@ async function view3d(b) {
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.saveState();
-  host.append(h("div", { class: "tools" }, h("button", { class: "fit", title: "back to the whole board", onclick: () => controls.reset() }, "fit")));
+  const edgesBtn = h("button", { class: "fit on", title: "outlines", onclick: () => { const on = !outlines[0]?.visible; outlines.forEach((l) => (l.visible = on)); edgesBtn.classList.toggle("on", on); } }, "edges");
+  host.append(h("div", { class: "tools" }, h("button", { class: "fit", title: "back to the whole board", onclick: () => controls.reset() }, "fit"), edgesBtn));
   const theme = () => { scene.background = new THREE.Color(css("--layout-bg")); };
   theme();
   themeListeners.add(theme);
@@ -519,8 +533,10 @@ async function view3d(b) {
 
 // layers in greys, lighter on top: the board stays neutral, so result maps and markers carry the
 // only colour
-const layerColors = (copper) => {
+const NORD_LAYERS = ["#bf616a", "#ebcb8b", "#a3be8c", "#b48ead", "#88c0d0", "#d08770", "#8fbcbb", "#81a1c1"];
+const layerColors = (copper, colourful = false) => {
   const n = copper.length;
+  if (colourful) return Object.fromEntries(copper.map((l, i) => [l, i === n - 1 && i > 0 ? "#5e81ac" : NORD_LAYERS[i % NORD_LAYERS.length]]));  // the first views of a design
   return Object.fromEntries(copper.map((l, i) => { const v = Math.round(200 - (n > 1 ? (110 * i) / (n - 1) : 0)); return [l, `rgb(${v},${v + 4},${v + 12})`]; }));
 };
 
@@ -547,7 +563,7 @@ const niceLength = (target) => { const e = 10 ** Math.floor(Math.log10(target));
 const lengthText = (mm) => (mm >= 1 ? `${+mm.toPrecision(3)} mm` : `${+(mm * 1000).toPrecision(3)} µm`);
 
 function layoutViewer(b, overlay = null, full = false) {
-  const color = layerColors(b.copper);
+  const color = layerColors(b.copper, full && !overlay);
   const shown = new Set(b.copper);
   let picked = null, markers = [], focus = null;
   const ring = (path, pts) => { pts.forEach(([x, y], i) => (i ? path.lineTo(x, y) : path.moveTo(x, y))); path.closePath(); };
