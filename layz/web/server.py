@@ -44,8 +44,9 @@ def files(folder: Path, *suffixes: str) -> list[Path]:
     return found
 
 
-def design(name: str) -> dict:
-    folder = RESULTS / name
+def design(name: str, folder: Path | None = None) -> dict:
+    """A run (in results/NAME, or ``folder``) with what each target wrote."""
+    folder = folder or RESULTS / name
     if not (folder / "run.json").is_file():
         raise FileNotFoundError(f"{name}: not run yet (layz run designs/{name})")
     run = json.loads((folder / "run.json").read_text())
@@ -89,22 +90,23 @@ def design(name: str) -> dict:
     return {"name": name, **run}
 
 
-def board(name: str) -> dict:
+def board(name: str, folder: Path | None = None) -> dict:
     from layz.web import board as boardfile
 
-    run = json.loads((RESULTS / name / "run.json").read_text())
+    folder = folder or RESULTS / name
+    run = json.loads((folder / "run.json").read_text())
     hyp = Path(run.get("board") or run.get("inputs", {}).get("board", ""))
     if not hyp.is_file():
         raise FileNotFoundError(f"{name}: no board yet (its setup names BOARD, the board target writes it)")
-    cache = RESULTS / name / "board.json"
+    cache = folder / "board.json"
     if not cache.exists() or cache.stat().st_mtime < hyp.stat().st_mtime:
         cache.write_text(json.dumps(boardfile.read(hyp)))
     return json.loads(cache.read_text())
 
 
-def drawings(src: Path, folder: Path) -> dict[str, list[str]]:
+def drawings(src: Path, folder: Path, root: Path, prefix: str) -> dict[str, list[str]]:
     """KiCad's drawings of a schematic or board, dark and light, made once (again when the file
-    is newer)."""
+    is newer); each as ``prefix`` + its path in the run's folder ``root``."""
     from layz.web import layout as draw
 
     out = {}
@@ -113,18 +115,20 @@ def drawings(src: Path, folder: Path) -> dict[str, list[str]]:
         pages = sorted(where.glob("*.svg"))
         if not pages or pages[0].stat().st_mtime < src.stat().st_mtime:
             pages = draw.kicad_svg(src, where, dark=theme == "dark")
-        out[theme] = ["/results/" + str(f.resolve().relative_to(RESULTS.resolve())) for f in pages]
+        out[theme] = [prefix + str(f.resolve().relative_to(root.resolve())) for f in pages]
     return out
 
 
-def inputs(name: str) -> dict:
+def inputs(name: str, folder: Path | None = None, prefix: str | None = None) -> dict:
     """What a run's setup named, drawn: the layout (a GDS on its stack, or a board as SVG) and the
     schematic (SVG pages, or a netlist's nets); made once, kept in results/NAME/web/."""
     from layz.web import layout as draw
 
-    run = json.loads((RESULTS / name / "run.json").read_text())
+    folder = folder or RESULTS / name
+    prefix = f"/results/{name}/" if prefix is None else prefix  # the drawings' paths: served, or the folder's own
+    run = json.loads((folder / "run.json").read_text())
     i = run.get("inputs", {})
-    web = RESULTS / name / "web"
+    web = folder / "web"
     web.mkdir(parents=True, exist_ok=True)
     fresh = lambda cache, src: cache.exists() and cache.stat().st_mtime >= Path(src).stat().st_mtime
     out: dict = {"inputs": i}
@@ -138,24 +142,24 @@ def inputs(name: str) -> dict:
         # a KiCad board: drawn from the run's HyperLynx board of it (copper per layer, vias, its
         # stackup), as a GDS is; KiCad's own drawing until there is one
         if Path(run.get("board") or i.get("board", "")).is_file():
-            out["layout"] = board(name)
+            out["layout"] = board(name, folder)
         else:
-            out["layout_svgs"] = drawings(lay, web / "board")
+            out["layout_svgs"] = drawings(lay, web / "board", folder, prefix)
     sch = Path(i.get("schematic", "")) if i.get("schematic") else (lay.with_suffix(".kicad_sch") if lay.suffix == ".kicad_pcb" else Path())
     if sch.is_file() and sch.suffix == ".kicad_sch":
-        out["schematic_svgs"] = drawings(sch, web / "schematic")
+        out["schematic_svgs"] = drawings(sch, web / "schematic", folder, prefix)
         out["schematic_index"] = draw.schematic_index(sch)
     elif sch.is_file():
         out["netlist"] = draw.netlist(sch)
     return out
 
 
-def flow_page(name: str) -> str:
+def flow_page(name: str, folder: Path | None = None) -> str:
     """The flow.py a design's last run ran, syntax-highlighted (highlight.js), dark or light as the
     system's."""
     import html
 
-    run = json.loads((RESULTS / name / "run.json").read_text())
+    run = json.loads(((folder or RESULTS / name) / "run.json").read_text())
     flow = Path(run.get("flow", ""))
     code = html.escape(flow.read_text()) if flow.is_file() else "(not found)"
     hl = "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0"

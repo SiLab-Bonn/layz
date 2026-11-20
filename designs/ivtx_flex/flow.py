@@ -18,7 +18,7 @@ from layz.hyperlynx import setup as hyperlynx
 from layz.lvs import analysis as lvs_analysis
 from layz.lvs import run as lvs_run
 
-RESULTS = Path("results/ivtx_flex")
+RESULTS = Path(__file__).resolve().parents[2] / "results" / "ivtx_flex"  # this clone's results, from wherever it runs
 
 
 @target

@@ -5,7 +5,7 @@
 #
 # The targets run in this file's order. setup names the inputs; each target after it names
 # every setting it uses (layz.drc.run, layz.lvs.run, layz.hyperlynx.run document them), runs,
-# checks the results against its limits and plots them, all in results/ivtx_rdl/<target>/.
+# checks the results against its limits and plots them, all in RESULTS/<target>/ (this clone's results/ivtx_rdl/).
 
 import shutil
 from pathlib import Path
@@ -19,7 +19,7 @@ from layz.hyperlynx import setup as hyperlynx
 from layz.lvs import analysis as lvs_analysis
 from layz.lvs import run as lvs_run
 
-RESULTS = Path("results/ivtx_rdl")
+RESULTS = Path(__file__).resolve().parents[2] / "results" / "ivtx_rdl"  # this clone's results, from wherever it runs
 
 
 @target
@@ -88,7 +88,7 @@ def dc():
     voltages, via currents, loss and current maps. (PSUB and PWell: their VRMs have no reference
     pin, and HyperLynx wants one shared with every chip they feed; how to set that up is open.)"""
     board = BOARD
-    out = Path("results/ivtx_rdl/dc")
+    out = RESULTS / "dc"
 
     # the four 3 V rails, one per chip, at 3 A each, with their returns; HyperLynx's report flags
     # more than 5 % drop, 1.5e7 A/m^2 and 1 A per via
@@ -116,7 +116,7 @@ def si():
     """The longest data pair, D4 (108 mm), at 160 Mb/s PRBS7: eye with ideal lines, eye with
     loss, crosstalk and jitter, and the crosstalk from ADC_4 and rst onto D4 held low."""
     board = BOARD
-    out = Path("results/ivtx_rdl/si")
+    out = RESULTS / "si"
 
     # eye with ideal lines: lossless, smooth, no jitter, no coupling
     ideal = run.si(
@@ -229,7 +229,7 @@ def sparams():
     """4-port S-parameters of D4 (P, N at the driver, then at the receiver); insertion and
     return loss at its Nyquist frequency, 80 MHz."""
     board = BOARD
-    out = Path("results/ivtx_rdl/sparams")
+    out = RESULTS / "sparams"
 
     # 1 MHz to 5 GHz, adaptive sweep at medium tolerance, 50 ohm ports, real line models
     d4 = run.sparam(board, out / "d4", license="HyperLynx SI/PI", pins=["V4.101", "V4.102", "VTX2.107", "VTX2.108"], fmin=1e6, fmax=5e9, sweep="adaptive", steps=500, steps_per_decade=100, tolerance="medium", reference_impedance=50.0, lossy=True, roughness=True, trapezoid=True, nonfunctional_pads=False)

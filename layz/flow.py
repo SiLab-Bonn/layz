@@ -141,8 +141,8 @@ def run_targets(targets: dict[str, Callable[[], None]], record: Path | None = No
 
 def main(argv: list[str]) -> int:
     """`layz run FLOW [TARGET ...]`: FLOW is a flow.py, or the folder with it; TARGETs, the steps to
-    run (setup, the first, always), else all. The run is recorded in results/<the flow's
-    folder>/run.json, and written as a page, report.html, next to it."""
+    run (setup, the first, always), else all. The run is recorded in the flow's RESULTS folder
+    (else results/<the flow's folder>), run.json, and written as a page, report.html, next to it."""
     flow = Path(argv[0])
     if flow.is_dir():
         flow = flow / "flow.py"
@@ -157,7 +157,10 @@ def main(argv: list[str]) -> int:
             raise SystemExit(f"{flow}: no target {', '.join(unknown)} (its targets: {', '.join(found)})")
         only = {next(iter(found)), *argv[1:]}  # the first (setup: the inputs) always
         log.info("flow", f"running {', '.join(n for n in found if n in only)}; the others keep their last results")
-    record = Path("results") / flow.resolve().parent.name / "run.json"
+    # where the flow puts its results (its RESULTS, best set from its own place: then a run from
+    # anywhere writes to the same folder), else results/<the flow's folder> here
+    results = next(iter(found.values())).__globals__.get("RESULTS")
+    record = (Path(results) if results is not None else Path("results") / flow.resolve().parent.name) / "run.json"
     record.parent.mkdir(parents=True, exist_ok=True)
     with open(record.parent / "run.log", "w") as f:
         log.FILE.update(file=f, lines=0)
@@ -173,7 +176,7 @@ def main(argv: list[str]) -> int:
     try:  # the run as a page to open from the file manager, without `layz web`
         from layz.web import report
 
-        log.info("flow", f"report: {report.write(record.parent.name).resolve()}")
+        log.info("flow", f"report: {report.write(record.parent).resolve()}")
     except Exception as e:  # noqa: BLE001 (the run is done; only its page is missing)
         log.warn("flow", f"no report page: {e}")
     return 1 if failed else 0
