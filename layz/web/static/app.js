@@ -212,7 +212,7 @@ function stage(d, t, i) {
     tables.forEach((tb, k) => left.push([names[k], () => table(tb, t.markers ? mark : null)]));
     if (hasMarks) left.push(["each violation", () => violations(t.markers.boxes, pickViolation)]);
   }
-  if (t.lines.length) left.push([`log${countLevels(t.lines)}`, () => h("pre", { class: "log" }, t.lines.map(logLine))]);
+  if (t.lines.length) left.push(["log", () => h("pre", { class: "log" }, t.lines.map(logLine))]);
 
   const rightTabs = tabs(right);
   const leftTabs = tabs(left);
@@ -263,11 +263,6 @@ function logLine(line) {
   return h("div", { class: `lv-${m[2]}` }, h("span", { class: "ts" }, m[1] + " "), h("span", { class: "lv" }, m[2].padEnd(6)), h("span", { class: "tool" }, m[3].padEnd(13)), m[4]);
 }
 
-function countLevels(lines) {
-  const n = (lv) => lines.filter((l) => l.includes(` ${lv} `)).length;
-  const w = n("WARN"), e = n("ERROR");
-  return (e ? ` · ${e} errors` : "") + (w ? ` · ${w} warnings` : "");
-}
 
 // ---------------------------------------------------------------- interactive plots (Plotly)
 
