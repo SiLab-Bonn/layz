@@ -244,8 +244,37 @@ def figure_data(fig: plt.Figure) -> dict:
                 z = z[::-1]
             lo, hi = im.get_clim()
             images.append({"z": [_list(r) for r in z], "x0": x0, "x1": x1, "y0": min(y0, y1), "y1": max(y0, y1), "zmin": lo, "zmax": hi, "log": type(im.norm).__name__ == "LogNorm"})
-        if not lines and not images:
+        from matplotlib.collections import PathCollection, QuadMesh
+        from matplotlib.patches import Polygon
+
+        points, meshes, fills, texts = [], [], [], []
+        for c in ax.collections:
+            if not c.get_visible():
+                continue
+            if isinstance(c, QuadMesh):  # pcolormesh: values on cell edges
+                z = np.ma.filled(np.ma.asarray(c.get_array(), dtype=float), np.nan)
+                xy = c.get_coordinates()
+                if z.ndim == 1:
+                    z = z.reshape(xy.shape[0] - 1, xy.shape[1] - 1)
+                lo, hi = c.get_clim()
+                meshes.append({"x": _list(xy[0, :, 0]), "y": _list(xy[:, 0, 1]), "z": [_list(r) for r in z], "zmin": lo, "zmax": hi, "log": type(c.norm).__name__ == "LogNorm"})
+            elif isinstance(c, PathCollection):  # scatter: points, coloured by value or not
+                xy = np.asarray(c.get_offsets(), dtype=float)
+                if not len(xy):
+                    continue
+                vals = c.get_array()
+                face = c.get_facecolor()
+                points.append({"x": _list(xy[:, 0]), "y": _list(xy[:, 1]), "c": _list(vals) if vals is not None else None, "color": to_hex(face[0]) if len(face) else "#888888", "size": float(np.sqrt(np.median(c.get_sizes()))) if len(c.get_sizes()) else 4.0, "label": "" if c.get_label().startswith("_") else c.get_label(), "log": vals is not None and type(c.norm).__name__ == "LogNorm", "cmin": c.get_clim()[0] if vals is not None else None, "cmax": c.get_clim()[1] if vals is not None else None, "reversed": vals is not None and getattr(c.get_cmap(), "name", "").endswith("_r")})
+        for patch in ax.patches:
+            if isinstance(patch, Polygon) and patch.get_visible():
+                xy = patch.get_xy()
+                fills.append({"x": _list(xy[:, 0]), "y": _list(xy[:, 1]), "color": to_hex(patch.get_facecolor()), "alpha": patch.get_alpha() if patch.get_alpha() is not None else 1.0})
+        for t in ax.texts:
+            if t.get_visible() and t.get_text().strip():
+                x, y = t.get_position()
+                texts.append({"x": float(x), "y": float(y), "text": t.get_text(), "data": t.get_transform() == ax.transData})
+        if not (lines or images or points or meshes or fills):
             continue
-        axes.append({"box": [box.x0, box.y0, box.x1, box.y1], "title": ax.get_title(), "xlabel": ax.get_xlabel(), "ylabel": ax.get_ylabel(), "xlog": ax.get_xscale() == "log", "ylog": ax.get_yscale() == "log", "xlim": list(ax.get_xlim()), "ylim": list(ax.get_ylim()), "lines": lines, "images": images})
+        axes.append({"box": [box.x0, box.y0, box.x1, box.y1], "title": ax.get_title(), "xlabel": ax.get_xlabel(), "ylabel": ax.get_ylabel(), "xlog": ax.get_xscale() == "log", "ylog": ax.get_yscale() == "log", "xlim": list(ax.get_xlim()), "ylim": list(ax.get_ylim()), "equal": ax.get_aspect() == 1.0, "lines": lines, "images": images, "points": points, "meshes": meshes, "fills": fills, "texts": texts})
     title = fig._suptitle.get_text() if getattr(fig, "_suptitle", None) else ""
     return {"title": title, "size": list(fig.get_size_inches()), "axes": axes}

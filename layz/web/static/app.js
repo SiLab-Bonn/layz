@@ -244,6 +244,18 @@ async function plotPane(design, p) {
         const ny = im.z.length, nx = im.z[0].length;
         traces.push({ type: "heatmap", xaxis: `x${n}`, yaxis: `y${n}`, z: im.log ? im.z.map((r) => r.map((v) => (v > 0 ? Math.log10(v) : null))) : im.z, x0: im.x0 + (im.x1 - im.x0) / nx / 2, dx: (im.x1 - im.x0) / nx, y0: im.y0 + (im.y1 - im.y0) / ny / 2, dy: (im.y1 - im.y0) / ny, zmin: im.log ? Math.log10(im.zmin) : im.zmin, zmax: im.log ? Math.log10(im.zmax) : im.zmax, colorscale: [[0, "#5e81ac"], [1, "#bf616a"]], showscale: k === 0, colorbar: { title: { text: im.log ? "log10" : "", side: "right" }, thickness: 10 }, hoverongaps: false });
       }
+      const scale = (rev) => (rev ? [[0, "#bf616a"], [1, "#5e81ac"]] : [[0, "#5e81ac"], [1, "#bf616a"]]);
+      for (const m of ax.meshes || []) {
+        const mid = (e) => e.slice(1).map((v, j) => (v + e[j]) / 2);
+        traces.push({ type: "heatmap", xaxis: `x${n}`, yaxis: `y${n}`, x: mid(m.x), y: mid(m.y), z: m.log ? m.z.map((r) => r.map((v) => (v > 0 ? Math.log10(v) : null))) : m.z, colorscale: scale(false), showscale: false, hoverongaps: false });
+      }
+      for (const f of ax.fills || []) traces.push({ type: "scatter", mode: "lines", xaxis: `x${n}`, yaxis: `y${n}`, x: [...f.x, f.x[0]], y: [...f.y, f.y[0]], fill: "toself", fillcolor: f.color, opacity: Math.max(0.25, f.alpha), line: { width: 0 }, hoverinfo: "skip", showlegend: false });
+      for (const p of ax.points || []) {
+        const c = p.c && (p.log ? p.c.map((v) => (v > 0 ? Math.log10(v) : null)) : p.c);
+        traces.push({ type: "scattergl", mode: "markers", xaxis: `x${n}`, yaxis: `y${n}`, x: p.x, y: p.y, name: p.label || undefined, showlegend: !!p.label, marker: c ? { color: c, colorscale: scale(p.reversed), size: Math.max(3, Math.min(9, p.size)), showscale: true, colorbar: { thickness: 10, len: 0.45, title: { text: p.log ? "log10" : "" } } } : { color: css("--ink-4"), size: Math.max(2, Math.min(6, p.size)) } });
+      }
+      for (const t of ax.texts || []) layout.annotations.push(t.data ? { text: t.text.replace(/\n/g, "<br>"), x: t.x, y: t.y, xref: `x${n}`, yref: `y${n}`, showarrow: false, font: { size: 10 } } : { text: t.text.replace(/\n/g, "<br>"), x: ax.box[0] + t.x * (ax.box[2] - ax.box[0]), y: ax.box[1] + t.y * (ax.box[3] - ax.box[1]), xref: "paper", yref: "paper", showarrow: false, font: { size: 10 } });
+      if (ax.equal) layout[`yaxis${n}`].scaleanchor = `x${n}`;
       for (const l of ax.lines) traces.push({ type: "scattergl", mode: l.markers ? "markers" : "lines", xaxis: `x${n}`, yaxis: `y${n}`, x: l.x, y: l.y, name: l.label || undefined, showlegend: !!l.label, line: { color: l.color, width: Math.max(1, l.width), dash: l.dash ? "dash" : "solid" }, marker: { color: l.color, size: 4 } });
     });
     window.Plotly.react(el, traces, layout, { responsive: true, displaylogo: false, modeBarButtonsToRemove: ["select2d", "lasso2d"] });

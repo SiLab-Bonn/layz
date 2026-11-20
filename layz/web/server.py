@@ -91,9 +91,10 @@ def inputs(name: str) -> dict:
         out["layout_svgs"] = [url(f) for f in pages]
     sch = Path(i.get("schematic", "")) if i.get("schematic") else (lay.with_suffix(".kicad_sch") if lay.suffix == ".kicad_pcb" else Path())
     if sch.is_file() and sch.suffix == ".kicad_sch":
-        pages = sorted((web / "schematic").glob("*.svg"))
+        folder = web / "schematic-inline"  # without the drawing sheet and background
+        pages = sorted(folder.glob("*.svg"))
         if not pages or pages[0].stat().st_mtime < sch.stat().st_mtime:
-            pages = draw.kicad_svg(sch, web / "schematic")
+            pages = draw.kicad_svg(sch, folder)
         out["schematic_svgs"] = [url(f) for f in pages]
     elif sch.is_file():
         out["netlist"] = draw.netlist(sch)
