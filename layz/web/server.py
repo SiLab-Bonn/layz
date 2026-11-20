@@ -55,7 +55,7 @@ def design(name: str) -> dict:
         if not out.is_dir():
             continue
         found = files(out, ".csv", ".png", ".overlay.json")
-        for f in [f for f in found if f.suffix == ".csv"]:
+        for f in [f for f in found if f.suffix == ".csv" and f.stat().st_size < 64_000]:  # tables, not data dumps
             with open(f, newline="") as fh:
                 rows = list(csv.reader(fh))
             if rows and len(rows) <= 400 and len(rows[0]) <= 30:  # tables, not data dumps
