@@ -187,3 +187,6 @@ html[data-theme="light"] .schematic .picked, html[data-theme="light"] .canvas .p
 .head .name { min-width: 80px; }
 button.fit.on { border-color: var(--accent); color: var(--ink-0); }
 .schematic.grey svg > *:not(.marks) { filter: grayscale(1); opacity: 0.75; }
+.stacked h4:first-child { margin-top: 2px; }
+.stacked .tablewrap { max-height: 300px; }
+.tabbody > .pane > .lazy > .stacked { max-height: 640px; overflow: auto; }

@@ -184,16 +184,29 @@ function stage(d, t, i) {
     setTimeout(() => viewer && viewer.setMarkers(boxes, boxes[0]), 50);
   };
   const left = [];
-  if (t.name === "setup") left.push(["inputs", () => h("table", { class: "kvtable" }, h("tr", {}, h("td", {}, "flow"), h("td", {}, d.flow)), Object.entries(d.inputs).map(([k, v]) => h("tr", {}, h("td", {}, k), h("td", {}, v))))]);
-  if (t.name === "setup") left.push(["layout facts", async () => { const inp = await inputs(); return inp.layout ? h("div", { class: "facts" }, layoutFacts(inp.layout)) : h("div", { class: "caption" }, "—"); }]);
+  if (t.name === "setup") left.push(["inputs", async () => {  // what setup named, and the layout's counts
+    const inp = await inputs();
+    return h("div", {}, h("table", { class: "kvtable" }, h("tr", {}, h("td", {}, "flow"), h("td", {}, d.flow)), Object.entries(d.inputs).map(([k, v]) => h("tr", {}, h("td", {}, k), h("td", {}, v)))), inp.layout ? h("div", { class: "facts" }, layoutFacts(inp.layout)) : null);
+  }]);
   if (isBoard) left.push(["board facts", async () => h("div", { class: "facts" }, layoutFacts(await board()))]);
-  const names = t.tables.map((tb) => tb.path.split("/").slice(1).join("/").replace(/\.csv$/, ""));
-  t.tables.forEach((tb, k) => left.push([names[k], () => table(tb, t.markers ? mark : null)]));
-  if (t.markers && t.markers.boxes.length) left.push(["each violation", () => violations(t.markers.boxes, (m) => {
+  // the step's tables, without those another one contains (its columns and rows); up to three
+  // together in one tab, with the violations, else a tab each
+  const covers = (big, small) => big !== small && small.rows.length === big.rows.length && small.rows[0].every((c) => big.rows[0].includes(c));
+  const tables = t.tables.filter((tb) => !t.tables.some((other) => covers(other, tb)));
+  const names = tables.map((tb) => tb.path.split("/").slice(1).join("/").replace(/\.csv$/, ""));
+  const pickViolation = (m) => {
     if (sheet && m.names && rightTabs.current() === "schematic · marked") { sheet.mark(t.markers.boxes.flatMap((x) => x.names || []), m.names, unchecked, t.markers.boxes); return; }
     rightTabs.show(`layout · ${t.markers.boxes.length} marked`);
     setTimeout(() => viewer && viewer.setMarkers(t.markers.boxes, m), 50);
-  })]);
+  };
+  const hasMarks = t.markers && t.markers.boxes.length;
+  if (tables.length && tables.length <= 3) left.push(["results", () => h("div", { class: "stacked" },
+    tables.map((tb, k) => [tables.length > 1 ? h("h4", {}, names[k]) : null, table(tb, t.markers ? mark : null)]),
+    hasMarks ? [h("h4", {}, "each violation"), violations(t.markers.boxes, pickViolation)] : null)]);
+  else {
+    tables.forEach((tb, k) => left.push([names[k], () => table(tb, t.markers ? mark : null)]));
+    if (hasMarks) left.push(["each violation", () => violations(t.markers.boxes, pickViolation)]);
+  }
   if (t.lines.length) left.push([`log${countLevels(t.lines)}`, () => h("pre", { class: "log" }, t.lines.map(logLine))]);
 
   const rightTabs = tabs(right);
@@ -201,8 +214,7 @@ function stage(d, t, i) {
   return h("section", { class: `target ${t.status}`, id: `t-${t.name}` },
     h("div", { class: "head" },
       h("span", { class: `chip ${t.status} timed` }, "● ", t.status, t.seconds == null || t.status === "pending" ? "" : ` ${t.seconds.toFixed(2)} s`),
-      h("span", { class: "name" }, t.name),
-      h("span", { class: "doc", title: t.doc }, firstSentence(t.doc))),
+      h("span", { class: "name", title: t.doc }, t.name)),
     t.error ? h("div", { class: "error" }, t.error) : null,
     leftTabs || rightTabs ? h("div", { class: rightTabs && leftTabs ? "split" : "single" }, leftTabs, rightTabs) : null);
 }
