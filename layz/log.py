@@ -29,7 +29,8 @@ _ERROR = re.compile(r"\b(error|errors|fail|failed|failure|fatal|traceback|except
 _WARN = re.compile(r"\b(warn|warning|warnings)\b", re.I)
 _REAL: list = []  # the stdout capture() replaced: where the log goes meanwhile
 COUNTS: dict = {"INFO": 0, "WARN": 0, "ERROR": 0, "fail": 0}  # this step's lines per level, failed checks
-FILE: dict = {"file": None, "lines": 0}  # a copy of the log, plain (layz.flow: results/<design>/run.log)
+FILE: dict = {"file": None, "lines": 0}
+STEP: list | None = None  # the running step's lines, while layz.flow collects them for its log.txt  # a copy of the log, plain (layz.flow: results/<design>/run.log)
 
 
 def _out():
@@ -66,6 +67,8 @@ def emit(tool: str, line: str, level: str | None = None) -> None:
     stamp = time.strftime("%H:%M:%S")
     tag = f"[{tool}]"
     out = _out()
+    if STEP is not None:
+        STEP.append(f"{stamp} {level:<5} {tag:<12} {line}")
     if FILE["file"] is not None:
         FILE["file"].write(f"{stamp} {level:<5} {tag:<12} {line}\n")
         FILE["file"].flush()

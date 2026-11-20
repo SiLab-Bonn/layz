@@ -87,6 +87,7 @@ def run_targets(targets: dict[str, Callable[[], None]], record: Path | None = No
         first = log.FILE["lines"]
         log.info("flow", f"[{i + 1}/{len(targets)}] {name}: {entry['doc'].split('. ')[0]}")
         log.COUNTS.update(INFO=0, WARN=0, ERROR=0, fail=0)
+        log.STEP = []
         try:
             with log.capture("layz"):
                 function()
@@ -110,6 +111,11 @@ def run_targets(targets: dict[str, Callable[[], None]], record: Path | None = No
             say = log.warn if entry["status"] != "ok" else log.info
             say("flow", f"[{i + 1}/{len(targets)}] {name}: {entry['status']} in {entry['seconds']:.0f} s" + (f" ({entry['errors']} errors, {entry['warnings']} warnings)" if entry["status"] != "ok" else ""))
         entry["log"] = [first, log.FILE["lines"]]  # its lines in run.log
+        if record is not None:  # and its own log, among the step's files
+            folder = record.parent / name
+            folder.mkdir(parents=True, exist_ok=True)
+            (folder / "log.txt").write_text("\n".join(log.STEP) + "\n")
+        log.STEP = None
         if record is not None:
             g = function.__globals__
             run["inputs"] = {k.lower(): str(g[k]) for k in INPUTS if g.get(k) is not None}

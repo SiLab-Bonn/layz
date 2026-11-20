@@ -53,6 +53,9 @@ def design(name: str) -> dict:
     for t in run["targets"]:
         t["lines"] = logged[t["log"][0] : t["log"][1]] if t.get("log") else []
         out = folder / t["name"]
+        if t["lines"] and not (out / "log.txt").exists():  # runs from before each step wrote its own
+            out.mkdir(parents=True, exist_ok=True)
+            (out / "log.txt").write_text("\n".join(t["lines"]) + "\n")
         t["tables"], t["plots"] = [], []
         if not out.is_dir():
             continue
@@ -67,7 +70,8 @@ def design(name: str) -> dict:
         t["overlays"] = [str(f.relative_to(folder)) for f in found if f.name.endswith(".overlay.json")]
         # what the step wrote, for sftp:// links (its own files, not HyperLynx's board copies)
         t["folder"] = str(out.resolve())
-        t["files"] = sorted(str(f.relative_to(out)) for f in files(out, "") if not f.name.endswith((".plot.json", ".overlay.json")) and f.name != "job.json")[:60]
+        found_files = sorted(str(f.relative_to(out)) for f in files(out, "") if not f.name.endswith((".plot.json", ".overlay.json")) and f.name != "job.json")
+        t["files"] = (["log.txt"] if "log.txt" in found_files else []) + [f for f in found_files if f != "log.txt"][:60]  # the log first
         t["summary"] = json.loads((out / "summary.json").read_text()) if (out / "summary.json").is_file() and (out / "summary.json").stat().st_size < 200_000 else None
     flow = Path(run.get("flow", ""))
     run["source"] = flow.read_text() if flow.is_file() else ""

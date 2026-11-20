@@ -211,19 +211,17 @@ function stage(d, t, i) {
   };
   const hasMarks = t.markers && t.markers.boxes.length;
   const filesLine = () => t.folder && t.files && t.files.length ? h("div", { class: "files" },
-    h("h4", {}, "files"), pathRow(`${t.name}/`, t.folder + "/", true),
+    pathRow(`${t.name}/`, t.folder + "/", true),
     t.files.map((f) => pathRow(f, `${t.folder}/${f}`))) : null;
   if (tables.length && tables.length <= 3) left.push(["results", () => h("div", { class: "stacked" },
     tables.map((tb, k) => [tables.length > 1 ? h("h4", {}, names[k]) : null, table(tb, t.markers ? mark : null)]),
-    hasMarks ? [h("h4", {}, "each violation"), violations(t.markers.boxes, pickViolation)] : null,
-    filesLine())]);
-  else if (!tables.length && t.files && t.files.length && t.name !== "setup") left.push(["results", () => filesLine()]);
+    hasMarks ? [h("h4", {}, "each violation"), violations(t.markers.boxes, pickViolation)] : null)]);
   else {
-    if (t.files && t.files.length) left.push(["files", () => filesLine()]);
     tables.forEach((tb, k) => left.push([names[k], () => table(tb, t.markers ? mark : null)]));
     if (hasMarks) left.push(["each violation", () => violations(t.markers.boxes, pickViolation)]);
   }
-  if (t.lines.length) left.push(["log", () => h("pre", { class: "log" }, t.lines.map(logLine))]);
+  // what the step wrote, its log among them
+  if (t.files && t.files.length) left.push(["files", () => filesLine()]);
 
   const rightTabs = tabs(right);
   const leftTabs = tabs(left);
