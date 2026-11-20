@@ -26,6 +26,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 PORT = 8003
 STATIC = Path(__file__).parent / "static"
+REPO = Path(__file__).resolve().parents[2]  # this clone: its flows and stacks can be previewed
 RESULTS = Path("results")
 
 
@@ -71,6 +72,16 @@ def design(name: str) -> dict:
     flow = Path(run.get("flow", ""))
     run["source"] = flow.read_text() if flow.is_file() else ""
     run["root"] = str(folder.resolve())
+    # the inputs' and the flow's files, absolute (a stack named by its process: its stack file)
+    from layz import stack as stackfile
+
+    paths = {"flow": run.get("flow", "")}
+    for k, v in run.get("inputs", {}).items():
+        try:
+            paths[k] = str(stackfile.resolve(v).resolve()) if k == "stack" else str(Path(v).resolve())
+        except FileNotFoundError:
+            paths[k] = ""
+    run["paths"] = paths
     return {"name": name, **run}
 
 
@@ -188,6 +199,13 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.send(200, json.dumps(inputs(q["name"])).encode(), "application/json")
             if url.path == "/api/board":
                 return self.send(200, json.dumps(board(q["name"])).encode(), "application/json")
+            if url.path == "/file":  # a file of a run, or of this clone (flows, stacks), to look at
+                f = Path(q["path"]).resolve()
+                if not f.is_file() or not any(root in f.parents for root in (RESULTS.resolve(), REPO)):
+                    return self.send(404, b"not found", "text/plain")
+                kind = mimetypes.guess_type(f.name)[0] or ""
+                shown = kind if kind.startswith("image/") or kind == "application/pdf" else "text/plain; charset=utf-8"
+                return self.send(200, f.read_bytes(), shown)
             if url.path.startswith("/results/"):
                 f = (RESULTS / unquote(url.path[len("/results/") :])).resolve()
                 if RESULTS.resolve() not in f.parents or not f.is_file():

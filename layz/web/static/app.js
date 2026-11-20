@@ -88,14 +88,11 @@ async function homePage() {
 async function designPage(name) {
   memo.clear();
   const d = await getJSON(`/api/design?name=${encodeURIComponent(name)}`);
-  const n = d.targets.filter(done).length;
   const jump = (t) => (e) => { e.preventDefault(); document.getElementById(`t-${t.name}`)?.scrollIntoView({ behavior: "smooth" }); };
   return h("div", { class: "page" },
     h("div", { class: "title" },
       h("a", { class: "home", href: "#", title: "every design" }, d.name),
-      h("span", { class: d.targets.some((t) => t.status === "failed") ? "bad" : d.targets.some((t) => t.status === "errors") ? "errs" : d.targets.some((t) => t.status === "warnings") ? "warns" : n === d.targets.length ? "good" : "dim" }, `${n}/${d.targets.length} steps`),
-      h("span", { class: "dim" }, d.started),
-      h("a", { href: `/flow?name=${encodeURIComponent(d.name)}`, target: "_blank" }, "flow.py")),
+      h("span", { class: "dim" }, d.started)),
     h("nav", { class: "toc" }, d.targets.map((t) => h("a", { onclick: jump(t) }, chip(t.status, ""), t.name))),
     d.targets.map((t, i) => stage(d, t, i)));
 }
@@ -198,7 +195,8 @@ function stage(d, t, i) {
   const left = [];
   if (t.name === "setup") left.push(["inputs", async () => {  // what setup named, and the layout's counts
     const inp = await inputs();
-    return h("div", {}, h("table", { class: "kvtable" }, h("tr", {}, h("td", {}, "flow"), h("td", {}, d.flow)), Object.entries(d.inputs).filter(([k]) => k !== "board").map(([k, v]) => h("tr", {}, h("td", {}, k), h("td", {}, v)))), inp.layout ? h("div", { class: "facts" }, layoutFacts(inp.layout)) : null);
+    const rows = [["flow", d.flow], ...Object.entries(d.inputs).filter(([k]) => k !== "board")];
+    return h("div", {}, h("table", { class: "kvtable" }, rows.map(([k, v]) => h("tr", {}, h("td", {}, k), h("td", {}, d.paths && d.paths[k] ? pathRow(v, d.paths[k], false, k === "flow" ? `/flow?name=${encodeURIComponent(d.name)}` : null) : v)))), inp.layout ? h("div", { class: "facts" }, layoutFacts(inp.layout)) : null);
   }]);
   if (isBoard) left.push(["board facts", async () => h("div", { class: "facts" }, layoutFacts(await board()))]);
   // the step's tables, without those another one contains (its columns and rows); up to three
@@ -212,17 +210,14 @@ function stage(d, t, i) {
     setTimeout(() => viewer && viewer.setMarkers(t.markers.boxes, m), 50);
   };
   const hasMarks = t.markers && t.markers.boxes.length;
-  // the step's files on the machine that ran it, as sftp:// links (a folder mounted in the file
-  // manager over SFTP opens them)
-  const sftp = (path) => `sftp://${location.hostname}${path}`;
   const filesLine = () => t.folder && t.files && t.files.length ? h("div", { class: "files" },
-    h("a", { href: sftp(t.folder + "/") }, `${t.name}/`),
-    t.files.map((f) => [" ", h("a", { href: sftp(`${t.folder}/${f}`) }, f)])) : null;
+    h("h4", {}, "files"), pathRow(`${t.name}/`, t.folder + "/", true),
+    t.files.map((f) => pathRow(f, `${t.folder}/${f}`))) : null;
   if (tables.length && tables.length <= 3) left.push(["results", () => h("div", { class: "stacked" },
     tables.map((tb, k) => [tables.length > 1 ? h("h4", {}, names[k]) : null, table(tb, t.markers ? mark : null)]),
     hasMarks ? [h("h4", {}, "each violation"), violations(t.markers.boxes, pickViolation)] : null,
     filesLine())]);
-  else if (!tables.length && t.files && t.files.length) left.push(["results", () => filesLine()]);
+  else if (!tables.length && t.files && t.files.length && t.name !== "setup") left.push(["results", () => filesLine()]);
   else {
     if (t.files && t.files.length) left.push(["files", () => filesLine()]);
     tables.forEach((tb, k) => left.push([names[k], () => table(tb, t.markers ? mark : null)]));
@@ -248,6 +243,19 @@ function boardTarget(d) {
 
 const overlayName = (o) => ({ dc: "current density" })[base(o).split("_")[0]] || base(o).replace(/\.overlay\.json$/, "");
 const firstSentence = (text) => { const m = (text || "").match(/^.*?[.:;](\s|$)/); return m ? m[0].trim().replace(/[:;]$/, "") : text; };
+// a file: its name opens a preview in a new tab; ↗ follows its sftp:// link (the file manager, with
+// the machine mounted over SFTP); ⧉ copies that link
+const sftp = (path) => `sftp://${location.hostname}${path}`;
+function pathRow(label, abs, folder = false, preview = null) {
+  const copy = h("button", { class: "pathbtn", title: "copy the sftp:// path", onclick: async () => {
+    try { await navigator.clipboard.writeText(sftp(abs)); } catch { const ta = h("textarea", {}, sftp(abs)); document.body.append(ta); ta.select(); document.execCommand("copy"); ta.remove(); }
+    copy.textContent = "✓"; setTimeout(() => (copy.textContent = "⧉"), 1200);
+  } }, "⧉");
+  return h("span", { class: "pathrow" },
+    folder ? h("span", { class: "pathname" }, label) : h("a", { class: "pathname", href: preview || `/file?path=${encodeURIComponent(abs)}`, target: "_blank", title: abs }, label),
+    h("a", { class: "pathbtn", href: sftp(abs), title: "open (sftp://)" }, "↗"), copy);
+}
+
 const plotLabel = (png) => base(png).replace(/\.png$/, "").replace(/_/g, " ");
 
 // ---------------------------------------------------------------- tables, violations, logs
