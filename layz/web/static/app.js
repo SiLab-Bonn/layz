@@ -156,10 +156,12 @@ function stage(d, t, i) {
       return viewer.el;
     }]);
   }
-  for (const o of t.overlays || []) right.push([`board · ${overlayName(o)}`, async () => layoutViewer(await board(), await once(fileUrl(d.name, o))).el]);
+  for (const o of t.overlays || []) right.push([`on the board`, async () => layoutViewer(await board(), await once(fileUrl(d.name, o))).el]);
   if (isBoard) right.push(["board", async () => layoutViewer(await board()).el]);
   if (isBoard) right.push(["board 3D", async () => view3d(await board())]);
-  for (const p of t.plots) right.push([plotLabel(p.png), async () => plotPane(d.name, p)]);
+  const REPLACES = { dc: ["dc_current_density", "dc_loss_map", "dc_pin_voltage", "dc_via_current"] };  // maps an overlay draws on the board
+  const replaced = new Set((t.overlays || []).flatMap((o) => REPLACES[base(o).split("_")[0]] || []));
+  for (const p of t.plots) if (!replaced.has(base(p.png).replace(/\.png$/, ""))) right.push([plotLabel(p.png), async () => plotPane(d.name, p)]);
 
   // left: numbers
   const mark = (rule) => {
@@ -173,7 +175,8 @@ function stage(d, t, i) {
   if (t.name === "setup") left.push(["inputs", () => h("table", { class: "kvtable" }, h("tr", {}, h("td", {}, "flow"), h("td", {}, d.flow)), Object.entries(d.inputs).map(([k, v]) => h("tr", {}, h("td", {}, k), h("td", {}, v))))]);
   if (t.name === "setup") left.push(["layout facts", async () => { const inp = await inputs(); return inp.layout ? h("div", { class: "facts" }, layoutFacts(inp.layout)) : h("div", { class: "caption" }, "the board's facts: with the board, below"); }]);
   if (isBoard) left.push(["board facts", async () => h("div", { class: "facts" }, layoutFacts(await board()))]);
-  for (const tb of t.tables) left.push([base(tb.path).replace(/\.csv$/, ""), () => table(tb, t.markers ? mark : null)]);
+  const names = t.tables.map((tb) => tb.path.split("/").slice(1).join("/").replace(/\.csv$/, ""));
+  t.tables.forEach((tb, k) => left.push([names[k], () => table(tb, t.markers ? mark : null)]));
   if (t.markers && t.markers.boxes.length) left.push(["each violation", () => violations(t.markers.boxes, (m) => { rightTabs.show(`layout · ${t.markers.boxes.length} marked`); setTimeout(() => viewer && viewer.setMarkers(t.markers.boxes, m), 50); })]);
   if (t.lines.length) left.push([`log${countLevels(t.lines)}`, () => h("pre", { class: "log" }, t.lines.map(logLine))]);
 
@@ -451,14 +454,18 @@ function layoutViewer(b, overlay = null, full = false) {
   const paths = b.polys.map((p) => { const path = new Path2D(); for (const r of [p.pts, ...p.holes]) ring(path, r); return { ...p, path }; });
   const cuts = (b.cuts || []).map((c) => { const path = new Path2D(); ring(path, c.pts); return { ...c, path }; });
 
-  // the overlay: per layer an image of its values (one colour scale for all), pins by voltage
+  // the overlay: current density per layer (one layer at a time), pin voltages, via currents
   let ov = null;
   if (overlay) {
     const vals = Object.values(overlay.layers).flatMap((l) => l.z.flat().filter((v) => v > 0)).sort((x, y) => x - y);
     const lo = vals.length ? vals[Math.floor(vals.length * 0.02)] : 1, hi = vals.length ? vals[vals.length - 1] : 1;
-    overlay.pins = overlay.pins.filter((p) => p.run === overlay.pins[0]?.run);  // the supply run's pins
-    const vs = overlay.pins.map((p) => p.v);
-    ov = { lo, hi, vmin: Math.min(...vs), vmax: Math.max(...vs), images: Object.fromEntries(Object.entries(overlay.layers).map(([n, l]) => [n, { img: overlayImage(l, lo, hi), ext: l.extent }])) };
+    const supply = overlay.pins[0]?.run;
+    const pins = overlay.pins.filter((p) => p.run === supply);
+    const vs = pins.map((p) => p.v), is = (overlay.vias || []).map((v) => v.i).filter((i) => i > 0);
+    ov = { mode: "current density", lo, hi, pins, vmin: Math.min(...vs), vmax: Math.max(...vs), imin: Math.min(...is), imax: Math.max(...is), images: Object.fromEntries(Object.entries(overlay.layers).map(([n, l]) => [n, { img: overlayImage(l, lo, hi), ext: l.extent }])) };
+    // current density: the layer carrying the most, alone
+    const top = Object.entries(overlay.layers).map(([n, l]) => [n, Math.max(0, ...l.z.flat().filter((v) => v > 0))]).sort((a2, b2) => b2[1] - a2[1])[0];
+    if (top) { shown.clear(); shown.add(top[0]); }
   }
   const canvas = h("canvas");
   const pickedBox = h("div", { class: "picked", style: "display:none" });
@@ -488,7 +495,7 @@ function layoutViewer(b, overlay = null, full = false) {
     const px = 1 / view.s;
     for (const layer of [...b.copper].reverse()) {
       if (!shown.has(layer)) continue;
-      ctx.globalAlpha = ov ? 0.18 : 0.55;
+      ctx.globalAlpha = ov ? 0.22 : 0.55;
       for (const p of paths) if (p.layer === layer) { ctx.fillStyle = picked && p.net && p.net === picked ? css("--ink-0") : color[layer]; ctx.fill(p.path, "evenodd"); }
       ctx.globalAlpha = 0.9;
       ctx.lineCap = "round";
@@ -498,7 +505,7 @@ function layoutViewer(b, overlay = null, full = false) {
         ctx.beginPath(); ctx.moveTo(s.x1, s.y1); ctx.lineTo(s.x2, s.y2); ctx.stroke();
       }
     }
-    if (ov) {  // the results over the copper: each shown layer's map, the top layer last
+    if (ov && ov.mode === "current density") {  // each shown layer's map over its copper
       ctx.imageSmoothingEnabled = false;
       for (const layer of [...b.copper].reverse()) {
         const o = ov.images[layer];
@@ -507,7 +514,7 @@ function layoutViewer(b, overlay = null, full = false) {
         ctx.save();
         ctx.translate(ex0, ey1);
         ctx.scale((ex1 - ex0) / o.img.width, -(ey1 - ey0) / o.img.height);
-        ctx.globalAlpha = 0.85;
+        ctx.globalAlpha = 0.9;
         ctx.drawImage(o.img, 0, 0);
         ctx.restore();
       }
@@ -535,21 +542,34 @@ function layoutViewer(b, overlay = null, full = false) {
         ctx.fillText(l.text, sx + 4, sy - 3);
       }
     }
-    if (ov) {  // pins coloured by voltage (low: red), and the scales
-      for (const p of overlay.pins) {
-        const sx = view.tx + view.s * p.x, sy = view.ty - view.s * p.y;
-        const t = (p.v - ov.vmin) / (ov.vmax - ov.vmin || 1);
-        ctx.fillStyle = `rgb(${0xbf + t * (0xa3 - 0xbf)},${0x61 + t * (0xbe - 0x61)},${0x6a + t * (0x8c - 0x6a)})`;
-        ctx.beginPath(); ctx.arc(sx, sy, 3, 0, 2 * Math.PI); ctx.fill();
+    if (ov) {  // pins by voltage, or vias by current, and the colour scale
+      const mix = (t) => `rgb(${0x5e + t * (0xbf - 0x5e)},${0x81 + t * (0x61 - 0x81)},${0xac + t * (0x6a - 0xac)})`;
+      let scale = null;
+      if (ov.mode === "pin voltage") {
+        for (const p of ov.pins) {
+          const t = 1 - (p.v - ov.vmin) / (ov.vmax - ov.vmin || 1);  // the lowest voltage red
+          ctx.fillStyle = mix(t);
+          ctx.beginPath(); ctx.arc(view.tx + view.s * p.x, view.ty - view.s * p.y, 4, 0, 2 * Math.PI); ctx.fill();
+        }
+        scale = [`${ov.vmax.toFixed(4)} V`, `${ov.vmin.toFixed(4)} V`, "pin voltage (supply)"];
+      } else if (ov.mode === "via current") {
+        const l0 = Math.log10(ov.imin), sp = Math.log10(ov.imax) - l0 || 1;
+        for (const v of [...(overlay.vias || [])].sort((a2, b2) => a2.i - b2.i)) {
+          if (!(v.i > 0)) continue;
+          ctx.fillStyle = mix((Math.log10(v.i) - l0) / sp);
+          ctx.beginPath(); ctx.arc(view.tx + view.s * v.x, view.ty - view.s * v.y, 2.5, 0, 2 * Math.PI); ctx.fill();
+        }
+        scale = [`${(ov.imin * 1e3).toPrecision(2)} mA`, `${(ov.imax * 1e3).toPrecision(3)} mA`, "via current (log)"];
+      } else {
+        scale = [`${ov.lo.toPrecision(2)}`, `${ov.hi.toPrecision(3)} ${overlay.unit}`, `current density, ${[...shown].join(", ")} (log)`];
       }
-      const w = 160, x = canvas.clientWidth - w - 14, y = canvas.clientHeight - 52;
+      const w = 180, x = canvas.clientWidth - w - 14, y = canvas.clientHeight - 52;
       const grad = ctx.createLinearGradient(x, 0, x + w, 0);
       grad.addColorStop(0, "#5e81ac"); grad.addColorStop(1, "#bf616a");
       ctx.fillStyle = grad; ctx.fillRect(x, y, w, 8);
       ctx.fillStyle = css("--ink-1"); ctx.font = "10px ui-monospace, monospace";
-      ctx.fillText(`${ov.lo.toPrecision(2)}`, x, y + 20);
-      ctx.fillText(`${ov.hi.toPrecision(2)} ${overlay.unit} (log)`, x + w - 90, y + 20);
-      ctx.fillText(`pins ${ov.vmin.toFixed(3)} (red) to ${ov.vmax.toFixed(3)} V (green)`, x - 40, y + 34);
+      ctx.fillText(scale[0], x, y + 20);
+      ctx.textAlign = "right"; ctx.fillText(scale[1], x + w, y + 20); ctx.fillText(scale[2], x + w, y - 6); ctx.textAlign = "left";
     }
     // the violations: boxes in the error colour, at least 8 pixels across (as FRIDA's)
     if (markers.length) {
@@ -608,11 +628,19 @@ function layoutViewer(b, overlay = null, full = false) {
   new ResizeObserver(() => { view = null; draw(); }).observe(wrap);
   themeListeners.add(draw);
   // the full panel (stackup, counts) once, with the inputs; elsewhere the layers as toggles
-  const toggles = h("div", { class: "layers" }, b.copper.map((l) => {
-    const a = h("a", { style: `--c:${color[l]}`, onclick: () => { shown.has(l) ? shown.delete(l) : shown.add(l); a.classList.toggle("off"); draw(); } }, l);
-    return a;
-  }));
+  const toggles = h("div", { class: "layers" }, b.copper.map((l) => h("a", { style: `--c:${color[l]}`, class: shown.has(l) ? null : "off", onclick: () => {
+    if (ov && ov.mode === "current density") { shown.clear(); shown.add(l); }  // one layer's map at a time
+    else if (shown.has(l)) shown.delete(l); else shown.add(l);
+    toggles.querySelectorAll("a").forEach((x) => x.classList.toggle("off", !shown.has(x.textContent)));
+    draw();
+  } }, l)));
   if (!full) wrap.append(toggles);
+  if (ov) wrap.append(h("div", { class: "modes" }, ["current density", "pin voltage", "via current"].map((m) => h("a", { class: m === ov.mode ? "on" : null, onclick: (e) => {
+    ov.mode = m;
+    e.target.parentNode.querySelectorAll("a").forEach((x) => x.classList.toggle("on", x.textContent === m));
+    if (m !== "current density") { b.copper.forEach((l) => shown.add(l)); toggles.querySelectorAll("a").forEach((x) => x.classList.remove("off")); }
+    draw();
+  } }, m))));
   const el = h("div", { class: "layout" + (full ? "" : " bare") }, wrap, full ? h("aside", {}, stackPanel(b, color, shown, draw)) : null);
   return { el, setMarkers: (boxes, at = null) => { markers = boxes; focus = at ? at.box || at : null; view = null; draw(); if (at && at.rule) say(at); } };
 }

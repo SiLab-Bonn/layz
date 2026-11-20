@@ -155,3 +155,7 @@ section.target > .error { margin: 8px 14px 0; }
 .facts { max-width: 420px; }
 .facts h4:first-child { margin-top: 4px; }
 aside { width: 220px; }
+.modes { position: absolute; left: 10px; top: 8px; display: flex; gap: 4px; }
+.modes a { font: 11px var(--font-mono); padding: 2px 8px; border-radius: 3px; background: var(--surface-raised); color: var(--ink-3); cursor: pointer; border: 1px solid var(--line-2); }
+.modes a.on { color: var(--ink-0); border-color: var(--accent); }
+.canvas .picked { top: 36px; }

@@ -121,7 +121,12 @@ def board_overlay(run: Path, out: Path, ret: Path | None = None) -> Path:
         for p in _rows(r / "ports.csv"):
             if p["x"]:
                 pins.append({"pin": p["pin"], "net": p["net"], "x": float(p["x"]) * MM, "y": float(p["y"]) * MM, "v": float(p["voltage_V"]), "i": float(p["current_A"]), "run": r.name})
-    data = {"kind": "dc", "unit": "A/mm²", "layers": {lay: {"extent": ext, "ny": J.shape[0], "nx": J.shape[1], "z": [[None if not np.isfinite(v) else round(float(v) / 1e6, 6) for v in row] for row in J]} for lay, (J, ext) in layers.items()}, "pins": pins}
+    vias = []
+    for r in [run] + ([ret] if ret else []):
+        for v in _rows(r / "vias.csv"):
+            if v.get("x1"):
+                vias.append({"net": v["net"], "x": float(v["x1"]) * MM, "y": float(v["y1"]) * MM, "i": abs(float(v["current_A"])), "run": r.name})
+    data = {"kind": "dc", "unit": "A/mm²", "replaces": ["dc_current_density", "dc_loss_map", "dc_pin_voltage", "dc_via_current"], "vias": vias, "layers": {lay: {"extent": ext, "ny": J.shape[0], "nx": J.shape[1], "z": [[None if not np.isfinite(v) else round(float(v) / 1e6, 6) for v in row] for row in J]} for lay, (J, ext) in layers.items()}, "pins": pins}
     path = out / "dc_board.overlay.json"
     path.write_text(json.dumps(data))
     return path
