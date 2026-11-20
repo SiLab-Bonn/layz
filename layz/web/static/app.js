@@ -274,7 +274,7 @@ async function kicanvas(urls) {
   // https://kicanvas.org: KiCad schematics and boards drawn in the page (loaded the first time)
   kicanvasLoaded ||= new Promise((ok, fail) => document.head.append(h("script", { type: "module", src: "https://kicanvas.org/kicanvas/kicanvas.js", onload: ok, onerror: () => fail(new Error("KiCanvas didn't load (kicanvas.org)")) })));
   await kicanvasLoaded;
-  const embed = h("kicanvas-embed", { controls: "full", theme: document.documentElement.dataset.theme === "light" ? "kicad" : "witchhazel" }, urls.map((u) => h("kicanvas-source", { src: u })));
+  const embed = h("kicanvas-embed", { controls: "none", theme: document.documentElement.dataset.theme === "light" ? "kicad" : "witchhazel" }, urls.map((u) => h("kicanvas-source", { src: u })));
   return h("div", { class: "kicanvas" }, embed, h("div", { class: "caption" }, urls.map((u, k) => [k ? " · " : "", h("a", { href: u, download: "" }, base(u))])));
 }
 

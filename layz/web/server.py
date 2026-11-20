@@ -19,6 +19,7 @@ from __future__ import annotations
 import csv
 import json
 import mimetypes
+import os
 import shutil
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -33,6 +34,16 @@ def designs() -> list[dict]:
     return [{"name": p.parent.name, **json.loads(p.read_text())} for p in sorted(RESULTS.glob("*/run.json"))]
 
 
+def files(folder: Path, *suffixes: str) -> list[Path]:
+    """A target's files with these suffixes, without HyperLynx's board copies (each run's board/
+    holds the whole project: slow to walk, and nothing to show)."""
+    found = []
+    for root, dirs, names in os.walk(folder):
+        dirs[:] = sorted(d for d in dirs if d != "board" and not d.startswith("."))
+        found += [Path(root) / n for n in sorted(names) if n.endswith(suffixes)]
+    return found
+
+
 def design(name: str) -> dict:
     folder = RESULTS / name
     run = json.loads((folder / "run.json").read_text())
@@ -43,14 +54,15 @@ def design(name: str) -> dict:
         t["tables"], t["plots"] = [], []
         if not out.is_dir():
             continue
-        for f in sorted(out.rglob("*.csv")):
+        found = files(out, ".csv", ".png", ".overlay.json")
+        for f in [f for f in found if f.suffix == ".csv"]:
             with open(f, newline="") as fh:
                 rows = list(csv.reader(fh))
             if rows and len(rows) <= 400 and len(rows[0]) <= 30:  # tables, not data dumps
                 t["tables"].append({"path": str(f.relative_to(folder)), "rows": rows})
-        t["plots"] = [{"png": str(f.relative_to(folder)), "data": str(f.with_suffix(".plot.json").relative_to(folder)) if f.with_suffix(".plot.json").exists() else None} for f in sorted(out.rglob("*.png"))]
+        t["plots"] = [{"png": str(f.relative_to(folder)), "data": str(f.with_suffix(".plot.json").relative_to(folder)) if f.with_suffix(".plot.json").exists() else None} for f in found if f.suffix == ".png"]
         t["markers"] = json.loads((out / "markers.json").read_text()) if (out / "markers.json").exists() else None
-        t["overlays"] = [str(f.relative_to(folder)) for f in sorted(out.rglob("*.overlay.json"))]
+        t["overlays"] = [str(f.relative_to(folder)) for f in found if f.name.endswith(".overlay.json")]
     flow = Path(run.get("flow", ""))
     run["source"] = flow.read_text() if flow.is_file() else ""
     return {"name": name, **run}
