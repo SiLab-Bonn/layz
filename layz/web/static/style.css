@@ -229,3 +229,4 @@ button.fit.on { border-color: var(--accent); color: var(--ink-0); }
 .split > .tabbox:last-child > .tabbody > .pane > .lazy > div > .schematic { flex: 1; height: auto; min-height: 0; }
 .split > .tabbox:last-child > .tabbody > .pane > .lazy > div:has(> .plotly) { height: 100%; display: flex; flex-direction: column; }
 .split > .tabbox:last-child > .tabbody > .pane > .lazy > div > .plotly { flex: 1; height: auto; min-height: 0; }
+.stacked > .tablewrap + .tablewrap { margin-top: 14px; }

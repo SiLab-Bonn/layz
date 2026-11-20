@@ -214,8 +214,8 @@ function stage(d, t, i) {
     pathRow(`${t.name}/`, t.folder + "/", true),
     t.files.map((f) => pathRow(f, `${t.folder}/${f}`))) : null;
   if (tables.length && tables.length <= 3) left.push(["results", () => h("div", { class: "stacked" },
-    tables.map((tb, k) => [tables.length > 1 ? h("h4", {}, names[k]) : null, table(tb, t.markers ? mark : null)]),
-    hasMarks ? [h("h4", {}, "each violation"), violations(t.markers.boxes, pickViolation)] : null)]);
+    tables.map((tb) => table(tb, t.markers ? mark : null)),
+    hasMarks ? violations(t.markers.boxes, pickViolation) : null)]);
   else {
     tables.forEach((tb, k) => left.push([names[k], () => table(tb, t.markers ? mark : null)]));
     if (hasMarks) left.push(["each violation", () => violations(t.markers.boxes, pickViolation)]);
