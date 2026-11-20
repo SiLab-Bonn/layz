@@ -133,8 +133,7 @@ layers.
 
 ## layz gds2pcb
 
-A utility: a GDS as a KiCad board, to look at or edit in KiCad. (`layz gds2hyp` still writes a
-GDS's `.hyp` through it, for now.)
+A utility: a GDS as a KiCad board, to look at or edit in KiCad. No analysis needs it.
 
 ```sh
 layz gds2pcb --lay design.gds --stack uni-bonn-rdl          # -> design.kicad_pcb
@@ -149,17 +148,21 @@ net with two names (a short) or a net label on no copper.
 
 ## layz gds2hyp
 
-HyperLynx `.hyp` from a GDS (through `layz gds2pcb`), a KiCad board, or an existing `.hyp`.
+HyperLynx `.hyp` from a GDS (directly, with KLayout: no KiCad), a KiCad board, or an existing
+`.hyp`.
 
 ```sh
 layz gds2hyp board.kicad_pcb                              # -> board.hyp
-layz gds2hyp design.gds --stack uni-bonn-rdl  # GDS -> board -> .hyp in one step
+layz gds2hyp design.gds --stack uni-bonn-rdl              # nets, pins from the GDS's labels
 layz gds2hyp exported.hyp -o with_traces.hyp              # rewrite a .hyp exported elsewhere
 layz gds2hyp board.kicad_pcb --traces none                # KiCad's own output
 layz gds2hyp board.kicad_pcb --traces /CLK_P,/CLK_N       # traces for just these nets
 ```
 
-The writer reproduces KiCad's GUI exporter (records and number format). **Signal routes as
+From a GDS, every net is named by its net labels and every pin label (REF.PIN) becomes a pin on
+the pad under it, a device per REF; layers keep the stack's names (M3, P3, ...). A net without a
+label stops it, as in `layz gds2pcb`. From a KiCad board, the writer reproduces KiCad's GUI
+exporter (records and number format). **Signal routes as
 traces** (`--traces auto`, the default): a GDS draws every route as a polygon, which KiCad
 exports as a pour, and HyperLynx BoardSim builds transmission lines, loss and crosstalk only from
 traces. So strip-shaped pours of signal nets are written as their centreline (SEG records), as

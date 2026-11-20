@@ -1,4 +1,5 @@
-"""Write a HyperLynx .hyp file from a KiCad board, the way KiCad's own exporter does.
+"""Write a HyperLynx .hyp: from a GDS directly (layz.gds2hyp.gds: KLayout, no KiCad), or from a
+KiCad board the way KiCad's own exporter does (below).
 
 KiCad only offers its HyperLynx exporter in the PCB editor (File > Export > Hyperlynx), not in
 kicad-cli or its Python module. This is a re-implementation of that exporter
@@ -8,13 +9,13 @@ the same records, in the same order and number format.
     {VERSION=2.14} / {UNITS=ENGLISH LENGTH}    lengths in inches, Y negated
     {BOARD ...}       PERIMETER_SEGMENT per board-outline segment
     {STACKUP ...}     SIGNAL per copper layer, DIELECTRIC per dielectric/mask (from the
-                      board's stackup: `layz gds2pcb --stack` writes it)
+                      board's stackup)
     {DEVICES ...}     one per footprint
     {PADSTACK=n ...}  pad and via padstacks, deduplicated, numbered in order of first use
     {NET="..." ...}   per net: PIN, VIA, SEG, ARC, and zone fills as POLYGON / POLYVOID;
                       every copper object without a net gets its own EmptyNet<n>
 
-    layz gds2hyp design.gds --stack uni-bonn-rdl [-o design.hyp]   (via layz gds2pcb)
+    layz gds2hyp design.gds --stack uni-bonn-rdl [-o design.hyp]   (nets from its labels)
     layz gds2hyp board.kicad_pcb [-o board.hyp]
     layz gds2hyp exported.hyp -o with_traces.hyp                             (pours -> traces only)
 
@@ -31,7 +32,6 @@ from __future__ import annotations
 import argparse
 import re
 import sys
-import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -426,20 +426,6 @@ def write_hyp(pcb_path: Path, hyp_path: Path, refill: bool = False) -> None:
         HypWriter(board, f, warn=lambda m: print(f"warning: {m}", file=sys.stderr)).run(process)
 
 
-def stack_layer_names(hyp_path: Path, process) -> None:
-    """Name the .hyp's layers as the stack does, not KiCad's F.Cu, In1.Cu, ... and DE_F.Cu, ...
-    (the dielectric under each copper): HyperLynx's results and layz's plots then say M3, P3, ..."""
-    kicad = process.kicad_names()
-    if all(name == k for name, k in kicad.items()):
-        return
-    names = {k: name for name, k in kicad.items()}
-    for above, l in zip(process.layers, process.layers[1:]):
-        if above.type == "copper" and l.type == "dielectric":
-            names[f"DE_{kicad[above.name]}"] = l.name
-    text = re.sub(r'"([^"]*)"', lambda m: f'"{names.get(m[1], m[1])}"', hyp_path.read_text(encoding="utf-8"))
-    hyp_path.write_text(text, encoding="utf-8")
-
-
 def traces_pass(hyp_path: Path, select: str, max_width_mm: float) -> None:
     """Rewrite ``hyp_path`` in place with its strip-shaped pours as traces, and say what changed."""
     if select == "none":  # nothing to do (and no shapely needed: layz's KiCad environment has none)
@@ -456,10 +442,9 @@ def traces_pass(hyp_path: Path, select: str, max_width_mm: float) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0], epilog="Running HyperLynx on the .hyp: layz hyp {setup,info,dc,si,sparam,plot,run} -h")
-    ap.add_argument("input", type=Path, help=".kicad_pcb board, a GDS (converted with layz gds2pcb), or a .hyp to rewrite")
+    ap.add_argument("input", type=Path, help="a GDS (with --stack), a .kicad_pcb board, or a .hyp to rewrite")
     ap.add_argument("-o", "--out", type=Path, help="output .hyp (default: next to the input)")
     ap.add_argument("--stack", type=Path, help="GDS input: layz process stack (.toml)")
-    ap.add_argument("--keep-pcb", action="store_true", help="GDS input: keep the intermediate .kicad_pcb next to the .hyp")
     ap.add_argument("--refill", action="store_true", help="refill zones with KiCad's zone filler first (default: use the fills as saved)")
     ap.add_argument("--traces", default="auto", metavar="auto|none|NET,...", help="write strip-shaped pours as traces (centreline + width), so HyperLynx models their transmission lines, loss and crosstalk: 'auto' (default) every net that is >= 95 %% strips no wider than --trace-max-width, 'none' (KiCad's own output), or the nets named")
     ap.add_argument("--trace-max-width", type=float, default=TRACE_MAX_WIDTH_MM, metavar="MM", help=f"auto: widest strip of a net made traces (default {TRACE_MAX_WIDTH_MM} mm)")
@@ -475,14 +460,10 @@ def main(argv: list[str] | None = None) -> int:
         board_to_hyp(args.input, out, refill=args.refill)
     else:
         if not args.stack:
-            ap.error("a GDS input needs --stack (its layer mapping and stackup)")
-        from layz.gds2pcb import convert as gds2pcb
+            ap.error("a GDS input needs --stack (its layers, stackup and net labels)")
+        from layz.gds2hyp import gds
 
-        with tempfile.TemporaryDirectory() as tmp:
-            pcb = out.with_suffix(".kicad_pcb") if args.keep_pcb else Path(tmp) / (out.stem + ".kicad_pcb")
-            gds2pcb.main(["--lay", str(args.input), "-o", str(pcb), "--stack", str(args.stack)])
-            board_to_hyp(pcb, out, refill=args.refill)
-        stack_layer_names(out, stackfile.load(args.stack))
+        gds.write_hyp(args.input, stackfile.load(args.stack), out)
     traces_pass(out, args.traces, args.trace_max_width)
     print(f"wrote {out}")
     return 0

@@ -46,7 +46,7 @@ class Connectivity:
         ly.read(str(gds))
         top = ly.top_cell()
         top.flatten(-1, True)  # labels and copper in one coordinate system; boards are small
-        self.dbu = ly.dbu
+        self.layout, self.top, self.dbu = ly, top, ly.dbu  # kept: the netlist refers to them
         self.l2n = l2n = kdb.LayoutToNetlist(kdb.RecursiveShapeIterator(ly, top, []))
 
         self.regions = {}  # "L/D" -> region, copper and via layers
@@ -75,7 +75,7 @@ class Connectivity:
                 label_map.append((lab, layer.gds))
 
         l2n.extract_netlist()
-        circuit = l2n.netlist().circuit_by_name(top.name) or next(l2n.netlist().each_circuit_top_down())
+        self.circuit = circuit = l2n.netlist().circuit_by_name(top.name) or next(l2n.netlist().each_circuit_top_down())
         self.nets = {n.cluster_id: n.expanded_name() for n in circuit.each_net()}
 
         self.labels = []
@@ -96,6 +96,10 @@ class Connectivity:
         """The net (cluster id) of the shape on layer ``gds`` (copper or via) at a point."""
         net = self.l2n.probe_net(self.regions[gds], kdb.DPoint(x_um, y_um))
         return net.cluster_id if net is not None else None
+
+    def shapes(self, gds: str, cluster: int) -> kdb.Region:
+        """The (merged) copper or via shapes of one net on one layer, in database units."""
+        return self.l2n.shapes_of_net(self.circuit.net_by_cluster_id(cluster), self.regions[gds], True).merged()
 
     def net_names(self) -> tuple[dict[int, str], list[str]]:
         """Each labelled net's name, from its net labels, and what is wrong: a net with two

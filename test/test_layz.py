@@ -40,15 +40,6 @@ def test_stack_heights_from_order():
     assert p.by_name("M3").z_um == pytest.approx(26)
 
 
-def test_hyp_from_gds_names_layers_as_the_stack(tmp_path):
-    from layz.gds2hyp.convert import stack_layer_names
-
-    hyp = tmp_path / "b.hyp"
-    hyp.write_text('(SIGNAL T=1 L="In1.Cu" M=COPPER)\n(DIELECTRIC T=1 L="DE_In1.Cu")\n("B.Cu", 1, 2)\n(? REF="U1" L="F.Cu")\n')
-    stack_layer_names(hyp, stack.load(RDL))
-    assert hyp.read_text() == '(SIGNAL T=1 L="M3" M=COPPER)\n(DIELECTRIC T=1 L="P2+P2.5")\n("ChipPad", 1, 2)\n(? REF="U1" L="TopPad")\n'
-
-
 def test_stack_in_kicad_names_keeps_their_order(tmp_path):
     bad = tmp_path / "bad.toml"
     bad.write_text('[[layer]]\nname="B.Cu"\ntype="copper"\nthickness_um=1\n[[layer]]\nname="D"\ntype="dielectric"\nthickness_um=1\n[[layer]]\nname="F.Cu"\ntype="copper"\nthickness_um=1\n')
@@ -88,24 +79,27 @@ def test_multicb_totals(name, total_um):
     assert stack.load(name).thickness_um == pytest.approx(total_um)
 
 
-@needs_kicad
 def test_gds_to_hyp(tmp_path):
-    """test/route.gds (two pads, a route, a via, a plane) through layz gds2pcb and gds2hyp: the
-    .hyp's STACKUP is test/route.toml's layers, in inches, with their εr."""
+    """test/route.gds (two pads, a route, a via, a plane) straight to a .hyp, no KiCad: the
+    STACKUP is test/route.toml's layers, in inches, with their εr and names; the nets, pins and
+    devices are the GDS's labels."""
     hyp = tmp_path / "route.hyp"
-    assert cli.main(["gds2hyp", str(TESTS / "route.gds"), "--stack", str(TESTS / "route.toml"), "-o", str(hyp)]) == 0
+    assert cli.main(["gds2hyp", str(TESTS / "route.gds"), "--stack", str(TESTS / "route.toml"), "-o", str(hyp), "--traces", "none"]) == 0
     text = hyp.read_text()
     assert text.startswith("{VERSION=2.14}\n{UNITS=ENGLISH LENGTH}\n")
-    rows = re.findall(r"\((SIGNAL|DIELECTRIC) T=([\d.e-]+) .*?C=([\d.e-]+)", text.split("{STACKUP", 1)[1].split("}", 1)[0])
+    rows = re.findall(r"\((SIGNAL|DIELECTRIC) T=([\d.e-]+) .*?C=([\d.e-]+) L=\"([^\"]+)\"", text.split("{STACKUP", 1)[1].split("}", 1)[0])
     layers = [l for l in stack.load(TESTS / "route.toml").layers if l.type in ("copper", "dielectric")]
     assert [r[0] for r in rows] == ["SIGNAL" if l.type == "copper" else "DIELECTRIC" for l in layers]
     assert [float(r[1]) * 25400 for r in rows] == pytest.approx([l.thickness_um for l in layers], rel=1e-4)
     assert [float(r[2]) for r in rows if r[0] == "DIELECTRIC"] == [l.er for l in layers if l.type == "dielectric"]
-    assert text.count("(VIA ") == 1 and text.count('(? REF="FP') == 3  # the two PADs, and the top cell's own F.Cu (a pad layer)
-    assert sorted(re.findall(r"\{NET=\"?([^\"\s]+)", text)) == ["GND", "SIG"]  # named by the GDS's labels
+    assert [r[3] for r in rows] == [l.name for l in layers]
+    assert re.findall(r'\{NET="([^"]+)"', text) == ["GND", "SIG"]
+    sig = text.split('{NET="SIG"')[1]
+    assert re.findall(r'R="([^"]+)"', sig) == ["U1.1", "U2.1"] and sig.count("{POLYGON") == 1  # pads and route merged into one pour
+    assert text.count("(VIA ") == 1 and text.count('(? REF="') == 2
 
 
-def test_gds2pcb_needs_a_label_on_every_net(tmp_path):
+def test_gds_conversions_need_a_label_on_every_net(tmp_path):
     from klayout import db
 
     from layz.gds2pcb import convert as gds2pcb
@@ -116,6 +110,8 @@ def test_gds2pcb_needs_a_label_on_every_net(tmp_path):
     ly.write(str(tmp_path / "bare.gds"))
     with pytest.raises(SystemExit, match="net without a label"):
         gds2pcb.main(["--lay", str(tmp_path / "bare.gds"), "--stack", str(TESTS / "route.toml"), "-o", str(tmp_path / "b.kicad_pcb")])
+    with pytest.raises(SystemExit, match="net without a label"):
+        cli.main(["gds2hyp", str(tmp_path / "bare.gds"), "--stack", str(TESTS / "route.toml"), "-o", str(tmp_path / "b.hyp")])
 
 
 @needs_fastercap
