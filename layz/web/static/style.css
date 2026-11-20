@@ -160,8 +160,8 @@ aside { width: 220px; }
 .modes a.on { color: var(--ink-0); border-color: var(--accent); }
 .canvas .picked { top: 36px; }
 select.panelpick { font: 12px var(--font-mono); background: var(--surface-raised); color: var(--ink-1); border: 1px solid var(--line-2); border-radius: 4px; padding: 3px 6px; margin-bottom: 6px; max-width: 100%; }
-button.fit { position: absolute; left: 10px; bottom: 28px; font: 11px var(--font-mono); padding: 2px 8px; border-radius: 3px; background: var(--surface-raised); color: var(--ink-1); border: 1px solid var(--line-2); cursor: pointer; z-index: 2; }
-button.fit:hover { border-color: var(--accent); }
+.fit { position: absolute; left: 10px; bottom: 28px; font: 11px var(--font-mono); padding: 2px 8px; border-radius: 3px; background: var(--surface-raised); color: var(--ink-1); border: 1px solid var(--line-2); cursor: pointer; z-index: 2; }
+.fit:hover { border-color: var(--accent); }
 .schematic { position: relative; }
 select.modes { position: absolute; left: 10px; top: 8px; z-index: 2; }
 * { font-family: var(--font-mono) !important; }
@@ -173,7 +173,7 @@ select.modes { position: absolute; left: 10px; top: 8px; z-index: 2; }
 section.target { scroll-margin-top: 10px; }
 .tools { position: absolute; left: 10px; top: 8px; display: flex; gap: 6px; align-items: center; z-index: 3; }
 .tools button.fit, .tools select.modes { position: static; margin: 0; }
-button.fit { left: auto; bottom: auto; }
+.fit { left: auto; bottom: auto; }
 .canvas .picked { left: auto; right: 10px; top: 40px; max-width: 45%; text-align: left; }
 .view3d .legend { position: absolute; right: 10px; top: 8px; color: var(--ink-4); font-size: 11px; }
 .head .doc { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -185,7 +185,7 @@ html[data-theme="light"] .schematic .picked, html[data-theme="light"] .canvas .p
 .plotly { height: 520px; }
 .chip.timed { min-width: 92px; text-align: left; font-size: 11px; padding: 1px 8px; }
 .head .name { min-width: 80px; }
-button.fit.on { border-color: var(--accent); color: var(--ink-0); }
+.fit.on { border-color: var(--accent); color: var(--ink-0); }
 .schematic.grey svg > *:not(.marks) { filter: grayscale(1); opacity: 0.75; }
 .stacked h4:first-child { margin-top: 2px; }
 .stacked .tablewrap { max-height: 300px; }
@@ -234,3 +234,7 @@ button.fit.on { border-color: var(--accent); color: var(--ink-0); }
 .tools.row select.panelpick { margin: 0; }
 a.fit { text-decoration: none; display: inline-block; line-height: 1.5; }
 .tools.row .pages { margin: 0 6px 0 0; display: inline-flex; gap: 12px; } .tools.row .pages a { padding: 2px 0; border-bottom: 2px solid transparent; } .tools.row .pages a.on { border-bottom-color: var(--accent); }
+/* links in the controls row look as its buttons (not the link colours) */
+a.fit, a.fit:visited { color: var(--ink-1); text-decoration: none; background: var(--surface-raised); border: 1px solid var(--line-2); border-radius: 3px; padding: 2px 8px; font: 11px var(--font-mono); position: static; }
+a.fit:hover { border-color: var(--accent); }
+.tools button.fit { position: static; }
