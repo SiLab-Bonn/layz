@@ -200,8 +200,9 @@ function stage(d, t, i) {
   const leftTabs = tabs(left);
   return h("section", { class: `target ${t.status}`, id: `t-${t.name}` },
     h("div", { class: "head" },
-      h("span", { class: "step" }, String(i + 1).padStart(2, "0")), chip(t.status), h("span", { class: "name" }, t.name),
-      h("span", { class: "doc", title: t.doc }, firstSentence(t.doc)), h("span", { class: "caption" }, t.seconds == null ? "" : `${t.seconds.toFixed(0)} s`)),
+      h("span", { class: `chip ${t.status} timed` }, "● ", t.status, t.seconds == null || t.status === "pending" ? "" : ` ${t.seconds.toFixed(2)} s`),
+      h("span", { class: "name" }, t.name),
+      h("span", { class: "doc", title: t.doc }, firstSentence(t.doc))),
     t.error ? h("div", { class: "error" }, t.error) : null,
     leftTabs || rightTabs ? h("div", { class: rightTabs && leftTabs ? "split" : "single" }, leftTabs, rightTabs) : null);
 }

@@ -92,7 +92,7 @@ def run_targets(targets: dict[str, Callable[[], None]], record: Path | None = No
         except (Exception, SystemExit) as e:  # a target stops with SystemExit or any error
             entry["status"], entry["error"] = "failed", str(e) or type(e).__name__
             failed = name
-        entry["seconds"] = round(time.monotonic() - start, 1)
+        entry["seconds"] = round(time.monotonic() - start, 2)
         if failed:
             for line in entry["error"].splitlines():
                 log.error("flow", line)
