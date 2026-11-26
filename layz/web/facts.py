@@ -9,7 +9,7 @@ NM = 1e-6  # the union's grid: 1 nm, in mm
 
 
 def _copper_area(b: dict) -> dict[str, float]:
-    """Each copper layer's metal area (mm²): its pours and traces merged, overlaps counted once."""
+    """Each copper layer's metal area (mm²): its pours, traces and pads merged, overlaps counted once."""
     import klayout.db as kdb
 
     regions = {name: kdb.Region() for name in b["copper"]}
@@ -22,6 +22,9 @@ def _copper_area(b: dict) -> dict[str, float]:
     for s in b["segs"]:
         if s["layer"] in regions and s["w"] > 0:
             regions[s["layer"]].insert(kdb.DPath([kdb.DPoint(s["x1"], s["y1"]), kdb.DPoint(s["x2"], s["y2"])], s["w"], s["w"] / 2, s["w"] / 2, True).to_itype(NM).polygon())
+    for p in b["pins"]:  # pads: a board's pins are no pours
+        if p["layer"] in regions and p["w"] > 0 and p["h"] > 0:
+            regions[p["layer"]].insert(kdb.DBox(p["x"] - p["w"] / 2, p["y"] - p["h"] / 2, p["x"] + p["w"] / 2, p["y"] + p["h"] / 2).to_itype(NM))
     return {name: r.merged().area() * NM * NM for name, r in regions.items()}
 
 
