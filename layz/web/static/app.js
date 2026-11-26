@@ -226,7 +226,7 @@ function stage(d, t, i) {
   // another contains), the violations; then its files
   const covers = (big, small) => big !== small && small.rows.length === big.rows.length && small.rows[0].every((c) => big.rows[0].includes(c));
   const tables = t.tables.filter((tb) => !t.tables.some((other) => covers(other, tb)))
-    .sort((a, b) => Number(b.rows[0].includes("pass")) - Number(a.rows[0].includes("pass")));  // overviews (pass or not) first, then their findings
+    .sort((a, b) => Number(a.rows[0].includes("what")) - Number(b.rows[0].includes("what")));  // in the order the flow wrote them, lists of findings last
   const pickViolation = (m) => {
     if (sheet && m.names && rightTabs.current() === "schematic") { sheet.mark(t.markers.boxes.flatMap((x) => x.names || []), m.names, unchecked, t.markers.boxes); return; }
     rightTabs.show("layout");
@@ -838,7 +838,8 @@ function layoutViewer(b, overlay = null, full = false, mode = "current density")
         scale = [`${ov.lo.toPrecision(2)} A/mm²`, `${ov.hi.toPrecision(3)} A/mm²`, `current density, ${[...shown].join(", ")} (${kind})`];
       }
       if (scale) {
-        const w = 220, x = (canvas.clientWidth - w) / 2, y = canvas.clientHeight - 30;  // centred below, as the plots' legends
+        // between the scale bar (bottom left) and the stackup (bottom right)
+        const room = canvas.clientWidth - 140 - 170, w = Math.max(120, Math.min(220, room - 20)), x = 140 + Math.max(0, (room - w) / 2), y = canvas.clientHeight - 30;
         const grad = ctx.createLinearGradient(x, 0, x + w, 0);
         grad.addColorStop(0, "#5e81ac"); grad.addColorStop(1, "#bf616a");
         ctx.fillStyle = grad; ctx.fillRect(x, y, w, 8);
