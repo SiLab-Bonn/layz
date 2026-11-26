@@ -237,7 +237,7 @@ def signal_integrity():
         xts.append(xt)
         plots.plot_si([real, xt], out, at="VTX2", skip_ui=4, centre_window=0.05, edge_levels=(0.2, 0.8), settle=0.1, name=pair)
 
-    # CLK and CMD: eyes at every chip (loss, crosstalk, jitter); no aggressors set
+    # CLK and CMD at every chip (loss, crosstalk, jitter): CLK's waveforms, CMD's eye; no aggressors set
     bus_eyes = []
     for name, b in BUSES.items():
         # eye with loss, roughness, crosstalk (traces within 0.5 mm, area fills), and jitter:
@@ -247,7 +247,7 @@ def signal_integrity():
             out / name / "eye_real",
             license="HyperLynx SI/PI",
             net=f"/{name}_N",
-            operation="eye",
+            operation="standard" if name == "CLK" else "eye",  # a clock: its waveforms (HyperLynx makes no eye of one)
             simulator="auto",
             corner="typical",
             probe="pin",
@@ -258,7 +258,7 @@ def signal_integrity():
             frequency=80e6 if name == "CLK" else 160e6,  # CLK: an 80 MHz clock (160 Mb/s DDR), to agree on
             duty_cycle=50.0,
             initial_state="low",
-            stop_s=None,
+            stop_s=200e-9 if name == "CLK" else None,
             step_s=None,
             jitter={"Gaussian": 100e-12, "GaussianFreq": 1e6, "Sine": 300e-12, "SineFreq": 5e6, "SineInitPhase": 0.0, "Uniform": 0.0, "UniformMean": 0.0, "Distortion": 0.0},
             lossy=True,
