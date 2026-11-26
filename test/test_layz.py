@@ -344,10 +344,9 @@ def test_hyperlynx_analysis(tmp_path):
     from layz.hyperlynx import analysis
 
     dc, si, sp = _hyperlynx_runs(tmp_path)
-    (row,) = analysis.dc_drop(dc, max_drop=0.04, out=tmp_path / "dc.csv")
+    (row,) = analysis.dc_drop(dc, out=tmp_path / "dc.csv")
     assert abs(row["drop_mV"] - 100) < 1e-6 and abs(row["return_rise_mV"] - 50) < 1e-6
-    assert row["pass"] is False and (tmp_path / "dc.csv").exists()  # 150 mV of 3 V: 5 %
-    assert analysis.dc_drop(dc, max_drop=0.06, out=None)[0]["pass"] is True
+    assert "pass" not in row and row["current_A"] >= 0 and (tmp_path / "dc.csv").exists()
     (eye,) = analysis.eyes([si], min_height=0.2, min_width_ui=0.7, at=None, skip_ui=4, centre_window=0.05, edge_levels=(0.2, 0.8), out=tmp_path / "eyes.csv")
     assert eye["height_mV"] > 700 and eye["width_ui"] > 0.9 and eye["pass"]
     assert 0 < eye["rise_ps"] <= 50 and 0 < eye["fall_ps"] <= 50  # one 50 ps sample per edge
@@ -365,8 +364,8 @@ def test_current_density(tmp_path):
     J, rho, _ = plots.current_density(dc)["F.Cu"]
     expect = (1e-4 / (1.724e-8 * 25.4e-6 * 1.016e-3 * 0.254e-3)) ** 0.5
     assert rho == 1.724e-8 and abs(np.nanmax(J) / expect - 1) < 1e-9 and np.isnan(J[0, 0])
-    (row,) = analysis.current_density(dc, max_density=1e7, out=None)  # J is 3e7
-    assert row["layer"] == "F.Cu" and row["pass"] is False and row["over_limit_pct"] == 100
+    (row,) = analysis.current_density([dc], max_density=1e7, out=None)  # J is 3e7
+    assert row["side"] == dc.name and row["layer"] == "F.Cu" and row["pass"] is False and row["over_limit_pct"] == 100
     assert abs(row["max_drop_mV_per_mm"] - rho * expect) < 1e-9
 
 

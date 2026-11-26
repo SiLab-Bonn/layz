@@ -82,13 +82,13 @@ def board():
 
 
 @target
-def dc():
+def power_integrity():
     """DC of the four chips' 3 V rails at 3 A each and their returns: per net the resistance to
-    each pin, drop, current density; drop against 5 % (the constraint set in HyperLynx); pin
-    voltages, via currents, loss and current maps. (PSUB and PWell: their VRMs have no reference
+    each pin, drop, current density; pin voltages, via currents; the voltage-drop and
+    current-density maps. (PSUB and PWell: their VRMs have no reference
     pin, and HyperLynx wants one shared with every chip they feed; how to set that up is open.)"""
     board = BOARD
-    out = RESULTS / "dc"
+    out = RESULTS / "power_integrity"
 
     # the four 3 V rails, one per chip, at 3 A each, with their returns; HyperLynx's report flags
     # more than 5 % drop, 1.5e7 A/m^2 and 1 A per via
@@ -98,25 +98,29 @@ def dc():
     # currents the first run measured as sinks (1 Mohm across each), give theirs
     ret = run.dc(board, out / "return", license="HyperLynx SI/PI", nets=["/3V_1", "/3V_2", "/3V_3", "/3V_4"], include_ref=True, vrms={}, sinks={}, vrm_references={}, sink_currents={}, max_voltage_drop=5.0, max_current_density=1.5e7, max_via_current=1.0, return_from=supply / "ports.csv", return_vrm_type="simple", return_sink_resistance=1e6)
 
-    # per chip and net: resistance VRM -> sink pins, drop over them, current density (median, max)
+    # per rail: the current its sinks draw, drop and return rise; per net: resistance VRM -> sink
+    # pins, drop over them, current density (median, max)
+    analysis.dc_drop(supply, out=out / "dc_drop.csv")
     analysis.dc_table(supply, ret, out=out / "dc_table.csv")
-
-    # supply drop + return rise, at most 5 % of the VRM voltage
-    analysis.dc_drop(supply, max_drop=0.05, out=out / "dc_drop.csv")
 
     # current density in the copper, and the drop per mm it causes, against 15 A/mm² (the limit
     # set in HyperLynx: a PCB value; thin aluminium takes some 1000 A/mm², to agree on)
-    analysis.current_density(supply, max_density=1.5e7, out=out / "current_density_supply.csv")
-    analysis.current_density(ret, max_density=1.5e7, out=out / "current_density_return.csv")
+    analysis.current_density([supply, ret], max_density=1.5e7, out=out / "current_density.csv")
+
+    # every pin's current and voltage, and the resistance from the VRM to each sink pin
+    analysis.pins([supply, ret], out=out / "pins.csv")
+    analysis.resistance(supply, out=out / "resistance.csv")
+
+    # the maps for the viewer: voltage drop from the VRM per rail, current density, via current
     plots.plot_dc(supply, out, ret)
 
 
 @target
-def si():
+def signal_integrity():
     """The longest data pair, D4 (108 mm), at 160 Mb/s PRBS7: eye with ideal lines, eye with
     loss, crosstalk and jitter, and the crosstalk from ADC_4 and rst onto D4 held low."""
     board = BOARD
-    out = RESULTS / "si"
+    out = RESULTS / "signal_integrity"
 
     # eye with ideal lines: lossless, smooth, no jitter, no coupling
     ideal = run.si(

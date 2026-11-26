@@ -14,9 +14,9 @@ from layz.hyperlynx import plots
 from layz.table import table
 
 
-def dc_drop(run: Path, *, max_drop: float, out: Path | None) -> list[dict]:
-    """Per supply net: VRM voltage, lowest pin voltage, drop (V and share of the VRM voltage),
-    and the rise of its return; pass where drop + return rise stay under ``max_drop`` (share)."""
+def dc_drop(run: Path, *, out: Path | None) -> list[dict]:
+    """Per supply net: VRM voltage, the current its sinks draw, lowest pin voltage, drop, and the
+    rise of its return."""
     ports = plots._rows(run / "ports.csv")
     vrms = json.loads((run / "vrms.json").read_text())
     nets = set(json.loads((run / "summary.json").read_text())["nets"])
@@ -27,8 +27,9 @@ def dc_drop(run: Path, *, max_drop: float, out: Path | None) -> list[dict]:
         sup = [float(p["voltage_V"]) for p in ports if p["net"] == v["power_net"]]
         ret = [float(p["voltage_V"]) for p in ports if p["net"] == v["ref_net"]]
         drop, rise = v["voltage"] - min(sup), (max(ret) if ret else 0.0)
-        share = (drop + rise) / v["voltage"]
-        rows.append({"net": v["power_net"], "vrm_V": v["voltage"], "min_pin_V": min(sup), "drop_mV": drop * 1e3, "return": v["ref_net"], "return_rise_mV": rise * 1e3, "total_pct": share * 100, "limit_pct": max_drop * 100, "pass": share <= max_drop})
+        pins = set(v["power_pins"])
+        current = sum(abs(float(p["current_A"])) for p in ports if p["net"] == v["power_net"] and p["pin"] not in pins)
+        rows.append({"net": v["power_net"], "vrm_V": v["voltage"], "current_A": current, "min_pin_V": min(sup), "drop_mV": drop * 1e3, "return": v["ref_net"], "return_rise_mV": rise * 1e3})
     return table(f"DC drop ({run.name})", rows, out)
 
 
@@ -102,22 +103,43 @@ def dc_table(supply: Path, ret: Path | None, *, out: Path | None) -> list[dict]:
         drop = (volts[net] - v) if net in volts else v  # a return: its rise
         r = np.array([float(x["resistance_ohm"]) for x in res if x["net"] == net])
         j = dens.get(net, np.array([]))
-        rows.append({"net": net, "kind": "return" if net in refs else "supply", "sink_pins": len(pins), "current_A": float(sum(abs(float(p["current_A"])) for p in pins)), "R_min_mohm": float(r.min()) * 1e3 if r.size else np.nan, "R_max_mohm": float(r.max()) * 1e3 if r.size else np.nan, "drop_min_V": float(drop.min()) if drop.size else np.nan, "drop_max_V": float(drop.max()) if drop.size else np.nan, "J_median_A_mm2": float(np.median(j)) / 1e6 if j.size else np.nan, "J_max_A_mm2": float(j.max()) / 1e6 if j.size else np.nan})
+        rows.append({"net": net, "kind": "return" if net in refs else "supply", "sinks": len(pins), "current_A": float(sum(abs(float(p["current_A"])) for p in pins)), "R_min_mohm": float(r.min()) * 1e3 if r.size else np.nan, "R_max_mohm": float(r.max()) * 1e3 if r.size else np.nan, "drop_min_V": float(drop.min()) if drop.size else np.nan, "drop_max_V": float(drop.max()) if drop.size else np.nan, "J_median_A_mm2": float(np.median(j)) / 1e6 if j.size else np.nan, "J_max_A_mm2": float(j.max()) / 1e6 if j.size else np.nan})
     return table(f"DC per net ({supply.name}{' + ' + ret.name if ret is not None else ''})", rows, out)
 
 
-def current_density(run: Path, *, max_density: float, out: Path | None) -> list[dict]:
-    """Per layer of a DC run: the highest current density (A/mm²) in the copper, where, the drop
-    per length it causes (mV/mm), and the share of the copper above ``max_density`` (A/m²); pass
-    where nothing is above it. HyperLynx's own maximum is in the title, as a cross-check."""
+def current_density(runs: list[Path], *, max_density: float, out: Path | None) -> list[dict]:
+    """Per DC run (side: the supply run, the return run) and layer: the highest current density
+    (A/mm²) in the copper, where, the drop per length it causes (mV/mm), and the share of the
+    copper above ``max_density`` (A/m²); pass where nothing is above it. HyperLynx's own maxima
+    are in the title, as a cross-check."""
+    rows, own = [], []
+    for run in runs:
+        hl = json.loads((run / "summary.json").read_text())["max_current_density"]
+        own.append(f"{run.name} {hl['value'] / 1e6:.0f} A/mm² on {hl['layer']}")
+        rows += _density_rows(run, max_density)
+    return table(f"Current density (HyperLynx's own maxima: {'; '.join(own)})", rows, out)
+
+
+def _density_rows(run: Path, max_density: float) -> list[dict]:
     rows = []
     for lay, (J, rho, ext) in plots.current_density(run).items():
         if not np.isfinite(J).any():
             continue
         k = np.unravel_index(np.nanargmax(J), J.shape)
-        rows.append({"layer": lay, "max_A_per_mm2": float(np.nanmax(J)) / 1e6, "x_mm": ext[0] + (k[1] + 0.5) * (ext[1] - ext[0]) / J.shape[1], "y_mm": ext[2] + (k[0] + 0.5) * (ext[3] - ext[2]) / J.shape[0], "max_drop_mV_per_mm": rho * float(np.nanmax(J)), "over_limit_pct": 100 * float(np.nanmean(J[np.isfinite(J)] > max_density)), "limit_A_per_mm2": max_density / 1e6, "pass": bool(np.nanmax(J) <= max_density)})
-    hl = json.loads((run / "summary.json").read_text())["max_current_density"]
-    return table(f"Current density ({run.name}; HyperLynx's own maximum: {hl['value'] / 1e6:.0f} A/mm² on {hl['layer']} at ({hl['at'][0] * 1e3:.1f}, {hl['at'][1] * 1e3:.1f}) mm)", rows, out)
+        rows.append({"side": run.name, "layer": lay, "max_A_per_mm2": float(np.nanmax(J)) / 1e6, "x_mm": ext[0] + (k[1] + 0.5) * (ext[1] - ext[0]) / J.shape[1], "y_mm": ext[2] + (k[0] + 0.5) * (ext[3] - ext[2]) / J.shape[0], "max_drop_mV_per_mm": rho * float(np.nanmax(J)), "over_limit_pct": 100 * float(np.nanmean(J[np.isfinite(J)] > max_density)), "limit_A_per_mm2": max_density / 1e6, "pass": bool(np.nanmax(J) <= max_density)})
+    return rows
+
+
+def pins(runs: list[Path], *, out: Path | None) -> list[dict]:
+    """Every pin of DC runs (side: the supply run, the return run): its net, current and voltage."""
+    rows = [{"side": run.name, "pin": p["pin"], "net": p["net"], "current_A": float(p["current_A"]), "voltage_V": float(p["voltage_V"])} for run in runs for p in plots._rows(run / "ports.csv")]
+    return table(f"Pins ({', '.join(r.name for r in runs)})", rows, out, quiet=True)
+
+
+def resistance(run: Path, *, out: Path | None) -> list[dict]:
+    """HyperLynx's resistance from each VRM pin to each sink pin of its net (mohm)."""
+    rows = [{"net": x["net"], "source": x["source"], "sink": x["sink"], "R_mohm": float(x["resistance_ohm"]) * 1e3} for x in plots._rows(run / "resistance.csv")] if (run / "resistance.csv").exists() else []
+    return table(f"Resistance VRM -> sink ({run.name})", rows, out, quiet=True)
 
 
 def _at(run: Path, at: str | None) -> list[dict]:

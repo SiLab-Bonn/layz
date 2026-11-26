@@ -81,30 +81,35 @@ def board():
 
 
 @target
-def dc():
+def power_integrity():
     """DC of the ladder's 3 V supply over the flex: +3V0 from the connector to the ladder at 12 A
-    (four chips at 3 A), and its GND return; resistance, drop, current density; drop against 5 %."""
-    out = RESULTS / "dc"
+    (four chips at 3 A), and its GND return; resistance, drop, current density; the maps."""
+    out = RESULTS / "power_integrity"
     # the supply, defined here (the board's HyperLynx project has none): 3.0 V at the connector's
     # +3V0 pins, referenced to GND beside them; the load at the ladder's supply pin
     supply = run.dc(BOARD, out / "supply", license="HyperLynx SI/PI", nets=["+3V0"], include_ref=True, vrms={"+3V0": {"voltage": 3.0, "pins": ["J1.2", "J1.4", "J1.6", "J1.8", "J1.10"], "ref": ["J1.9"]}}, sinks={"+3V0": {"pins": ["iVTX1.1"], "resistance": 1e6}}, vrm_references={}, sink_currents={"+3V0": 12.0}, max_voltage_drop=5.0, max_current_density=1.5e7, max_via_current=1.0, return_from=None, return_vrm_type="simple", return_sink_resistance=1e6)
     # the return, re-solved as the supply with the currents the first run measured (HyperLynx
     # maps the loss of supply nets only)
     ret = run.dc(BOARD, out / "return", license="HyperLynx SI/PI", nets=["+3V0"], include_ref=True, vrms={"+3V0": {"voltage": 3.0, "pins": ["J1.2", "J1.4", "J1.6", "J1.8", "J1.10"], "ref": ["J1.9"]}}, sinks={"+3V0": {"pins": ["iVTX1.1"], "resistance": 1e6}}, vrm_references={}, sink_currents={}, max_voltage_drop=5.0, max_current_density=1.5e7, max_via_current=1.0, return_from=supply / "ports.csv", return_vrm_type="simple", return_sink_resistance=1e6)
+    analysis.dc_drop(supply, out=out / "dc_drop.csv")
     analysis.dc_table(supply, ret, out=out / "dc_table.csv")
-    analysis.dc_drop(supply, max_drop=0.05, out=out / "dc_drop.csv")
-    analysis.current_density(supply, max_density=1.5e7, out=out / "current_density_supply.csv")
-    analysis.current_density(ret, max_density=1.5e7, out=out / "current_density_return.csv")
+    analysis.current_density([supply, ret], max_density=1.5e7, out=out / "current_density.csv")
+
+    # every pin's current and voltage, and the resistance from the VRM to each sink pin
+    analysis.pins([supply, ret], out=out / "pins.csv")
+    analysis.resistance(supply, out=out / "resistance.csv")
+
+    # the maps for the viewer: voltage drop from the VRM per rail, current density, via current
     plots.plot_dc(supply, out, ret)
 
 
 @target
-def si():
+def signal_integrity():
     """Chip 4's data pair (DATA_CHIP_4, ladder to connector over the 45 cm flex) at 160 Mb/s
     PRBS7: eye with ideal lines, eye with loss, crosstalk and jitter, and the crosstalk from
     CLK and GPIO_4 onto it, quiet."""
     board = BOARD
-    out = RESULTS / "si"
+    out = RESULTS / "signal_integrity"
 
     # eye with ideal lines: lossless, smooth, no jitter, no coupling
     ideal = run.si(

@@ -21,6 +21,7 @@ dependencies = [
     "shapely>=2.0",        # layz.gds2hyp.traces, layz.hyperlynx
     "klayout-pex>=0.7.0",  # layz.pex: 3-D model builder for FasterCap
     "numpy",
+    "scipy",               # layz.hyperlynx.drop: the voltage-drop map (shortest paths)
     "matplotlib>=3.11",    # rc legend.linewidth (plotstyle.py); a system 3.10 would otherwise do
     "plotly",
     "pytest",              # layz doctor runs the test suite

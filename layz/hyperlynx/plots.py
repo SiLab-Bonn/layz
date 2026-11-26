@@ -106,16 +106,35 @@ def _loss(ports, volts: dict) -> float:
 @mpl.rc_context(PLOT_STYLE)
 def board_overlay(run: Path, out: Path, ret: Path | None = None) -> Path:
     """A DC run's results for `layz web` to draw over the board, in the .hyp's coordinates (mm):
-    the current density per layer (A/mm², supply and return runs together) and each pin's voltage
-    and current."""
+    per layer and side (the supply run, the return run), the voltage drop from the VRM (mV,
+    layz.hyperlynx.drop), the current density (A/mm²) and which net each cell is; each pin's
+    voltage and current, each via's current. The grids go as base64 (float32, int16), row 0 at the
+    bottom."""
+    import base64
     import json
 
-    layers = {}
+    from layz import log
+    from layz.hyperlynx import drop
+
+    b64 = lambda a, t: base64.b64encode(np.ascontiguousarray(a, dtype=t).tobytes()).decode()
+    nets, sides, layers, checks = [], {}, {}, {}
     for r in [run] + ([ret] if ret else []):
-        for lay, (J, _, ext) in current_density(r).items():
-            if lay in layers and layers[lay][1] == ext and layers[lay][0].shape == J.shape:
-                J = np.fmax(layers[lay][0], J)
-            layers[lay] = (J, ext)
+        side = "return" if r is ret else "supply"
+        m = drop.drop_map(r)
+        checks[side] = m["check"]
+        c = m["check"]
+        if c["pins"]:
+            errs = np.array([abs(me - hl) for hl, me, _ in m["pins"]]) * 1e3
+            log.info("layz", f"voltage-drop map ({side}): {c['pins']} sink pins, against HyperLynx's: median {np.median(errs):.1f} mV off, at most {errs.max():.0f} mV, of up to {c['max_drop_mV']:.0f} mV")
+        first = len(nets)
+        nets += [{"name": n, "side": side} for n in m["nets"]]
+        for lay, g in m["layers"].items():
+            ny, nx = g["drop"].shape
+            if not (g["net"] >= 0).any():
+                continue
+            net = np.where(g["net"] >= 0, g["net"] + first, -1)
+            layers.setdefault(lay, {})[side] = {"extent": m["extent"], "nx": nx, "ny": ny, "drop": b64(g["drop"] * 1e3, "<f4"), "J": b64(g["J"] / 1e6, "<f4"), "net": b64(net, "<i2")}
+        sides[side] = r.name
     pins = []
     for r in [run] + ([ret] if ret else []):
         for p in _rows(r / "ports.csv"):
@@ -126,7 +145,7 @@ def board_overlay(run: Path, out: Path, ret: Path | None = None) -> Path:
         for v in _rows(r / "vias.csv"):
             if v.get("x1"):
                 vias.append({"net": v["net"], "x": float(v["x1"]) * MM, "y": float(v["y1"]) * MM, "i": abs(float(v["current_A"])), "run": r.name})
-    data = {"kind": "dc", "unit": "A/mm²", "replaces": ["dc_current_density", "dc_loss_map", "dc_pin_voltage", "dc_via_current"], "vias": vias, "layers": {lay: {"extent": ext, "ny": J.shape[0], "nx": J.shape[1], "z": [[None if not np.isfinite(v) else round(float(v) / 1e6, 6) for v in row] for row in J]} for lay, (J, ext) in layers.items()}, "pins": pins}
+    data = {"kind": "pi", "replaces": ["dc_current_density", "dc_loss_map", "dc_pin_voltage", "dc_via_current"], "nets": nets, "layers": layers, "check": checks, "pins": pins, "vias": vias}
     path = out / "dc_board.overlay.json"
     path.write_text(json.dumps(data))
     return path

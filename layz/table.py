@@ -6,9 +6,10 @@ import csv
 from pathlib import Path
 
 
-def table(title: str, rows: list[dict], out: Path | None) -> list[dict]:
+def table(title: str, rows: list[dict], out: Path | None, quiet: bool = False) -> list[dict]:
     """Print a check's table and write it as CSV; rows that fail (pass False) count as the
-    step's errors (layz.log.COUNTS: the flow marks the step)."""
+    step's errors (layz.log.COUNTS: the flow marks the step). ``quiet``: a long listing, written
+    and named in the log, not printed."""
     from layz import log
 
     if not rows:
@@ -17,10 +18,13 @@ def table(title: str, rows: list[dict], out: Path | None) -> list[dict]:
     keys = list(rows[0])
     fmt = lambda v: f"{v:.4g}" if isinstance(v, float) else str(v)
     width = {k: max(len(k), *(len(fmt(r[k])) for r in rows)) for k in keys}
-    print(title)
-    print("  " + "  ".join(k.ljust(width[k]) for k in keys))
-    for r in rows:
-        print("  " + "  ".join(fmt(r[k]).ljust(width[k]) for k in keys))
+    if quiet:
+        print(f"{title}: {len(rows)} rows" + (f", in {out}" if out is not None else ""))
+    else:
+        print(title)
+        print("  " + "  ".join(k.ljust(width[k]) for k in keys))
+        for r in rows:
+            print("  " + "  ".join(fmt(r[k]).ljust(width[k]) for k in keys))
     if out is not None:
         out.parent.mkdir(parents=True, exist_ok=True)
         with open(out, "w", newline="") as f:
