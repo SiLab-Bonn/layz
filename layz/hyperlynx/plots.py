@@ -593,7 +593,7 @@ def tdr(run: Path, *, rise_ps: float, er_eff: float) -> dict:
     def step(s: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         su = np.interp(fu, f, s.real) + 1j * np.interp(fu, f, s.imag)  # DC: the lowest frequency's
         pad = 8  # zeros above the data's top frequency: time steps of 1/(16 fmax), not 1/(2 fmax)
-        h = np.fft.irfft(su * edge, n=2 * (len(fu) - 1) * pad) * pad
+        h = np.fft.irfft(su * edge, n=2 * (len(fu) - 1) * pad)  # its sum stays the DC value, whatever its length
         m = len(h) // 8  # the response's ringing before t = 0 sits at the period's end: summed first
         return np.arange(len(h) - m) / (len(h) * df), np.cumsum(np.roll(h, m))[m:]
 

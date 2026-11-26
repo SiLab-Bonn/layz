@@ -457,7 +457,7 @@ def test_tdr(tmp_path):
     from layz.hyperlynx import plots
 
     f = np.linspace(1e6, 5e9, 5000)
-    for name, s11 in (("line", np.zeros_like(f)), ("short", -np.ones_like(f))):
+    for name, s11 in (("line", np.zeros_like(f)), ("short", -np.ones_like(f)), ("mismatch", np.full_like(f, 0.2))):
         run = tmp_path / name
         run.mkdir()
         s21 = np.exp(-2j * np.pi * f * 1e-9)
@@ -472,6 +472,8 @@ def test_tdr(tmp_path):
         late = tr["t"] > 0.2e-9
         if name == "line":
             assert np.allclose(tr["Z"][late], 50.0, atol=0.5)
-        else:
-            assert np.allclose(tr["rho"][late], -0.999, atol=0.01)
+        elif name == "mismatch":  # rho 0.2: 75 ohm
+            assert np.allclose(tr["rho"][late], 0.2, atol=0.005) and np.allclose(tr["Z"][late], 75.0, atol=1.0)
+        else:  # once the edge has settled
+            assert np.allclose(tr["rho"][tr["t"] > 0.5e-9], -0.999, atol=0.01)
         assert abs(tr["d"][-1] / tr["t"][-1] - 2.998e8 / 2 / 2) < 1e3  # v/2 at er 4
