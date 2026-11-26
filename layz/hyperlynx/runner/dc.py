@@ -7,7 +7,7 @@ linear, so with the VRM moved to the return pins and the measured return current
 is the return path's map: its pin voltages are the VRM voltage minus the ground rise).
 
 Outputs: ports.csv, vias.csv, resistance.csv (VRM to each sink pin, supply runs), report.csv,
-powerscope.tps, Thermal__<net>.txt, vrms.json, summary.json
+powerscope.tps, Thermal_<net>.txt ("/" becomes "_"), vrms.json, summary.json
 """
 
 import csv

@@ -6,7 +6,7 @@ schematic, into one folder.
     checked = run.lvs(GDS, RESULTS / "lvs", stack="uni-bonn-rdl", schematic=SCH)
     analysis.findings(checked, out=checked / "summary.csv")
 
-Writes lvs.lyrdb (KLayout markers), findings.csv (kind, what, x, y µm), summary.json (the
+Writes lvs.lyrdb (KLayout markers), findings.csv (kind, what; their places in markers.json), summary.json (the
 counts) and job.json. A PCB is compared with its schematic by KiCad itself (its schematic
 parity: the .kicad_sch next to the board, by the project's name):
 

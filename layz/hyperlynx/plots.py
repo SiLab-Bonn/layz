@@ -77,7 +77,7 @@ def current_density(run: Path) -> dict[str, tuple[np.ndarray, float, list[float]
     hyp = next((run / "board").glob("*.hyp"))
     rho = {m.group(2): float(m.group(1)) for m in re.finditer(r'\(SIGNAL [^)]*?C=([-\d.eE+]+) L="([^"]+)"', hyp.read_text())}
     out: dict[str, tuple[np.ndarray, float, list[float]]] = {}
-    for f in sorted(run.glob("Thermal__*.txt")):
+    for f in sorted(run.glob("Thermal_*.txt")):  # Thermal_<net>.txt: "/3V_1" makes Thermal__3V_1
         lines = f.read_text().splitlines()
         thick = {l.split(",")[1].strip().strip('"'): float(l.split(",")[3]) * IN / MM for l in lines if l.startswith("Layer:")}
         grids, cell, ext = load_thermal(f)
@@ -197,11 +197,11 @@ def plot_dc(run: Path, out: Path, ret: Path | None = None) -> list[Path]:
         paths += save_figure(fig, out / "dc_via_current")
 
     maps = []
-    for f in sorted(run.glob("Thermal__*.txt")):
+    for f in sorted(run.glob("Thermal_*.txt")):
         maps.append(("Supply", load_thermal(f), _loss(ports, sup)))
     if ret is not None:
         rports = _rows(ret / "ports.csv")
-        for f in sorted(ret.glob("Thermal__*.txt")):
+        for f in sorted(ret.glob("Thermal_*.txt")):
             maps.append(("Return", load_thermal(f), _loss(ports, ref)))
         del rports
     if maps:
@@ -587,12 +587,13 @@ def tdr(run: Path, *, rise_ps: float, er_eff: float) -> dict:
     fu = np.arange(0.0, f.max() + df / 2, df)
     # the edge: a Gaussian (10-90 % rise = 2.563 sigma), no sharper than the data's bandwidth
     # allows, and tapered to nothing over its top fifth (a cut spectrum rings)
-    sigma = max(rise_ps * 1e-12, 2.563 / (np.pi * f.max())) / 2.563
+    sigma = max(rise_ps * 1e-12 / 2.563, 0.6 / (np.pi * f.max()))
     edge = np.exp(-2 * (np.pi * fu * sigma) ** 2) * np.where(fu > 0.8 * f.max(), 0.5 * (1 + np.cos(np.pi * (fu - 0.8 * f.max()) / (0.2 * f.max()))), 1.0)
 
     def step(s: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         su = np.interp(fu, f, s.real) + 1j * np.interp(fu, f, s.imag)  # DC: the lowest frequency's
-        h = np.fft.irfft(su * edge, n=2 * (len(fu) - 1))
+        pad = 8  # zeros above the data's top frequency: time steps of 1/(16 fmax), not 1/(2 fmax)
+        h = np.fft.irfft(su * edge, n=2 * (len(fu) - 1) * pad) * pad
         m = len(h) // 8  # the response's ringing before t = 0 sits at the period's end: summed first
         return np.arange(len(h) - m) / (len(h) * df), np.cumsum(np.roll(h, m))[m:]
 
