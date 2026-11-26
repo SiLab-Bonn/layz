@@ -446,3 +446,32 @@ def test_flow_skip(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     (tmp_path / "flow.py").write_text('from layz.flow import Skip, target\n\n@target\ndef a():\n    raise Skip("no board")\n\n@target\ndef b():\n    open("b.ran", "w").write("")\n')
     assert targets.main([str(tmp_path)]) == 0 and (tmp_path / "b.ran").exists()
+
+
+def test_tdr(tmp_path):
+    """A matched 1 ns line reads 50 ohm and its delay; a short at the port reads rho -1."""
+    import json
+
+    import numpy as np
+
+    from layz.hyperlynx import plots
+
+    f = np.linspace(1e6, 5e9, 5000)
+    for name, s11 in (("line", np.zeros_like(f)), ("short", -np.ones_like(f))):
+        run = tmp_path / name
+        run.mkdir()
+        s21 = np.exp(-2j * np.pi * f * 1e-9)
+        with open(run / "sparams.s2p", "w") as fh:
+            fh.write("# HZ S RI R 50\n")
+            for k, x in enumerate(f):  # 2-port order: S11 S21 S12 S22
+                fh.write(f"{x} {s11[k]} 0 {s21[k].real} {s21[k].imag} {s21[k].real} {s21[k].imag} {s11[k]} 0\n")
+        (run / "sparam.json").write_text(json.dumps({"pins": ["A", "B"], "file": "sparams.s2p", "reference_impedance": 50.0}))
+        r = plots.tdr(run, rise_ps=50.0, er_eff=4.0)
+        tr = r["traces"]["A"]
+        assert abs(r["delay_s"] - 1e-9) < 1e-11
+        late = tr["t"] > 0.2e-9
+        if name == "line":
+            assert np.allclose(tr["Z"][late], 50.0, atol=0.5)
+        else:
+            assert np.allclose(tr["rho"][late], -0.999, atol=0.01)
+        assert abs(tr["d"][-1] / tr["t"][-1] - 2.998e8 / 2 / 2) < 1e3  # v/2 at er 4

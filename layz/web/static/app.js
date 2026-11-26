@@ -327,6 +327,13 @@ async function plotPane(design, p) {
   const select = fig.axes.length < 2 || stack ? null : !byY
     ? h("select", { class: "panelpick", onchange: (e) => { pick = Number(e.target.value); draw(); } }, fig.axes.map((ax, k) => h("option", { value: k, selected: k === pick ? "" : null }, label(ax, k))))
     : h("span", { class: "pages" }, fig.axes.map((ax, k) => h("a", { class: k === pick ? "on" : null, onclick: (e) => { pick = k; e.target.parentNode.querySelectorAll("a").forEach((x, j) => x.classList.toggle("on", j === k)); draw(); } }, label(ax, k))));
+  const tops = [];  // [panel axis, its top axis, the map between them]
+  const follow = (ev) => {
+    if (!tops.length || Object.keys(ev).some((key) => tops.some(([, id]) => key.startsWith(`xaxis${id}`)))) return;
+    const upd = {};
+    for (const [n, id, f] of tops) { const r = el.layout[`xaxis${n}`].range; upd[`xaxis${id}.range`] = [f(r[0]), f(r[1])]; }
+    window.Plotly.relayout(el, upd);
+  };
   const draw = () => {
     // one panel at a time, always over the whole area (not where the PNG's layout put it), so every
     // plot has one width
@@ -337,12 +344,20 @@ async function plotPane(design, p) {
     const ink = css("--ink-1"), grid = css("--line-2"), dim = css("--ink-4");
     const traces = [], layout = { paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: { color: ink, family: css("--font-mono"), size: 11 }, margin: { l: 60, r: 20, t: fig.title ? 36 : 14, b: 84 }, showlegend: true, legend: { orientation: "h", x: 0.5, xanchor: "center", yref: "container", y: 0.01, yanchor: "bottom", bgcolor: "rgba(0,0,0,0)", font: { size: 10 } }, title: fig.title ? { text: fig.title, font: { size: 12 } } : undefined, annotations: [] };
     const seen = new Map();  // the PNG's colours, one palette colour each (across stacked panels too)
+    tops.length = 0;
     axesShown.forEach((ax, k) => {
       const n = k ? k + 1 : "";
       const axis = (label, log, lim, dom) => ({ title: { text: label, font: { size: 11 } }, type: log ? "log" : "linear", range: log ? lim.map((v) => Math.log10(Math.max(v, 1e-300))) : lim, domain: dom, gridcolor: grid, zerolinecolor: grid, linecolor: dim, mirror: true, ticks: "inside" });
       layout[`xaxis${n}`] = { ...axis(ax.xlabel, ax.xlog, ax.xlim, [ax.box[0], ax.box[2]]), anchor: `y${n}`, ...(stack && k ? { matches: "x" } : {}), ...(stack && k < axesShown.length - 1 ? { showticklabels: false } : {}) };
       layout[`yaxis${n}`] = { ...axis(ax.ylabel, ax.ylog, ax.ylim, [ax.box[1], ax.box[3]]), anchor: `x${n}` };
       if (ax.title) layout.annotations.push({ text: ax.title, xref: "paper", yref: "paper", x: (ax.box[0] + ax.box[2]) / 2, y: ax.box[3], yanchor: "bottom", showarrow: false, font: { size: 11 } });
+      if (ax.x2) {  // a second x axis on top, linear in the first (TDR: distance over time), following its zoom
+        const id = 20 + k, f = (v) => ax.x2.k * v + ax.x2.b;
+        layout[`xaxis${n}`].mirror = false;
+        layout[`xaxis${id}`] = { ...axis(ax.x2.label, false, ax.xlim.map(f), [ax.box[0], ax.box[2]]), overlaying: `x${n}`, side: "top", anchor: `y${n}`, showgrid: false, mirror: false };
+        traces.push({ type: "scatter", mode: "lines", xaxis: `x${id}`, yaxis: `y${n}`, x: ax.xlim.map(f), y: [ax.ylim[0], ax.ylim[0]], opacity: 0, hoverinfo: "skip", showlegend: false });
+        tops.push([n, id, f]);
+      }
       for (const im of ax.images) {
         const ny = im.z.length, nx = im.z[0].length;
         traces.push({ type: "heatmap", xaxis: `x${n}`, yaxis: `y${n}`, z: im.log ? im.z.map((r) => r.map((v) => (v > 0 ? Math.log10(v) : null))) : im.z, x0: im.x0 + (im.x1 - im.x0) / nx / 2, dx: (im.x1 - im.x0) / nx, y0: im.y0 + (im.y1 - im.y0) / ny / 2, dy: (im.y1 - im.y0) / ny, zmin: im.log ? Math.log10(im.zmin) : im.zmin, zmax: im.log ? Math.log10(im.zmax) : im.zmax, colorscale: [[0, "#5e81ac"], [1, "#bf616a"]], showscale: k === 0, colorbar: { title: { text: im.log ? "log10" : "", side: "right" }, thickness: 10 }, hoverongaps: false });
@@ -350,7 +365,8 @@ async function plotPane(design, p) {
       const scale = (rev) => (rev ? [[0, "#bf616a"], [1, "#5e81ac"]] : [[0, "#5e81ac"], [1, "#bf616a"]]);
       for (const m of ax.meshes || []) {
         const mid = (e) => e.slice(1).map((v, j) => (v + e[j]) / 2);
-        traces.push({ type: "heatmap", xaxis: `x${n}`, yaxis: `y${n}`, x: mid(m.x), y: mid(m.y), z: m.log ? m.z.map((r) => r.map((v) => (v > 0 ? Math.log10(v) : null))) : m.z, colorscale: scale(false), showscale: false, hoverongaps: false });
+        // a density (an eye's samples): smoothed, with its colour bar as the legend
+        traces.push({ type: "heatmap", xaxis: `x${n}`, yaxis: `y${n}`, x: mid(m.x), y: mid(m.y), z: m.log ? m.z.map((r) => r.map((v) => (v > 0 ? Math.log10(v) : null))) : m.z, colorscale: scale(false), zsmooth: "best", showscale: k === 0, colorbar: { thickness: 10, len: 0.6, title: { text: m.log ? "samples (log10)" : "samples", side: "right" } }, hoverongaps: false });
       }
       for (const f of ax.fills || []) traces.push({ type: "scatter", mode: "lines", xaxis: `x${n}`, yaxis: `y${n}`, x: [...f.x, f.x[0]], y: [...f.y, f.y[0]], fill: "toself", fillcolor: f.color, opacity: Math.min(0.25, f.alpha), line: { width: 0 }, hoverinfo: "skip", showlegend: false });
       for (const p of ax.points || []) {
@@ -367,7 +383,7 @@ async function plotPane(design, p) {
         traces.push({ type: "scattergl", mode: l.markers ? "markers" : "lines", xaxis: `x${n}`, yaxis: `y${n}`, x: l.x, y: l.y, name: l.label || undefined, showlegend: !!l.label, line: { color: c, width: Math.max(1.2, l.width), dash: l.dash ? "dash" : "solid" }, marker: { color: c, size: 4 } });
       }
     });
-    window.Plotly.react(el, traces, layout, { responsive: true, displaylogo: false, displayModeBar: false });
+    window.Plotly.react(el, traces, layout, { responsive: true, displaylogo: false, displayModeBar: false }).then(() => { if (!el.followed) { el.on("plotly_relayout", follow); el.followed = true; } });
   };
   themeListeners.add(draw);
   requestAnimationFrame(draw);

@@ -116,9 +116,30 @@ def power_integrity():
 
 
 @target
+def sparams():
+    """4-port S-parameters of D4 (P, N at the driver, then at the receiver); insertion and
+    return loss at its Nyquist frequency, 80 MHz."""
+    board = BOARD
+    out = RESULTS / "sparams"
+
+    # 1 MHz to 5 GHz, adaptive sweep at medium tolerance, 50 ohm ports, real line models
+    d4 = run.sparam(board, out / "d4", license="HyperLynx SI/PI", pins=["V4.101", "V4.102", "VTX2.107", "VTX2.108"], fmin=1e6, fmax=5e9, sweep="adaptive", steps=500, steps_per_decade=100, tolerance="medium", reference_impedance=50.0, lossy=True, roughness=True, trapezoid=True, nonfunctional_pads=False)
+
+    # SDD21 at least -3 dB, SDD11 at most -10 dB (first guesses, to agree on)
+    analysis.sparams(d4, at_hz=80e6, min_sdd21_db=-3.0, max_sdd11_db=-10.0, out=out / "sparams.csv")
+    plots.plot_sparam(d4, out)
+
+
+@target
 def signal_integrity():
     """The longest data pair, D4 (108 mm), at 160 Mb/s PRBS7: eye with ideal lines, eye with
     loss, crosstalk and jitter, and the crosstalk from ADC_4 and rst onto D4 held low."""
+
+    # TDR of the pair from its S-parameters (the sparams step): a 50 ps step into each port and
+    # each end's pair; distance at v = c/sqrt(eps_eff), eps_eff 3.3 (the dielectric's, to agree on)
+    sp = RESULTS / "sparams" / "d4"
+    plots.plot_tdr(sp, RESULTS / "signal_integrity", rise_ps=50.0, er_eff=3.3)
+    analysis.tdr(sp, rise_ps=50.0, er_eff=3.3, out=RESULTS / "signal_integrity" / "tdr.csv")
     board = BOARD
     out = RESULTS / "signal_integrity"
 
@@ -226,18 +247,3 @@ def signal_integrity():
     analysis.eyes([ideal, real], min_height=0.2, min_width_ui=0.7, at="VTX2", skip_ui=4, centre_window=0.05, edge_levels=(0.2, 0.8), out=out / "eyes.csv")
     analysis.crosstalk(xt, max_noise=0.1, at="VTX2", settle=0.1, out=out / "crosstalk.csv")
     plots.plot_si([ideal, real, xt], out, at="VTX2", skip_ui=4, centre_window=0.05, edge_levels=(0.2, 0.8), settle=0.1)
-
-
-@target
-def sparams():
-    """4-port S-parameters of D4 (P, N at the driver, then at the receiver); insertion and
-    return loss at its Nyquist frequency, 80 MHz."""
-    board = BOARD
-    out = RESULTS / "sparams"
-
-    # 1 MHz to 5 GHz, adaptive sweep at medium tolerance, 50 ohm ports, real line models
-    d4 = run.sparam(board, out / "d4", license="HyperLynx SI/PI", pins=["V4.101", "V4.102", "VTX2.107", "VTX2.108"], fmin=1e6, fmax=5e9, sweep="adaptive", steps=500, steps_per_decade=100, tolerance="medium", reference_impedance=50.0, lossy=True, roughness=True, trapezoid=True, nonfunctional_pads=False)
-
-    # SDD21 at least -3 dB, SDD11 at most -10 dB (first guesses, to agree on)
-    analysis.sparams(d4, at_hz=80e6, min_sdd21_db=-3.0, max_sdd11_db=-10.0, out=out / "sparams.csv")
-    plots.plot_sparam(d4, out)

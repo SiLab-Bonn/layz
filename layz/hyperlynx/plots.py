@@ -478,7 +478,7 @@ def plot_si(runs: list[Path], out: Path, *, at: str | None, skip_ui: float, cent
             t, v = wave(r / w["file"])
             e = eye(t, v, ui, skip_ui=skip_ui, centre_window=centre_window, edge_levels=edge_levels)
             span = max(abs(v).max(), 1e-3) * 1.1
-            nx, ny = 400, 240
+            nx, ny = 800, 480  # fine bins: the eye's traces, not boxes
             td, vd = densify(t, v, dv=span / ny, dt=ui / (nx / 2))  # a point in every bin it crosses
             keep = td > td[0] + skip_ui * ui
             # each eye centred at 1 UI, its crossings near 0.5 and 1.5
@@ -572,6 +572,75 @@ def read_touchstone(path: Path) -> tuple[np.ndarray, np.ndarray]:
     s = x + 1j * y if fmt == "RI" else (x if fmt == "MA" else 10 ** (x / 20)) * np.exp(1j * np.deg2rad(y))
     s = s.reshape(-1, n, n)
     return a[:, 0] * unit, (np.swapaxes(s, 1, 2) if n == 2 else s)  # 2-port files are column-major
+
+
+def tdr(run: Path, *, rise_ps: float, er_eff: float) -> dict:
+    """Time-domain reflectometry from an S-parameter run: a step of ``rise_ps`` (10-90 %, a
+    Gaussian edge) into each port, and for a 4-port (P, N at one end, then the other) into each
+    end's pair, differentially. Per trace (label): t (s), the distance (m; t·v/2, v = c/√er_eff),
+    the reflection coefficient ρ, the impedance Z = Z0·(1+ρ)/(1-ρ) and the TDR voltage (1+ρ)/2 of
+    a 1 V step. Shown up to 1.5 round trips (the line's delay: S21's phase)."""
+    info = json.loads((run / "sparam.json").read_text())
+    f, S = read_touchstone(run / info["file"])
+    pins, n, z0 = info["pins"], S.shape[1], float(info.get("reference_impedance", 50.0))
+    df = f.min()
+    fu = np.arange(0.0, f.max() + df / 2, df)
+    # the edge: a Gaussian (10-90 % rise = 2.563 sigma), no sharper than the data's bandwidth
+    # allows, and tapered to nothing over its top fifth (a cut spectrum rings)
+    sigma = max(rise_ps * 1e-12, 2.563 / (np.pi * f.max())) / 2.563
+    edge = np.exp(-2 * (np.pi * fu * sigma) ** 2) * np.where(fu > 0.8 * f.max(), 0.5 * (1 + np.cos(np.pi * (fu - 0.8 * f.max()) / (0.2 * f.max()))), 1.0)
+
+    def step(s: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        su = np.interp(fu, f, s.real) + 1j * np.interp(fu, f, s.imag)  # DC: the lowest frequency's
+        h = np.fft.irfft(su * edge, n=2 * (len(fu) - 1))
+        m = len(h) // 8  # the response's ringing before t = 0 sits at the period's end: summed first
+        return np.arange(len(h) - m) / (len(h) * df), np.cumsum(np.roll(h, m))[m:]
+
+    traces = {}
+    if n == 4:  # ports 1,2 at one end, 3,4 at the other, P before N
+        M = np.array([[1, -1, 0, 0], [0, 0, 1, -1], [1, 1, 0, 0], [0, 0, 1, 1]]) / np.sqrt(2)
+        Smm = M @ S @ M.T
+        traces[f"{pins[0]}/{pins[1]} (diff)"] = (Smm[:, 0, 0], 2 * z0)
+        traces[f"{pins[2]}/{pins[3]} (diff)"] = (Smm[:, 1, 1], 2 * z0)
+        thru = S[:, 2, 0]
+    else:
+        thru = S[:, 1, 0] if n > 1 else S[:, 0, 0]
+    for k in range(n):
+        traces[pins[k]] = (S[:, k, k], z0)
+    w = 2 * np.pi * f
+    low = f <= max(f.min() * 50, 1e8)  # the line's delay from S21's phase at low frequencies
+    delay = float(-np.polyfit(w[low], np.unwrap(np.angle(thru[low])), 1)[0]) if low.sum() > 2 and n > 1 else 1e-9
+    v = 2.998e8 / np.sqrt(er_eff)
+    out = {"delay_s": delay, "v": v, "rise_ps": sigma * 2.563e12, "traces": {}}
+    for label, (s, zref) in traces.items():
+        t, rho = step(s)
+        keep = t <= 3 * max(delay, 1e-10)
+        rho = np.clip(rho[keep], -0.999, 0.999)
+        out["traces"][label] = {"t": t[keep], "d": t[keep] * v / 2, "rho": rho, "Z": zref * (1 + rho) / (1 - rho), "V": (1 + rho) / 2, "z0": zref}
+    return out
+
+
+@mpl.rc_context(PLOT_STYLE)
+def plot_tdr(run: Path, out: Path, *, rise_ps: float, er_eff: float) -> list[Path]:
+    """TDR (tdr()): impedance, reflection coefficient and voltage over time (bottom) and distance
+    (top), every port and pair."""
+    r = tdr(run, rise_ps=rise_ps, er_eff=er_eff)
+    fig, axes = plt.subplots(3, 1, figsize=(9.6, 8.4), sharex=True)
+    for (label, tr), c in zip(r["traces"].items(), CURVE_COLORS):
+        axes[0].plot(tr["t"] * 1e9, tr["Z"], color=c, label=label)
+        axes[1].plot(tr["t"] * 1e9, tr["rho"], color=c, label=label)
+        axes[2].plot(tr["t"] * 1e9, tr["V"], color=c, label=label)
+    for ax, lab in zip(axes, ("Z (ohm)", "Reflection coefficient rho", "TDR voltage (V)")):
+        ax.set_ylabel(lab)
+        style_grid(ax)
+    axes[0].set_title(f"TDR, {r['rise_ps']:.0f} ps step (one-way delay {r['delay_s'] * 1e9:.2f} ns)", fontsize=10)
+    axes[0].legend(loc="upper right", fontsize=8)
+    axes[-1].set_xlabel("Time (ns)")
+    mm_per_ns = r["v"] / 2 * 1e-9 * 1e3  # round trip: half the distance
+    for ax in axes:
+        sec = ax.secondary_xaxis("top", functions=(lambda t, k=mm_per_ns: t * k, lambda d, k=mm_per_ns: d / k))
+        sec.set_xlabel("Distance (mm)" if ax is axes[0] else "")
+    return list(save_figure(fig, out / "tdr"))
 
 
 @mpl.rc_context(PLOT_STYLE)

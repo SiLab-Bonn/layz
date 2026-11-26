@@ -189,3 +189,16 @@ def sparams(run: Path, *, at_hz: float, min_sdd21_db: float, max_sdd11_db: float
     sdd21, sdd11 = db(Smm[k, 1, 0]), db(Smm[k, 0, 0])
     rows = [{"pins": " ".join(info["pins"]), "f_MHz": f[k] / 1e6, "SDD21_dB": sdd21, "SDD11_dB": sdd11, "SCD21_dB": db(Smm[k, 3, 0]), "pass": bool(sdd21 >= min_sdd21_db and sdd11 <= max_sdd11_db)}]
     return table(f"S-parameters at {at_hz / 1e6:.0f} MHz (limits: SDD21 >= {min_sdd21_db} dB, SDD11 <= {max_sdd11_db} dB)", rows, out)
+
+
+def tdr(run: Path, *, rise_ps: float, er_eff: float, out: Path | None) -> list[dict]:
+    """Per port and pair of an S-parameter run (plots.tdr): the reference impedance, the lowest
+    and highest impedance seen and where (distance), and the impedance at the far end."""
+    r = plots.tdr(run, rise_ps=rise_ps, er_eff=er_eff)
+    rows = []
+    for label, t in r["traces"].items():
+        inside = t["t"] <= 2 * r["delay_s"]  # the line itself, up to its round trip
+        z, d = t["Z"][inside], t["d"][inside]
+        lo, hi = int(np.argmin(z)), int(np.argmax(z))
+        rows.append({"trace": label, "Z0_ohm": t["z0"], "Z_min_ohm": float(z[lo]), "at_min_mm": float(d[lo] * 1e3), "Z_max_ohm": float(z[hi]), "at_max_mm": float(d[hi] * 1e3), "Z_end_ohm": float(t["Z"][-1])})
+    return table(f"TDR ({run.name}; {r['rise_ps']:.0f} ps step, one-way delay {r['delay_s'] * 1e9:.2f} ns)", rows, out)

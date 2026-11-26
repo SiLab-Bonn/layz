@@ -276,7 +276,13 @@ def figure_data(fig: plt.Figure) -> dict:
         if not (lines or images or points or meshes or fills):
             continue
         kept.append(ax)
-        axes.append({"box": [box.x0, box.y0, box.x1, box.y1], "title": ax.get_title(), "xlabel": ax.get_xlabel(), "ylabel": ax.get_ylabel(), "xlog": ax.get_xscale() == "log", "ylog": ax.get_yscale() == "log", "xlim": list(ax.get_xlim()), "ylim": list(ax.get_ylim()), "equal": ax.get_aspect() == 1.0, "lines": lines, "images": images, "points": points, "meshes": meshes, "fills": fills, "texts": texts})
+        x2 = None  # a second x axis on top (TDR: distance over time), linear in the first
+        for child in getattr(ax, "child_axes", []):
+            fwd = getattr(child, "_functions", None)
+            if type(child).__name__ == "SecondaryAxis" and fwd and getattr(child, "_orientation", "x") == "x":
+                b0 = float(fwd[0](np.array([0.0]))[0])
+                x2 = {"label": child.get_xlabel(), "k": float(fwd[0](np.array([1.0]))[0]) - b0, "b": b0}
+        axes.append({"x2": x2, "box": [box.x0, box.y0, box.x1, box.y1], "title": ax.get_title(), "xlabel": ax.get_xlabel(), "ylabel": ax.get_ylabel(), "xlog": ax.get_xscale() == "log", "ylog": ax.get_yscale() == "log", "xlim": list(ax.get_xlim()), "ylim": list(ax.get_ylim()), "equal": ax.get_aspect() == 1.0, "lines": lines, "images": images, "points": points, "meshes": meshes, "fills": fills, "texts": texts})
     title = fig._suptitle.get_text() if getattr(fig, "_suptitle", None) else ""
     # panels over one x axis, one above the other (a time axis: aggressors above, victim below):
     # the viewer stacks them as the PNG does

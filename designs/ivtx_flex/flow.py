@@ -104,10 +104,27 @@ def power_integrity():
 
 
 @target
+def sparams():
+    """4-port S-parameters of chip 4's data pair (P, N at the ladder, then at the connector);
+    insertion and return loss at its Nyquist frequency, 80 MHz."""
+    out = RESULTS / "sparams"
+    pair = run.sparam(BOARD, out / "data4", license="HyperLynx SI/PI", pins=["iVTX1.15", "iVTX1.16", "J1.29", "J1.31"], fmin=1e6, fmax=5e9, sweep="adaptive", steps=500, steps_per_decade=100, tolerance="medium", reference_impedance=50.0, lossy=True, roughness=True, trapezoid=True, nonfunctional_pads=False)
+    # SDD21 at least -3 dB, SDD11 at most -10 dB (first guesses, to agree on)
+    analysis.sparams(pair, at_hz=80e6, min_sdd21_db=-3.0, max_sdd11_db=-10.0, out=out / "sparams.csv")
+    plots.plot_sparam(pair, out)
+
+
+@target
 def signal_integrity():
     """Chip 4's data pair (DATA_CHIP_4, ladder to connector over the 45 cm flex) at 160 Mb/s
     PRBS7: eye with ideal lines, eye with loss, crosstalk and jitter, and the crosstalk from
     CLK and GPIO_4 onto it, quiet."""
+
+    # TDR of the pair from its S-parameters (the sparams step): a 50 ps step into each port and
+    # each end's pair; distance at v = c/sqrt(eps_eff), eps_eff 3.6 (the dielectric's, to agree on)
+    sp = RESULTS / "sparams" / "data4"
+    plots.plot_tdr(sp, RESULTS / "signal_integrity", rise_ps=50.0, er_eff=3.6)
+    analysis.tdr(sp, rise_ps=50.0, er_eff=3.6, out=RESULTS / "signal_integrity" / "tdr.csv")
     board = BOARD
     out = RESULTS / "signal_integrity"
 
@@ -216,14 +233,3 @@ def signal_integrity():
     analysis.eyes([ideal, real], min_height=0.2, min_width_ui=0.7, at="J1", skip_ui=4, centre_window=0.05, edge_levels=(0.2, 0.8), out=out / "eyes.csv")
     analysis.crosstalk(xt, max_noise=0.1, at="J1", settle=0.1, out=out / "crosstalk.csv")
     plots.plot_si([ideal, real, xt], out, at="J1", skip_ui=4, centre_window=0.05, edge_levels=(0.2, 0.8), settle=0.1)
-
-
-@target
-def sparams():
-    """4-port S-parameters of chip 4's data pair (P, N at the ladder, then at the connector);
-    insertion and return loss at its Nyquist frequency, 80 MHz."""
-    out = RESULTS / "sparams"
-    pair = run.sparam(BOARD, out / "data4", license="HyperLynx SI/PI", pins=["iVTX1.15", "iVTX1.16", "J1.29", "J1.31"], fmin=1e6, fmax=5e9, sweep="adaptive", steps=500, steps_per_decade=100, tolerance="medium", reference_impedance=50.0, lossy=True, roughness=True, trapezoid=True, nonfunctional_pads=False)
-    # SDD21 at least -3 dB, SDD11 at most -10 dB (first guesses, to agree on)
-    analysis.sparams(pair, at_hz=80e6, min_sdd21_db=-3.0, max_sdd11_db=-10.0, out=out / "sparams.csv")
-    plots.plot_sparam(pair, out)
