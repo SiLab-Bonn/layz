@@ -101,7 +101,20 @@ def board(name: str, folder: Path | None = None) -> dict:
     cache = folder / "board.json"
     if not cache.exists() or cache.stat().st_mtime < hyp.stat().st_mtime:
         cache.write_text(json.dumps(boardfile.read(hyp)))
-    return json.loads(cache.read_text())
+    b = json.loads(cache.read_text())
+    facts = folder / "facts.json"  # its facts table (layz.web.facts), with the run's stack and GDS
+    if not facts.exists() or facts.stat().st_mtime < cache.stat().st_mtime:
+        from layz import stack as stackfile
+        from layz.web import facts as boardfacts
+
+        i = run.get("inputs", {})
+        try:
+            process = stackfile.load(i["stack"]) if i.get("stack") else None
+        except (FileNotFoundError, KeyError):
+            process = None
+        facts.write_text(json.dumps(boardfacts.board(b, process, Path(i["layout"]) if i.get("layout") else None)))
+    b["facts"] = json.loads(facts.read_text())
+    return b
 
 
 def drawings(src: Path, folder: Path, root: Path, prefix: str) -> dict[str, list[str]]:

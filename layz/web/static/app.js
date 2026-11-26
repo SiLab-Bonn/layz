@@ -206,9 +206,10 @@ function stage(d, t, i) {
   for (const p of t.plots) if (!replaced.has(base(p.png).replace(/\.png$/, ""))) right.push([plotLabel(p.png), async () => plotPane(d.name, p)]);
 
   // left: numbers
-  const mark = (rule) => {
+  const mark = (row, head) => {
     if (!t.markers) return;
-    const boxes = t.markers.boxes.filter((m) => !rule || m.rule === rule);
+    const w = head.indexOf("what"), what = w >= 0 ? row[w] : null;
+    const boxes = t.markers.boxes.filter((m) => (what ? m.what === what : m.rule === row[0]));
     if (!boxes.length) return;
     rightTabs.show("layout");
     setTimeout(() => viewer && viewer.setMarkers(boxes, boxes[0]), 50);
@@ -217,12 +218,15 @@ function stage(d, t, i) {
   if (t.name === "setup") left.push(["inputs", async () => {  // what setup named, and the layout's counts
     const inp = await inputs();
     const rows = [["flow", d.flow], ...Object.entries(d.inputs).filter(([k]) => k !== "board")];
-    return h("div", {}, h("table", { class: "kvtable" }, rows.map(([k, v]) => h("tr", {}, h("td", {}, k), h("td", {}, d.paths && d.paths[k] ? pathRow(v, d.paths[k], false, k === "flow" ? (STATIC ? "web/flow.html" : `/flow?name=${encodeURIComponent(d.name)}`) : null) : v)))), inp.layout ? h("div", { class: "facts" }, layoutFacts(inp.layout)) : null);
+    const pins = inp.layout ? (inp.layout.labels && inp.layout.labels.length) || inp.layout.pins.length : null;  // a GDS's pin labels, a board's pads
+    if (pins) rows.push(["pins", pins]);
+    return h("div", {}, h("table", { class: "kvtable" }, rows.map(([k, v]) => h("tr", {}, h("td", {}, k), h("td", {}, d.paths && d.paths[k] ? pathRow(v, d.paths[k], false, k === "flow" ? (STATIC ? "web/flow.html" : `/flow?name=${encodeURIComponent(d.name)}`) : null) : v)))));
   }]);
   // the step's results in one tab: the board's facts (the board step), its tables (without those
   // another contains), the violations; then its files
   const covers = (big, small) => big !== small && small.rows.length === big.rows.length && small.rows[0].every((c) => big.rows[0].includes(c));
-  const tables = t.tables.filter((tb) => !t.tables.some((other) => covers(other, tb)));
+  const tables = t.tables.filter((tb) => !t.tables.some((other) => covers(other, tb)))
+    .sort((a, b) => Number(b.rows[0].includes("pass")) - Number(a.rows[0].includes("pass")));  // overviews (pass or not) first, then their findings
   const pickViolation = (m) => {
     if (sheet && m.names && rightTabs.current() === "schematic") { sheet.mark(t.markers.boxes.flatMap((x) => x.names || []), m.names, unchecked, t.markers.boxes); return; }
     rightTabs.show("layout");
@@ -230,9 +234,9 @@ function stage(d, t, i) {
   };
   const hasMarks = t.markers && t.markers.boxes.length;
   if (isBoard || tables.length || hasMarks) left.push(["results", async () => h("div", { class: "stacked" },
-    isBoard ? h("div", { class: "facts" }, layoutFacts(await board())) : null,
+    isBoard ? factsTable((await board()).facts) : null,
     tables.map((tb) => table(tb, t.markers ? mark : null)),
-    hasMarks ? violations(t.markers.boxes, pickViolation) : null)]);
+    hasMarks && !tables.some((tb) => tb.rows[0].includes("what")) ? violations(t.markers.boxes, pickViolation) : null)]);  // a findings table lists them already
   const filesLine = () => (t.folder && t.files && t.files.length ? h("div", { class: "files" }, pathRow(`${t.name}/`, t.folder + "/", true), t.files.map((f) => pathRow(f, `${t.folder}/${f}`))) : null);
   // what the step wrote, its log among them
   if (t.files && t.files.length) left.push(["files", () => filesLine()]);
@@ -281,7 +285,7 @@ function table(t, mark) {
   return h("div", { class: "tablewrap" },
     h("table", { class: "data" + (mark ? " clickable" : "") },
       h("tr", {}, head.map((c) => h("th", {}, c))),
-      rows.map((r) => h("tr", { onclick: mark ? () => mark(r[0]) : null, title: mark ? "show on the layout" : null }, r.map((c, i) => h("td", { class: i === passCol ? `pass-${c}` : null }, fmt(c)))))));
+      rows.map((r) => h("tr", { onclick: mark ? () => mark(r, head) : null, title: mark ? "show on the layout" : null }, r.map((c, i) => h("td", { class: i === passCol ? `pass-${c}` : null }, fmt(c)))))));
 }
 
 function violations(boxes, pick) {
@@ -639,7 +643,7 @@ const lengthText = (mm) => (mm >= 1 ? `${+mm.toPrecision(3)} mm` : `${+(mm * 100
 function layoutViewer(b, overlay = null, full = false, mode = "current density") {
   const color = layerColors(b.copper, full && !overlay);
   const shown = new Set(b.copper);
-  let picked = null, markers = [], focus = null;
+  let picked = null, markers = [], focus = null, showPins = true, showMarks = true;
   const ring = (path, pts) => { pts.forEach(([x, y], i) => (i ? path.lineTo(x, y) : path.moveTo(x, y))); path.closePath(); };
   const paths = b.polys.map((p) => { const path = new Path2D(); for (const r of [p.pts, ...p.holes]) ring(path, r); return { ...p, path }; });
   const cuts = (b.cuts || []).map((c) => { const path = new Path2D(); ring(path, c.pts); return { ...c, path }; });
@@ -674,8 +678,12 @@ function layoutViewer(b, overlay = null, full = false, mode = "current density")
     canvas.height = canvas.clientHeight * dpr;
     if (!canvas.clientWidth) return;
     if (!view) {
-      if (focus) { const pad = Math.max(focus[2] - focus[0], focus[3] - focus[1], 0.05) * 6; fitTo([focus[0] - pad, focus[1] - pad, focus[2] + pad, focus[3] + pad], 1); }
-      else fitTo(b.bbox, 0.92);
+      fitTo(b.bbox, 0.92);
+      if (focus) {  // to a violation, at most 300 % of the whole layout's view
+        const most = 3 * view.s, pad = Math.max(focus[2] - focus[0], focus[3] - focus[1], 0.05) * 6;
+        fitTo([focus[0] - pad, focus[1] - pad, focus[2] + pad, focus[3] + pad], 1);
+        if (view.s > most) { const [cx, cy] = [(focus[0] + focus[2]) / 2, (focus[1] + focus[3]) / 2]; view = { s: most, tx: canvas.clientWidth / 2 - most * cx, ty: canvas.clientHeight / 2 + most * cy }; }
+      }
     }
     const ctx = canvas.getContext("2d");
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -729,14 +737,14 @@ function layoutViewer(b, overlay = null, full = false, mode = "current density")
     for (const v of b.vias) if (v.layers.some((l) => shown.has(l))) { ctx.beginPath(); ctx.arc(v.x, v.y, Math.max(v.d / 2, px), 0, 2 * Math.PI); ctx.fill(); }
     ctx.strokeStyle = "#b48ead";
     ctx.lineWidth = px;
-    for (const p of b.pins) if (shown.has(p.layer)) ctx.strokeRect(p.x - p.w / 2, p.y - p.h / 2, p.w, p.h);
+    if (showPins) for (const p of b.pins) if (shown.has(p.layer)) ctx.strokeRect(p.x - p.w / 2, p.y - p.h / 2, p.w, p.h);
     ctx.strokeStyle = css("--ink-3");
     ctx.lineWidth = 1.2 * px;
     ctx.beginPath();
     for (const [ax, ay, bx, by] of b.outline) { ctx.moveTo(ax, ay); ctx.lineTo(bx, by); }
     ctx.stroke();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    if (b.labels && b.labels.length) {  // labels, where there's room to read them
+    if (showPins && b.labels && b.labels.length) {  // pin labels, where there's room to read them
       ctx.font = "10px ui-monospace, monospace";
       const onScreen = b.labels.filter((l) => shown.has(l.layer)).map((l) => [l, view.tx + view.s * l.x, view.ty - view.s * l.y]).filter(([, sx, sy]) => sx >= 0 && sy >= 0 && sx <= canvas.clientWidth && sy <= canvas.clientHeight);
       if (onScreen.length <= 300) for (const [l, sx, sy] of onScreen) {
@@ -788,8 +796,9 @@ function layoutViewer(b, overlay = null, full = false, mode = "current density")
       ctx.fillText(lengthText(len), 18 + w / 2, hh - 20);
       ctx.textAlign = "left";
     }
+    if (exporting) drawStack(ctx, b, color, shown, canvas.clientWidth, canvas.clientHeight);
     // the violations: boxes in the error colour, at least 8 pixels across (as FRIDA's)
-    if (markers.length) {
+    if (showMarks && markers.length) {
       const err = css("--sem-error");
       ctx.strokeStyle = err;
       ctx.fillStyle = err + "33";
@@ -844,17 +853,19 @@ function layoutViewer(b, overlay = null, full = false, mode = "current density")
   };
   new ResizeObserver(() => { view = null; draw(); }).observe(wrap);
   themeListeners.add(draw);
-  // the full panel (stackup, counts) once, with the inputs; elsewhere the layers as toggles
-  const toggles = h("div", { class: "layers" }, b.copper.map((l) => h("a", { style: `--c:${color[l]}`, class: shown.has(l) ? null : "off", onclick: () => {
+  // the stackup, bottom right: click a copper layer to hide or show it
+  const toggle = (l) => {
     if (ov && ov.mode === "current density") { shown.clear(); shown.add(l); }  // one layer's map at a time
     else if (shown.has(l)) shown.delete(l); else shown.add(l);
-    toggles.querySelectorAll("a").forEach((x) => x.classList.toggle("off", !shown.has(x.textContent)));
-    draw();
-  } }, l)));
-  if (!full) wrap.append(toggles);
+    stack.refresh(); draw();
+  };
+  const stack = stackPanel(b, color, shown, toggle);
   const tools = h("div", { class: "tools" });
   wrap.append(tools);
   tools.append(h("button", { class: "fit", title: "back to the whole layout", onclick: () => { focus = null; view = null; draw(); } }, "fit"));
+  const switchBtn = (label, title, get, set) => { const el2 = h("button", { class: "fit", title, onclick: () => { set(!get()); el2.classList.toggle("off", !get()); draw(); } }, label); return el2; };
+  if ((b.labels && b.labels.length) || b.pins.length) tools.append(switchBtn("pins", "show or hide the pin labels (exports too)", () => showPins, (v) => (showPins = v)));
+  const marksBtn = switchBtn("annotations", "show or hide the violations (exports too)", () => showMarks, (v) => (showMarks = v));
   // the view as it is, in the light theme's colours on a transparent background, at twice the
   // screen's resolution: PNG, or a PDF of it
   const shot = () => { exporting = true; draw(); const url = canvas.toDataURL("image/png"); const size = [canvas.width, canvas.height]; exporting = false; draw(); return [url, size]; };
@@ -868,9 +879,9 @@ function layoutViewer(b, overlay = null, full = false, mode = "current density")
     pdf.save(`${stem()}.pdf`);
   } }, "pdf"));
 
-  if (full) wrap.append(h("div", { class: "stackover" }, stackPanel(b, color, shown, draw)));  // on the grid itself
+  wrap.append(h("div", { class: "stackover" }, stack));  // on the grid itself
   const el = h("div", { class: "layout" + (full ? "" : " bare") }, wrap);
-  return { el, setMarkers: (boxes, at = null) => { markers = boxes; focus = at ? at.box || at : null; view = null; draw(); if (at && at.rule) say(at); } };
+  return { el, setMarkers: (boxes, at = null) => { if (boxes.length && !marksBtn.isConnected) tools.insertBefore(marksBtn, tools.children[1]); markers = boxes; focus = at ? at.box || at : null; view = null; draw(); if (at && at.rule) say(at); } };
 }
 
 function segDist(s, x, y) {
@@ -879,40 +890,67 @@ function segDist(s, x, y) {
   return Math.hypot(x - (s.x1 + t * dx), y - (s.y1 + t * dy));
 }
 
-function bars(rows, colour, label) {
-  if (!rows || !rows.length) return h("div", { class: "caption" }, "none");
-  const max = Math.max(...rows.map((r) => r[1]));
-  return h("div", { class: "bars" }, rows.slice(0, 12).map(([k, n]) => h("div", { class: "row" },
-    h("span", {}, label(k)), h("div", { class: "bar" }, h("span", { style: `width:${(100 * n) / max}%;background:${colour}` })), h("span", { class: "n" }, n))));
-}
-
-// the stackup, top to bottom: click a copper layer to hide or show it
-function stackPanel(b, color, shown, draw) {
+// the stackup, top to bottom: each metal in its layer's colour, the insulators grey; click a metal
+// to hide or show it
+const stackHeight = (l, total) => Math.max(12, Math.min(30, (160 * l.thickness_mm) / total));
+const stackUm = (mm) => `${(mm * 1000).toFixed(mm < 0.01 ? 1 : 0)} µm`;
+function stackPanel(b, color, shown, toggle) {
   const total = b.stackup.reduce((a, l) => a + l.thickness_mm, 0) || 1;
-  const um = (mm) => `${(mm * 1000).toFixed(mm < 0.01 ? 1 : 0)} µm`;
-  return [h("div", { class: "stack" }, b.stackup.map((l) => {
-    const el = h("div", { class: l.type, style: `height:${Math.max(12, Math.min(30, (160 * l.thickness_mm) / total))}px` + (l.type === "copper" ? `;box-shadow: inset 4px 0 0 ${color[l.name]}` : ""), title: `${l.name}: ${l.material || l.type}, ${um(l.thickness_mm)}` + (l.er ? `, εr ${l.er}` : "") },
-      l.name, h("span", { class: "t" }, um(l.thickness_mm)));
-    if (l.type === "copper") el.onclick = () => { shown.has(l.name) ? shown.delete(l.name) : shown.add(l.name); el.classList.toggle("off"); draw(); };
-    return el;
-  }))];
+  const rows = b.stackup.map((l) => {
+    const el = h("div", { class: l.type, style: `height:${stackHeight(l, total)}px` + (l.type === "copper" && color[l.name] ? `;background:${color[l.name]}` : ""), title: `${l.name}: ${l.material || l.type}, ${stackUm(l.thickness_mm)}` + (l.er ? `, εr ${l.er}` : "") },
+      l.name, h("span", { class: "t" }, stackUm(l.thickness_mm)));
+    if (l.type === "copper") el.onclick = () => toggle(l.name);
+    return [l, el];
+  });
+  const el = h("div", { class: "stack" }, rows.map(([, e]) => e));
+  el.refresh = () => rows.forEach(([l, e]) => l.type === "copper" && e.classList.toggle("off", !shown.has(l.name)));
+  el.refresh();
+  return el;
 }
 
-// a layout's counts: shapes per layer (GDS), trace widths and vias (board), and its facts
-function layoutFacts(b) {
-  const s = b.stats;
-  const mm = (x) => `${x.toFixed(x < 1 ? 3 : 2)} mm`;
-  const facts = [["thickness", mm(s.thickness_mm)], ["size", `${s.size_mm[0].toFixed(2)} × ${s.size_mm[1].toFixed(2)} mm`], ["copper layers", s.copper_layers]];
-  for (const k of ["nets", "pours", "tracks", "vias", "pins", "components", "via cuts", "labels"]) if (s[k] != null) facts.push([k, s[k]]);
-  return [
-    b.kind === "gds"
-      ? [h("h4", {}, "shapes per layer"), bars(Object.entries(s["shapes per layer"]), "var(--nord8)", (k) => k)]
-      : [h("h4", {}, "trace widths"), bars(s.trace_widths, "var(--nord14)", (w) => mm(w)),
-         h("h4", {}, "via profiles (pad / drill)"), bars(s.via_profiles, "var(--nord13)", (k) => `${k} mm`),
-         h("h4", {}, "via spans"), bars(s.via_spans, "var(--nord8)", (k) => k)],
-    h("h4", {}, "facts"), h("div", { class: "kv" }, facts.flatMap(([k, v]) => [h("span", {}, k), h("span", {}, v)])),
-  ];
+// the same stackup drawn on an exported view, bottom right (the panel is no part of the canvas)
+function drawStack(ctx, b, color, shown, W, H) {
+  const total = b.stackup.reduce((a, l) => a + l.thickness_mm, 0) || 1;
+  const w = 150, hs = b.stackup.map((l) => stackHeight(l, total));
+  let y = H - 10 - hs.reduce((a, v) => a + v, 0);
+  const x = W - 10 - w;
+  ctx.font = "9px ui-monospace, monospace";
+  ctx.textBaseline = "middle";
+  b.stackup.forEach((l, i) => {
+    ctx.globalAlpha = l.type === "copper" && !shown.has(l.name) ? 0.3 : 1;
+    ctx.fillStyle = l.type === "copper" && color[l.name] ? color[l.name] : "#d8dee9";
+    ctx.fillRect(x, y, w, hs[i]);
+    ctx.strokeStyle = "rgba(0,0,0,0.25)"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x, y + hs[i] - 0.5); ctx.lineTo(x + w, y + hs[i] - 0.5); ctx.stroke();
+    ctx.fillStyle = "#2e3440";
+    ctx.textAlign = "center"; ctx.fillText(l.name, x + w / 2, y + hs[i] / 2);
+    ctx.textAlign = "right"; ctx.fillText(stackUm(l.thickness_mm), x + w - 4, y + hs[i] / 2);
+    y += hs[i];
+  });
+  ctx.globalAlpha = 1; ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
 }
+
+// a board's facts (layz.web.facts): one table
+function factsTable(rows) {
+  return rows && rows.length ? h("div", { class: "tablewrap" }, h("table", { class: "data" }, h("tr", {}, h("th", {}, "fact"), h("th", {}, "value")), rows.map(([k, v]) => h("tr", {}, h("td", {}, k), h("td", {}, v))))) : null;
+}
+
+// the wheel scrolls the page; a view (layout, schematic, 3D, a plot, a table, a log) takes it only
+// once clicked, until a click elsewhere
+const GRAB = ".canvas, .schematic, .view3d, .plotly, .tabbody, .tablewrap, pre.log";
+let grabbed = null;
+document.addEventListener("mousedown", (e) => {
+  grabbed?.classList.remove("grabbed");
+  grabbed = e.target.closest?.(".canvas, .schematic, .view3d, .plotly, .tabbody") || null;  // the view clicked in
+  grabbed?.classList.add("grabbed");
+}, true);
+window.addEventListener("wheel", (e) => {
+  const region = e.target.closest?.(GRAB);
+  if (!region || (grabbed && (grabbed === region || grabbed.contains(region)))) return;
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  $("#main").scrollBy({ top: e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? innerHeight : 1) });
+}, { capture: true, passive: false });
 
 initTheme();
 window.addEventListener("hashchange", render);

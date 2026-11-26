@@ -21,6 +21,7 @@ halo_um = 200
 [[layer]]
 name = "TopPad"         # top pad metal, on the P3 openings
 type = "copper"
+material = "Aluminium"
 thickness_um = 0.5      # to confirm
 gds = "8/0"
 pads = true
@@ -36,6 +37,7 @@ material = "Polyimide"
 [[layer]]
 name = "M3"             # Al
 type = "copper"
+material = "Aluminium"
 thickness_um = 6.0
 gds = "6/0"
 
@@ -49,6 +51,7 @@ material = "Polyimide"
 [[layer]]
 name = "M2"             # Al
 type = "copper"
+material = "Aluminium"
 thickness_um = 6.0
 gds = "3/0"
 
@@ -62,6 +65,7 @@ material = "Polyimide"
 [[layer]]
 name = "ChipPad"        # the chip's top-metal pads
 type = "copper"
+material = "Aluminium"
 thickness_um = 1.0
 gds = "68/0"
 pads = true

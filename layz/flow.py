@@ -96,7 +96,7 @@ def run_targets(targets: dict[str, Callable[[], None]], record: Path | None = No
         entry = run["targets"][i]
         start = time.monotonic()
         first = log.FILE["lines"]
-        log.info("flow", f"[{i + 1}/{len(targets)}] {name}: {entry['doc'].split('. ')[0]}")
+        log.info("flow", f"{name}: {entry['doc'].split('. ')[0]}")
         log.COUNTS.update(INFO=0, WARN=0, ERROR=0, fail=0)
         log.STEP = []
         try:
@@ -115,12 +115,12 @@ def run_targets(targets: dict[str, Callable[[], None]], record: Path | None = No
         if failed:
             for line in entry["error"].splitlines():
                 log.error("flow", line)
-            log.error("flow", f"[{i + 1}/{len(targets)}] {name}: failed after {entry['seconds']:.0f} s")
+            log.error("flow", f"{name}: failed after {entry['seconds']:.0f} s")
         elif entry["status"] == "skipped":
-            log.warn("flow", f"[{i + 1}/{len(targets)}] {name}: skipped: {entry['error']}")
+            log.warn("flow", f"{name}: skipped: {entry['error']}")
         else:
             say = log.warn if entry["status"] != "ok" else log.info
-            say("flow", f"[{i + 1}/{len(targets)}] {name}: {entry['status']} in {entry['seconds']:.0f} s" + (f" ({entry['errors']} errors, {entry['warnings']} warnings)" if entry["status"] != "ok" else ""))
+            say("flow", f"{name}: {entry['status']} in {entry['seconds']:.0f} s" + (f" ({entry['errors']} errors, {entry['warnings']} warnings)" if entry["status"] != "ok" else ""))
         entry["log"] = [first, log.FILE["lines"]]  # its lines in run.log
         if record is not None:  # and its own log, among the step's files
             folder = record.parent / name

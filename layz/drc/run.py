@@ -47,7 +47,7 @@ def drc(layout: Path, out: Path, *, kit: str, suite: str, topcell: str | None, t
     with open(out / "rules.csv", "w", newline="") as f:
         w = csv.writer(f)
         w.writerow(["rule", "violations"])
-        w.writerows(per_rule(report).items())
+        w.writerows({**dict.fromkeys(suite_rules(kit, suite), 0), **per_rule(report)}.items())  # every rule, passing ones with 0
     (out / "markers.json").write_text(json.dumps({"on": "layout", "boxes": markers(report)}))
     return out
 
@@ -73,6 +73,19 @@ def markers(report: Path) -> list[dict]:
         if box is not None:
             found.append({"rule": rule, "what": text, "box": [box.left / 1000, box.bottom / 1000, box.right / 1000, box.top / 1000]})
     return found
+
+
+def suite_rules(kit: str, suite: str) -> list[str]:
+    """Every rule id a kit's suite checks (its decks' rules), in the decks' order."""
+    import yaml
+
+    from layz.drc.check import DRC_DIR
+
+    ids = []
+    for inc in yaml.safe_load((DRC_DIR / kit / "suites" / f"{suite}.yml").read_text()).get("include", []):
+        deck = DRC_DIR / kit / "decks" / f"{inc['deck']}.yml"
+        ids += [r["id"] for r in (yaml.safe_load(deck.read_text()) or {}).get("rules", []) if "id" in r]
+    return ids
 
 
 def per_rule(report: Path) -> dict[str, int]:

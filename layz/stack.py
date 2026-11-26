@@ -55,6 +55,21 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 K_DEFAULT = {"mask": 3.3, "dielectric": 4.5}  # KiCad's own defaults when no εr is given
+
+# radiation lengths X0 (mm) for the material budget, by a word in a layer's material (PDG's
+# tables; FR4, solder mask and adhesive are typical values): a layer's own x0_mm comes first
+X0_MM = {"alumin": 88.97, "copper": 14.36, "gold": 3.344, "nickel": 14.24, "silicon": 93.7, "polyimide": 285.6, "kapton": 285.6, "coverlay": 285.6,
+         "fr4": 175.0, "fr-4": 175.0, "prepreg": 175.0, "core": 175.0, "mask": 300.0, "adhesive": 344.1, "acryl": 344.1}
+
+
+def x0_mm(material: str | None, kind: str) -> float | None:
+    """A material's radiation length (mm), from a word in its name; a metal layer without one is
+    copper. None: not known."""
+    m = (material or "").lower()
+    for word, x0 in X0_MM.items():
+        if word in m:
+            return x0
+    return X0_MM["copper"] if kind == "copper" and not m else None
 TYPES = ("copper", "dielectric", "mask")
 
 
@@ -70,6 +85,7 @@ class Layer:
     pads: bool = False  # copper only: sub-cell shapes become footprint pads
     zones: bool = True  # copper only: top-level shapes become zones
     labels: list[str] = field(default_factory=list)  # copper only: text layers naming its nets
+    x0_mm: float | None = None  # radiation length, where its material's (X0_MM) isn't right
     z_um: float = 0.0  # bottom face, filled in by Process (z = 0 at the bottom)
 
     @property
@@ -204,7 +220,7 @@ def load(path: str | Path) -> Process:
     d = tomllib.loads(path.read_text())
     if "layer" not in d:
         raise ValueError(f"{path}: no [[layer]] entries (a layz stack lists its layers top to bottom)")
-    layers = [Layer(name=x["name"], type=x["type"], thickness_um=float(x["thickness_um"]), er=x.get("er"), material=x.get("material"), loss_tangent=x.get("loss_tangent"), gds=x.get("gds"), pads=bool(x.get("pads", False)), zones=bool(x.get("zones", True)), labels=[str(v) for v in x["labels"]] if "labels" in x else _pin_layer(x.get("gds"))) for x in d["layer"]]
+    layers = [Layer(name=x["name"], type=x["type"], thickness_um=float(x["thickness_um"]), er=x.get("er"), material=x.get("material"), loss_tangent=x.get("loss_tangent"), gds=x.get("gds"), pads=bool(x.get("pads", False)), zones=bool(x.get("zones", True)), labels=[str(v) for v in x["labels"]] if "labels" in x else _pin_layer(x.get("gds")), x0_mm=x.get("x0_mm")) for x in d["layer"]]
     vias = [ViaLayer(gds=v["gds"], top=v["top"], bottom=v["bottom"]) for v in d.get("via", [])]
     return _check(Process(name=d.get("name", Path(path).stem), layers=layers, vias=vias, outline=d.get("outline"), halo_um=float(d.get("halo_um", 200.0))), str(path))
 
