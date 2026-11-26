@@ -122,8 +122,8 @@ def sparams():
 @target
 def signal_integrity():
     """Each data pair (ladder to connector over the 45 cm flex) at 160 Mb/s PRBS7: its TDR, eye
-    with ideal lines, eye with loss, crosstalk and jitter, and the crosstalk from its chip's GPIO
-    line (and CLK, beside chip 4's) onto it."""
+    with loss, crosstalk and jitter, and the crosstalk from the GPIO lines
+    and CLK switching (HyperLynx brings in those that couple)."""
 
     # TDR of the pair from its S-parameters (the sparams step): a 50 ps step into each port and
     # each end's pair; distance at v = c/sqrt(eps_eff), eps_eff 3.6 (the dielectric's, to agree on)
@@ -136,39 +136,6 @@ def signal_integrity():
 
     eyes, xts = [], []
     for pair, p in PAIRS.items():
-        # eye with ideal lines: lossless, smooth, no jitter, no coupling
-        ideal = run.si(
-            board,
-            out / pair / "eye_ideal",
-            license="HyperLynx SI/PI",
-            net=f"{pair}_N",
-            operation="eye",
-            simulator="auto",
-            corner="typical",
-            probe="pin",
-            stimulus_scope="global",
-            bit_sequence="prbs",
-            prbs_order=7,
-            repetitions=4,
-            frequency=160e6,
-            duty_cycle=50.0,
-            initial_state="low",
-            stop_s=None,
-            step_s=None,
-            jitter={"Gaussian": 0.0, "GaussianFreq": 1e6, "Sine": 0.0, "SineFreq": 1e6, "SineInitPhase": 0.0, "Uniform": 0.0, "UniformMean": 0.0, "Distortion": 0.0},
-            lossy=False,
-            roughness=False,
-            trapezoid=False,
-            nonfunctional_pads=False,
-            crosstalk=False,
-            trace_coupling={"enabled": False, "method": "geometric", "threshold": 0.001, "max_distance": 0.5e-3, "min_segment": 0.0127, "horizontal_neighbours": 1, "vertical_neighbours": 1, "nonparallel": False, "self": True},
-            area_fill_coupling={"enabled": False, "grid": 0.001016, "search_distance": 0.001016},
-            sparameter_coupling={"connector": False, "connector_threshold": -20.0, "package": False, "package_threshold": -20.0, "em": False, "em_threshold": -20.0, "fmin": 1e5, "fmax": 2e10},
-            driver_states={},
-            aggressors=[],
-            models={},
-        )
-
         # eye with loss, roughness, crosstalk (traces within 0.5 mm, area fills), and jitter:
         # 100 ps rms random, 300 ps at 5 MHz sine
         real = run.si(
@@ -234,12 +201,12 @@ def signal_integrity():
             area_fill_coupling={"enabled": True, "grid": 0.001016, "search_distance": 0.001016},
             sparameter_coupling={"connector": False, "connector_threshold": -20.0, "package": False, "package_threshold": -20.0, "em": False, "em_threshold": -20.0, "fmin": 1e5, "fmax": 2e10},
             driver_states={},
-            aggressors=[{"driver": p["gpio"][0], "receivers": [p["gpio"][1]], "lib": "modvsez.ibs", "device": "MODvsEZIBIS", "model": "3"}] + ([{"driver": "J1.36", "receivers": ["iVTX1.18"], "lib": "modvsez.ibs", "device": "MODvsEZIBIS", "model": "3"}] if pair == "DATA_CHIP_4" else []),
+            aggressors=[{"driver": q["gpio"][0], "receivers": [q["gpio"][1]], "lib": "modvsez.ibs", "device": "MODvsEZIBIS", "model": "3"} for q in PAIRS.values()] + [{"driver": "J1.36", "receivers": ["iVTX1.18"], "lib": "modvsez.ibs", "device": "MODvsEZIBIS", "model": "3"}],
             models={},
         )
-        eyes += [ideal, real]
+        eyes.append(real)
         xts.append(xt)
-        plots.plot_si([ideal, real, xt], out, at="J1", skip_ui=4, centre_window=0.05, edge_levels=(0.2, 0.8), settle=0.1, name=pair)
+        plots.plot_si([real, xt], out, at="J1", skip_ui=4, centre_window=0.05, edge_levels=(0.2, 0.8), settle=0.1, name=pair)
 
     # at the receiver (the connector, J1): eye at least 200 mV and 0.7 UI, crosstalk at most 100 mV p-p (first
     # guesses, to agree on); eyes measured after 4 UI, height within +-5 % UI of the centre,

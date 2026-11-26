@@ -151,8 +151,8 @@ def sparams():
 
 @target
 def signal_integrity():
-    """Each data pair at 160 Mb/s PRBS7: its TDR, eye with ideal lines, eye with loss, crosstalk
-    and jitter, and the crosstalk from its chip's ADC line and rst onto it held low."""
+    """Each data pair at 160 Mb/s PRBS7: its TDR, eye with loss, crosstalk and
+    jitter, and the crosstalk from the ADC lines and rst onto it held low."""
 
     # TDR of the pair from its S-parameters (the sparams step): a 50 ps step into each port and
     # each end's pair; distance at v = c/sqrt(eps_eff), eps_eff 3.3 (the dielectric's, to agree on)
@@ -165,39 +165,6 @@ def signal_integrity():
 
     eyes, xts = [], []
     for pair, p in PAIRS.items():
-        # eye with ideal lines: lossless, smooth, no jitter, no coupling
-        ideal = run.si(
-            board,
-            out / pair / "eye_ideal",
-            license="HyperLynx SI/PI",
-            net=f"/{pair}_N",
-            operation="eye",
-            simulator="auto",
-            corner="typical",
-            probe="pin",
-            stimulus_scope="global",
-            bit_sequence="prbs",
-            prbs_order=7,
-            repetitions=4,
-            frequency=160e6,
-            duty_cycle=50.0,
-            initial_state="low",
-            stop_s=None,
-            step_s=None,
-            jitter={"Gaussian": 0.0, "GaussianFreq": 1e6, "Sine": 0.0, "SineFreq": 1e6, "SineInitPhase": 0.0, "Uniform": 0.0, "UniformMean": 0.0, "Distortion": 0.0},
-            lossy=False,
-            roughness=False,
-            trapezoid=False,
-            nonfunctional_pads=False,
-            crosstalk=False,
-            trace_coupling={"enabled": False, "method": "geometric", "threshold": 0.001, "max_distance": 0.5e-3, "min_segment": 0.0127, "horizontal_neighbours": 1, "vertical_neighbours": 1, "nonparallel": False, "self": True},
-            area_fill_coupling={"enabled": False, "grid": 0.001016, "search_distance": 0.001016},
-            sparameter_coupling={"connector": False, "connector_threshold": -20.0, "package": False, "package_threshold": -20.0, "em": False, "em_threshold": -20.0, "fmin": 1e5, "fmax": 2e10},
-            driver_states={},
-            aggressors=[],
-            models={},
-        )
-
         # eye with loss, roughness, crosstalk (traces within 0.5 mm, area fills), and jitter:
         # 100 ps rms random, 300 ps at 5 MHz sine
         real = run.si(
@@ -232,8 +199,9 @@ def signal_integrity():
             models={},
         )
 
-        # the pair's drivers held low while its chip's ADC line and rst (for D4: 95 and 100 um away,
-        # over 25 mm) switch as an 80 MHz clock, with HyperLynx's stock IBIS CMOS driver and receivers
+        # the pair's drivers held low while every ADC line and rst switch as an 80 MHz clock
+        # (HyperLynx brings in those that couple: D4's own ADC_4 and rst, 95 and 100 um away over
+        # 25 mm; D1's ADC_2), with HyperLynx's stock IBIS CMOS driver and receivers
         xt = run.si(
             board,
             out / pair / "crosstalk",
@@ -262,49 +230,16 @@ def signal_integrity():
             area_fill_coupling={"enabled": True, "grid": 0.001016, "search_distance": 0.001016},
             sparameter_coupling={"connector": False, "connector_threshold": -20.0, "package": False, "package_threshold": -20.0, "em": False, "em_threshold": -20.0, "fmin": 1e5, "fmax": 2e10},
             driver_states={pin: "low" for pin in p["driver"]},
-            aggressors=[{"driver": p["adc"][0], "receivers": [p["adc"][1]], "lib": "modvsez.ibs", "device": "MODvsEZIBIS", "model": "3"}, {"driver": "VTX2.100", "receivers": ["V1.100", "V2.100", "V3.100", "V4.100"], "lib": "modvsez.ibs", "device": "MODvsEZIBIS", "model": "3"}],
+            aggressors=[{"driver": q["adc"][0], "receivers": [q["adc"][1]], "lib": "modvsez.ibs", "device": "MODvsEZIBIS", "model": "3"} for q in PAIRS.values()] + [{"driver": "VTX2.100", "receivers": ["V1.100", "V2.100", "V3.100", "V4.100"], "lib": "modvsez.ibs", "device": "MODvsEZIBIS", "model": "3"}],
             models={},
         )
-        eyes += [ideal, real]
+        eyes.append(real)
         xts.append(xt)
-        plots.plot_si([ideal, real, xt], out, at="VTX2", skip_ui=4, centre_window=0.05, edge_levels=(0.2, 0.8), settle=0.1, name=pair)
+        plots.plot_si([real, xt], out, at="VTX2", skip_ui=4, centre_window=0.05, edge_levels=(0.2, 0.8), settle=0.1, name=pair)
 
-    # CLK and CMD: eyes at every chip, ideal and real; no aggressors set
+    # CLK and CMD: eyes at every chip (loss, crosstalk, jitter); no aggressors set
     bus_eyes = []
     for name, b in BUSES.items():
-        # eye with ideal lines: lossless, smooth, no jitter, no coupling
-        ideal = run.si(
-            board,
-            out / name / "eye_ideal",
-            license="HyperLynx SI/PI",
-            net=f"/{name}_N",
-            operation="eye",
-            simulator="auto",
-            corner="typical",
-            probe="pin",
-            stimulus_scope="global",
-            bit_sequence="oscillator" if name == "CLK" else "prbs",
-            prbs_order=7,
-            repetitions=4,
-            frequency=80e6 if name == "CLK" else 160e6,  # CLK: an 80 MHz clock (160 Mb/s DDR), to agree on
-            duty_cycle=50.0,
-            initial_state="low",
-            stop_s=None,
-            step_s=None,
-            jitter={"Gaussian": 0.0, "GaussianFreq": 1e6, "Sine": 0.0, "SineFreq": 1e6, "SineInitPhase": 0.0, "Uniform": 0.0, "UniformMean": 0.0, "Distortion": 0.0},
-            lossy=False,
-            roughness=False,
-            trapezoid=False,
-            nonfunctional_pads=False,
-            crosstalk=False,
-            trace_coupling={"enabled": False, "method": "geometric", "threshold": 0.001, "max_distance": 0.5e-3, "min_segment": 0.0127, "horizontal_neighbours": 1, "vertical_neighbours": 1, "nonparallel": False, "self": True},
-            area_fill_coupling={"enabled": False, "grid": 0.001016, "search_distance": 0.001016},
-            sparameter_coupling={"connector": False, "connector_threshold": -20.0, "package": False, "package_threshold": -20.0, "em": False, "em_threshold": -20.0, "fmin": 1e5, "fmax": 2e10},
-            driver_states={},
-            aggressors=[],
-            models={**{pin: dict(FAST, io="output") for pin in b["driver"]}, **{pin: dict(RCV, io="input") for pin in b["chips"]}},
-        )
-
         # eye with loss, roughness, crosstalk (traces within 0.5 mm, area fills), and jitter:
         # 100 ps rms random, 300 ps at 5 MHz sine
         real = run.si(
@@ -338,8 +273,8 @@ def signal_integrity():
             aggressors=[],
             models={**{pin: dict(FAST, io="output") for pin in b["driver"]}, **{pin: dict(RCV, io="input") for pin in b["chips"]}},
         )
-        bus_eyes += [ideal, real]
-        plots.plot_si([ideal, real], out, at=CHIPS, skip_ui=4, centre_window=0.05, edge_levels=(0.2, 0.8), settle=0.1, name=name)
+        bus_eyes.append(real)
+        plots.plot_si([real], out, at=CHIPS, skip_ui=4, centre_window=0.05, edge_levels=(0.2, 0.8), settle=0.1, name=name)
 
     # at the receiver (VTX2): eye at least 200 mV and 0.7 UI, crosstalk at most 100 mV p-p (first
     # guesses, to agree on); eyes measured after 4 UI, height within +-5 % UI of the centre,
