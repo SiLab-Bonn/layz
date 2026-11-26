@@ -30,7 +30,7 @@ PAIRS = {f"D{k}": {"driver": [f"V{k}.101", f"V{k}.102"], "receiver": [f"VTX2.{99
 # (C3/C4, C103/C104, ... on CLK; C1/C2, ... on CMD) to their pins k.123/124, k.121/122. The project
 # has no models on them: the data pairs' own, fast_drv at the connector, Fast_Rcv at each chip.
 # Their S-parameters run to chip 4's capacitors (the farthest), the other branches as stubs.
-FAST = {"lib": "fast_drv.sp", "device": "fast_drv", "model": "fast_drv"}  # TO CHECK: as the project names them
+FAST = {"lib": "fast_drv.sp", "device": "fast_drv", "model": "fast_drv"}  # as the project names them (its SPICE models)
 RCV = {"lib": "fast_rcv.sp", "device": "Fast_Rcv", "model": "Fast_Rcv"}
 CHIPS = ["V1-", "V2-", "V3-", "V4-"]  # the chips' waveforms (HyperLynx names them V(V1-123,V1-124))
 BUSES = {
