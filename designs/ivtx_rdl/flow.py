@@ -21,6 +21,11 @@ from layz.lvs import run as lvs_run
 
 RESULTS = Path(__file__).resolve().parents[2] / "results" / "ivtx_rdl"  # this clone's results, from wherever it runs
 
+# the data pairs: chip k drives D<k>_P/N from its pins .101/.102 to the connector VTX2, beside its
+# ADC line (k.114 -> VTX2.110+k); rst runs past all four. (CLK and CMD come from the connector to
+# the four chips' coupling capacitors; the HyperLynx project has no models on them yet.)
+PAIRS = {f"D{k}": {"driver": [f"V{k}.101", f"V{k}.102"], "receiver": [f"VTX2.{99 + 2 * k}", f"VTX2.{100 + 2 * k}"], "adc": (f"V{k}.114", f"VTX2.{110 + k}")} for k in (1, 2, 3, 4)}
+
 
 @target
 def setup():
@@ -117,133 +122,139 @@ def power_integrity():
 
 @target
 def sparams():
-    """4-port S-parameters of D4 (P, N at the driver, then at the receiver); insertion and
-    return loss at its Nyquist frequency, 80 MHz."""
+    """4-port S-parameters of each data pair (P, N at the chip, then at the connector); insertion
+    and return loss at its Nyquist frequency, 80 MHz."""
     board = BOARD
     out = RESULTS / "sparams"
 
     # 1 MHz to 5 GHz, adaptive sweep at medium tolerance, 50 ohm ports, real line models
-    d4 = run.sparam(board, out / "d4", license="HyperLynx SI/PI", pins=["V4.101", "V4.102", "VTX2.107", "VTX2.108"], fmin=1e6, fmax=5e9, sweep="adaptive", steps=500, steps_per_decade=100, tolerance="medium", reference_impedance=50.0, lossy=True, roughness=True, trapezoid=True, nonfunctional_pads=False)
+    runs = [run.sparam(board, out / pair, license="HyperLynx SI/PI", pins=p["driver"] + p["receiver"], fmin=1e6, fmax=5e9, sweep="adaptive", steps=500, steps_per_decade=100, tolerance="medium", reference_impedance=50.0, lossy=True, roughness=True, trapezoid=True, nonfunctional_pads=False) for pair, p in PAIRS.items()]
 
     # SDD21 at least -3 dB, SDD11 at most -10 dB (first guesses, to agree on)
-    analysis.sparams(d4, at_hz=80e6, min_sdd21_db=-3.0, max_sdd11_db=-10.0, out=out / "sparams.csv")
-    plots.plot_sparam(d4, out)
+    analysis.sparams(runs, at_hz=80e6, min_sdd21_db=-3.0, max_sdd11_db=-10.0, out=out / "sparams.csv")
+    for r in runs:
+        plots.plot_sparam(r, out, name=r.name)
 
 
 @target
 def signal_integrity():
-    """The longest data pair, D4 (108 mm), at 160 Mb/s PRBS7: eye with ideal lines, eye with
-    loss, crosstalk and jitter, and the crosstalk from ADC_4 and rst onto D4 held low."""
+    """Each data pair at 160 Mb/s PRBS7: its TDR, eye with ideal lines, eye with loss, crosstalk
+    and jitter, and the crosstalk from its chip's ADC line and rst onto it held low."""
 
     # TDR of the pair from its S-parameters (the sparams step): a 50 ps step into each port and
     # each end's pair; distance at v = c/sqrt(eps_eff), eps_eff 3.3 (the dielectric's, to agree on)
-    sp = RESULTS / "sparams" / "d4"
-    plots.plot_tdr(sp, RESULTS / "signal_integrity", rise_ps=50.0, er_eff=3.3)
-    analysis.tdr(sp, rise_ps=50.0, er_eff=3.3, out=RESULTS / "signal_integrity" / "tdr.csv")
+    sps = [RESULTS / "sparams" / pair for pair in PAIRS]
+    for sp in sps:
+        plots.plot_tdr(sp, RESULTS / "signal_integrity", rise_ps=50.0, er_eff=3.3, name=sp.name)
+    analysis.tdr(sps, rise_ps=50.0, er_eff=3.3, out=RESULTS / "signal_integrity" / "tdr.csv")
     board = BOARD
     out = RESULTS / "signal_integrity"
 
-    # eye with ideal lines: lossless, smooth, no jitter, no coupling
-    ideal = run.si(
-        board,
-        out / "eye_ideal",
-        license="HyperLynx SI/PI",
-        net="/D4_N",
-        operation="eye",
-        simulator="auto",
-        corner="typical",
-        probe="pin",
-        stimulus_scope="global",
-        bit_sequence="prbs",
-        prbs_order=7,
-        repetitions=4,
-        frequency=160e6,
-        duty_cycle=50.0,
-        initial_state="low",
-        stop_s=None,
-        step_s=None,
-        jitter={"Gaussian": 0.0, "GaussianFreq": 1e6, "Sine": 0.0, "SineFreq": 1e6, "SineInitPhase": 0.0, "Uniform": 0.0, "UniformMean": 0.0, "Distortion": 0.0},
-        lossy=False,
-        roughness=False,
-        trapezoid=False,
-        nonfunctional_pads=False,
-        crosstalk=False,
-        trace_coupling={"enabled": False, "method": "geometric", "threshold": 0.001, "max_distance": 0.5e-3, "min_segment": 0.0127, "horizontal_neighbours": 1, "vertical_neighbours": 1, "nonparallel": False, "self": True},
-        area_fill_coupling={"enabled": False, "grid": 0.001016, "search_distance": 0.001016},
-        sparameter_coupling={"connector": False, "connector_threshold": -20.0, "package": False, "package_threshold": -20.0, "em": False, "em_threshold": -20.0, "fmin": 1e5, "fmax": 2e10},
-        driver_states={},
-        aggressors=[],
-    )
+    eyes, xts = [], []
+    for pair, p in PAIRS.items():
+        # eye with ideal lines: lossless, smooth, no jitter, no coupling
+        ideal = run.si(
+            board,
+            out / pair / "eye_ideal",
+            license="HyperLynx SI/PI",
+            net=f"/{pair}_N",
+            operation="eye",
+            simulator="auto",
+            corner="typical",
+            probe="pin",
+            stimulus_scope="global",
+            bit_sequence="prbs",
+            prbs_order=7,
+            repetitions=4,
+            frequency=160e6,
+            duty_cycle=50.0,
+            initial_state="low",
+            stop_s=None,
+            step_s=None,
+            jitter={"Gaussian": 0.0, "GaussianFreq": 1e6, "Sine": 0.0, "SineFreq": 1e6, "SineInitPhase": 0.0, "Uniform": 0.0, "UniformMean": 0.0, "Distortion": 0.0},
+            lossy=False,
+            roughness=False,
+            trapezoid=False,
+            nonfunctional_pads=False,
+            crosstalk=False,
+            trace_coupling={"enabled": False, "method": "geometric", "threshold": 0.001, "max_distance": 0.5e-3, "min_segment": 0.0127, "horizontal_neighbours": 1, "vertical_neighbours": 1, "nonparallel": False, "self": True},
+            area_fill_coupling={"enabled": False, "grid": 0.001016, "search_distance": 0.001016},
+            sparameter_coupling={"connector": False, "connector_threshold": -20.0, "package": False, "package_threshold": -20.0, "em": False, "em_threshold": -20.0, "fmin": 1e5, "fmax": 2e10},
+            driver_states={},
+            aggressors=[],
+        )
 
-    # eye with loss, roughness, crosstalk (traces within 0.5 mm, area fills), and jitter:
-    # 100 ps rms random, 300 ps at 5 MHz sine
-    real = run.si(
-        board,
-        out / "eye_real",
-        license="HyperLynx SI/PI",
-        net="/D4_N",
-        operation="eye",
-        simulator="auto",
-        corner="typical",
-        probe="pin",
-        stimulus_scope="global",
-        bit_sequence="prbs",
-        prbs_order=7,
-        repetitions=4,
-        frequency=160e6,
-        duty_cycle=50.0,
-        initial_state="low",
-        stop_s=None,
-        step_s=None,
-        jitter={"Gaussian": 100e-12, "GaussianFreq": 1e6, "Sine": 300e-12, "SineFreq": 5e6, "SineInitPhase": 0.0, "Uniform": 0.0, "UniformMean": 0.0, "Distortion": 0.0},
-        lossy=True,
-        roughness=True,
-        trapezoid=True,
-        nonfunctional_pads=False,
-        crosstalk=True,
-        trace_coupling={"enabled": True, "method": "geometric", "threshold": 0.001, "max_distance": 0.5e-3, "min_segment": 0.0127, "horizontal_neighbours": 1, "vertical_neighbours": 1, "nonparallel": False, "self": True},
-        area_fill_coupling={"enabled": True, "grid": 0.001016, "search_distance": 0.001016},
-        sparameter_coupling={"connector": False, "connector_threshold": -20.0, "package": False, "package_threshold": -20.0, "em": False, "em_threshold": -20.0, "fmin": 1e5, "fmax": 2e10},
-        driver_states={},
-        aggressors=[],
-    )
+        # eye with loss, roughness, crosstalk (traces within 0.5 mm, area fills), and jitter:
+        # 100 ps rms random, 300 ps at 5 MHz sine
+        real = run.si(
+            board,
+            out / pair / "eye_real",
+            license="HyperLynx SI/PI",
+            net=f"/{pair}_N",
+            operation="eye",
+            simulator="auto",
+            corner="typical",
+            probe="pin",
+            stimulus_scope="global",
+            bit_sequence="prbs",
+            prbs_order=7,
+            repetitions=4,
+            frequency=160e6,
+            duty_cycle=50.0,
+            initial_state="low",
+            stop_s=None,
+            step_s=None,
+            jitter={"Gaussian": 100e-12, "GaussianFreq": 1e6, "Sine": 300e-12, "SineFreq": 5e6, "SineInitPhase": 0.0, "Uniform": 0.0, "UniformMean": 0.0, "Distortion": 0.0},
+            lossy=True,
+            roughness=True,
+            trapezoid=True,
+            nonfunctional_pads=False,
+            crosstalk=True,
+            trace_coupling={"enabled": True, "method": "geometric", "threshold": 0.001, "max_distance": 0.5e-3, "min_segment": 0.0127, "horizontal_neighbours": 1, "vertical_neighbours": 1, "nonparallel": False, "self": True},
+            area_fill_coupling={"enabled": True, "grid": 0.001016, "search_distance": 0.001016},
+            sparameter_coupling={"connector": False, "connector_threshold": -20.0, "package": False, "package_threshold": -20.0, "em": False, "em_threshold": -20.0, "fmin": 1e5, "fmax": 2e10},
+            driver_states={},
+            aggressors=[],
+        )
 
-    # D4's drivers held low while ADC_4 (95 um away, 25 mm) and rst (100 um, 26 mm) switch as an
-    # 80 MHz clock, with HyperLynx's stock IBIS CMOS driver and receivers
-    xt = run.si(
-        board,
-        out / "crosstalk",
-        license="HyperLynx SI/PI",
-        net="/D4_N",
-        operation="standard",
-        simulator="auto",
-        corner="typical",
-        probe="pin",
-        stimulus_scope="global",
-        bit_sequence="oscillator",
-        prbs_order=7,
-        repetitions=1,
-        frequency=80e6,
-        duty_cycle=50.0,
-        initial_state="low",
-        stop_s=200e-9,
-        step_s=None,
-        jitter={"Gaussian": 0.0, "GaussianFreq": 1e6, "Sine": 0.0, "SineFreq": 1e6, "SineInitPhase": 0.0, "Uniform": 0.0, "UniformMean": 0.0, "Distortion": 0.0},
-        lossy=True,
-        roughness=True,
-        trapezoid=True,
-        nonfunctional_pads=False,
-        crosstalk=True,
-        trace_coupling={"enabled": True, "method": "geometric", "threshold": 0.001, "max_distance": 0.5e-3, "min_segment": 0.0127, "horizontal_neighbours": 1, "vertical_neighbours": 1, "nonparallel": False, "self": True},
-        area_fill_coupling={"enabled": True, "grid": 0.001016, "search_distance": 0.001016},
-        sparameter_coupling={"connector": False, "connector_threshold": -20.0, "package": False, "package_threshold": -20.0, "em": False, "em_threshold": -20.0, "fmin": 1e5, "fmax": 2e10},
-        driver_states={"V4.101": "low", "V4.102": "low"},
-        aggressors=[{"driver": "V4.114", "receivers": ["VTX2.114"], "lib": "modvsez.ibs", "device": "MODvsEZIBIS", "model": "3"}, {"driver": "VTX2.100", "receivers": ["V1.100", "V2.100", "V3.100", "V4.100"], "lib": "modvsez.ibs", "device": "MODvsEZIBIS", "model": "3"}],
-    )
+        # the pair's drivers held low while its chip's ADC line and rst (for D4: 95 and 100 um away,
+        # over 25 mm) switch as an 80 MHz clock, with HyperLynx's stock IBIS CMOS driver and receivers
+        xt = run.si(
+            board,
+            out / pair / "crosstalk",
+            license="HyperLynx SI/PI",
+            net=f"/{pair}_N",
+            operation="standard",
+            simulator="auto",
+            corner="typical",
+            probe="pin",
+            stimulus_scope="global",
+            bit_sequence="oscillator",
+            prbs_order=7,
+            repetitions=1,
+            frequency=80e6,
+            duty_cycle=50.0,
+            initial_state="low",
+            stop_s=200e-9,
+            step_s=None,
+            jitter={"Gaussian": 0.0, "GaussianFreq": 1e6, "Sine": 0.0, "SineFreq": 1e6, "SineInitPhase": 0.0, "Uniform": 0.0, "UniformMean": 0.0, "Distortion": 0.0},
+            lossy=True,
+            roughness=True,
+            trapezoid=True,
+            nonfunctional_pads=False,
+            crosstalk=True,
+            trace_coupling={"enabled": True, "method": "geometric", "threshold": 0.001, "max_distance": 0.5e-3, "min_segment": 0.0127, "horizontal_neighbours": 1, "vertical_neighbours": 1, "nonparallel": False, "self": True},
+            area_fill_coupling={"enabled": True, "grid": 0.001016, "search_distance": 0.001016},
+            sparameter_coupling={"connector": False, "connector_threshold": -20.0, "package": False, "package_threshold": -20.0, "em": False, "em_threshold": -20.0, "fmin": 1e5, "fmax": 2e10},
+            driver_states={pin: "low" for pin in p["driver"]},
+            aggressors=[{"driver": p["adc"][0], "receivers": [p["adc"][1]], "lib": "modvsez.ibs", "device": "MODvsEZIBIS", "model": "3"}, {"driver": "VTX2.100", "receivers": ["V1.100", "V2.100", "V3.100", "V4.100"], "lib": "modvsez.ibs", "device": "MODvsEZIBIS", "model": "3"}],
+        )
+        eyes += [ideal, real]
+        xts.append(xt)
+        plots.plot_si([ideal, real, xt], out, at="VTX2", skip_ui=4, centre_window=0.05, edge_levels=(0.2, 0.8), settle=0.1, name=pair)
 
     # at the receiver (VTX2): eye at least 200 mV and 0.7 UI, crosstalk at most 100 mV p-p (first
     # guesses, to agree on); eyes measured after 4 UI, height within +-5 % UI of the centre,
     # rise and fall 20-80 %; crosstalk after the first 10 % of the run
-    analysis.eyes([ideal, real], min_height=0.2, min_width_ui=0.7, at="VTX2", skip_ui=4, centre_window=0.05, edge_levels=(0.2, 0.8), out=out / "eyes.csv")
-    analysis.crosstalk(xt, max_noise=0.1, at="VTX2", settle=0.1, out=out / "crosstalk.csv")
-    plots.plot_si([ideal, real, xt], out, at="VTX2", skip_ui=4, centre_window=0.05, edge_levels=(0.2, 0.8), settle=0.1)
+    analysis.eyes(eyes, min_height=0.2, min_width_ui=0.7, at="VTX2", skip_ui=4, centre_window=0.05, edge_levels=(0.2, 0.8), out=out / "eyes.csv")
+    analysis.crosstalk(xts, max_noise=0.1, at="VTX2", settle=0.1, out=out / "crosstalk.csv")

@@ -447,18 +447,25 @@ def _label(run: Path) -> str:
 
 
 @mpl.rc_context(PLOT_STYLE)
-def plot_si(runs: list[Path], out: Path, *, at: str | None, skip_ui: float, centre_window: float, edge_levels: tuple[float, float], settle: float) -> list[Path]:
+def _stem(kind: str, name: str | None) -> str:
+    """A figure's file name: its kind, and the pair (net) it is of: eye__D1 (`layz web` shows one
+    tab per kind, the pairs to pick from)."""
+    return f"{kind}__{name}" if name else kind
+
+
+def plot_si(runs: list[Path], out: Path, *, at: str | None, skip_ui: float, centre_window: float, edge_levels: tuple[float, float], settle: float, name: str | None = None) -> list[Path]:
     """The eyes at the receiver (waveforms naming ``at``; None: every one), one per eye run, side by
     side; crosstalk runs (those with aggressors) on their own; every run's waveforms, per pair.
     skip_ui, centre_window, edge_levels: as for eye(); settle: share of a crosstalk run's time
     left out as start-up. Written in that order: eye, crosstalk, waveforms."""
+    tag = name  # the pair the figures are of (the loops below use name for waveforms)
     paths: list[Path] = []
     # runs with aggressors (a quiet victim, another stimulus) get their own crosstalk plot
     signal = [r for r in runs if not json.loads((r / "si.json").read_text()).get("aggressors")]
     waves = {r: _diff_waves(r) for r in signal}
     names = [w["name"] for w in waves[signal[0]]] if signal else []
     if not names:
-        return paths + [p for r in runs for p in _plot_crosstalk(r, json.loads((r / "si.json").read_text()), out, settle)]
+        return paths + [p for r in runs for p in _plot_crosstalk(r, json.loads((r / "si.json").read_text()), out, settle, tag)]
 
     eyes = [r for r in signal if json.loads((r / "si.json").read_text()).get("mode") == "eye"]
     if eyes:
@@ -505,12 +512,12 @@ def plot_si(runs: list[Path], out: Path, *, at: str | None, skip_ui: float, cent
             fig.colorbar(mesh, ax=axes, label="Samples")
         if len(here) == 1:
             fig.suptitle(f"Eye at {here[0]}", fontsize=10)
-        paths += save_figure(fig, out / "eye")
+        paths += save_figure(fig, out / _stem("eye", tag))
 
     for r in runs:
         si = json.loads((r / "si.json").read_text())
         if si.get("aggressors"):
-            paths += _plot_crosstalk(r, si, out, settle)
+            paths += _plot_crosstalk(r, si, out, settle, tag)
     fig, axes = plt.subplots(len(names), 1, figsize=(9.6, 2.6 * len(names) + 0.6), sharex=True, squeeze=False)
     for ax, name in zip(axes[:, 0], names):
         for (r, ws), c in zip(waves.items(), CURVE_COLORS):
@@ -525,12 +532,12 @@ def plot_si(runs: list[Path], out: Path, *, at: str | None, skip_ui: float, cent
         style_grid(ax)
     axes[0, 0].legend(loc="upper right", fontsize=8)
     axes[-1, 0].set_xlabel("Time (ns)")
-    paths += save_figure(fig, out / "waveforms")
+    paths += save_figure(fig, out / _stem("waveforms", tag))
     return paths
 
 
 @mpl.rc_context(PLOT_STYLE)
-def _plot_crosstalk(run: Path, si: dict, out: Path, settle: float) -> list[Path]:
+def _plot_crosstalk(run: Path, si: dict, out: Path, settle: float, name: str | None = None) -> list[Path]:
     fig, axes = plt.subplots(2, 1, figsize=(9.6, 6.0), sharex=True)
     for g, c in zip(si["aggressors"], CURVE_COLORS[2:]):
         stem = g["driver"].replace(".", "-")
@@ -549,7 +556,7 @@ def _plot_crosstalk(run: Path, si: dict, out: Path, settle: float) -> list[Path]
     axes[1].set_xlabel("Time (ns)")
     for ax in axes:
         style_grid(ax)
-    return list(save_figure(fig, out / ("crosstalk" if run.name == "crosstalk" else f"crosstalk_{run.name}")))
+    return list(save_figure(fig, out / _stem("crosstalk" if run.name == "crosstalk" else f"crosstalk_{run.name}", name)))
 
 
 # ------------------------------------------------------------------------------------- S-parameters
@@ -622,7 +629,7 @@ def tdr(run: Path, *, rise_ps: float, er_eff: float) -> dict:
 
 
 @mpl.rc_context(PLOT_STYLE)
-def plot_tdr(run: Path, out: Path, *, rise_ps: float, er_eff: float) -> list[Path]:
+def plot_tdr(run: Path, out: Path, *, rise_ps: float, er_eff: float, name: str | None = None) -> list[Path]:
     """TDR (tdr()): impedance, reflection coefficient and voltage over time (bottom) and distance
     (top), every port and pair."""
     r = tdr(run, rise_ps=rise_ps, er_eff=er_eff)
@@ -641,11 +648,11 @@ def plot_tdr(run: Path, out: Path, *, rise_ps: float, er_eff: float) -> list[Pat
     for ax in axes:
         sec = ax.secondary_xaxis("top", functions=(lambda t, k=mm_per_ns: t * k, lambda d, k=mm_per_ns: d / k))
         sec.set_xlabel("Distance (mm)" if ax is axes[0] else "")
-    return list(save_figure(fig, out / "tdr"))
+    return list(save_figure(fig, out / _stem("tdr", name)))
 
 
 @mpl.rc_context(PLOT_STYLE)
-def plot_sparam(run: Path, out: Path) -> list[Path]:
+def plot_sparam(run: Path, out: Path, name: str | None = None) -> list[Path]:
     info = json.loads((run / "sparam.json").read_text())
     f, S = read_touchstone(run / info["file"])
     pins, n = info["pins"], S.shape[1]
@@ -665,7 +672,7 @@ def plot_sparam(run: Path, out: Path) -> list[Path]:
     style_grid(ax)
     ax.legend(loc="lower left", fontsize=8)
     style_info_box(ax, [f"max singular value {np.linalg.svd(S, compute_uv=False).max():.3f}"], location="lower right")
-    return list(save_figure(fig, out / "sparams"))
+    return list(save_figure(fig, out / _stem("sparams", name)))
 
 
 # ------------------------------------------------------------------------------------------ all

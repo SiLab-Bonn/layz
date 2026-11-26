@@ -161,44 +161,51 @@ def eyes(runs: list[Path], *, min_height: float, min_width_ui: float, at: str | 
             ui = plots.run_ui(run, t, v)
             e = plots.eye(t, v, ui, skip_ui=skip_ui, centre_window=centre_window, edge_levels=edge_levels)
             hgt, wid = e["height"], e["width"]
-            rows.append({"run": run.name, "wave": w["name"], "height_mV": hgt * 1e3, "width_ns": wid * 1e9, "width_ui": wid / ui, "rise_ps": e["rise"] * 1e12, "fall_ps": e["fall"] * 1e12, "pass": bool(hgt >= min_height and wid / ui >= min_width_ui)})
+            rows.append({"pair": run.parent.name, "run": run.name, "wave": w["name"], "height_mV": hgt * 1e3, "width_ns": wid * 1e9, "width_ui": wid / ui, "rise_ps": e["rise"] * 1e12, "fall_ps": e["fall"] * 1e12, "pass": bool(hgt >= min_height and wid / ui >= min_width_ui)})
     return table(f"Eyes (limits: height >= {min_height * 1e3:.0f} mV, width >= {min_width_ui:.2f} UI)", rows, out)
 
 
-def crosstalk(run: Path, *, max_noise: float, at: str | None, settle: float, out: Path | None) -> list[dict]:
+def crosstalk(runs: list[Path], *, max_noise: float, at: str | None, settle: float, out: Path | None) -> list[dict]:
     """Peak-to-peak and rms noise at each differential pair (those naming ``at``; None: all) of
-    a crosstalk run, after its first ``settle`` share of time, against the limit (V p-p)."""
+    crosstalk runs (pair: each run's folder), after the first ``settle`` share of time, against
+    the limit (V p-p)."""
     rows = []
-    for w in _at(run, at):
-        t, v = plots.wave(run / w["file"])
-        k = t > t[0] + settle * (t[-1] - t[0])  # after the start-up
-        rows.append({"wave": w["name"], "noise_pp_mV": float(np.ptp(v[k])) * 1e3, "noise_rms_mV": float(v[k].std()) * 1e3, "limit_pp_mV": max_noise * 1e3, "pass": bool(np.ptp(v[k]) <= max_noise)})
-    return table(f"Crosstalk ({run.name}, limit {max_noise * 1e3:.0f} mV p-p)", rows, out)
+    for run in runs:
+        for w in _at(run, at):
+            t, v = plots.wave(run / w["file"])
+            k = t > t[0] + settle * (t[-1] - t[0])  # after the start-up
+            rows.append({"pair": run.parent.name, "wave": w["name"], "noise_pp_mV": float(np.ptp(v[k])) * 1e3, "noise_rms_mV": float(v[k].std()) * 1e3, "limit_pp_mV": max_noise * 1e3, "pass": bool(np.ptp(v[k]) <= max_noise)})
+    return table(f"Crosstalk (limit {max_noise * 1e3:.0f} mV p-p)", rows, out)
 
 
-def sparams(run: Path, *, at_hz: float, min_sdd21_db: float, max_sdd11_db: float, out: Path | None) -> list[dict]:
-    """Mixed-mode insertion and return loss of a 4-port pair at ``at_hz`` (e.g. its Nyquist)."""
-    info = json.loads((run / "sparam.json").read_text())
-    f, S = plots.read_touchstone(run / info["file"])
-    if S.shape[1] != 4:
-        return []
-    M = np.array([[1, -1, 0, 0], [0, 0, 1, -1], [1, 1, 0, 0], [0, 0, 1, 1]]) / np.sqrt(2)
-    Smm = M @ S @ M.T
-    k = int(np.argmin(abs(f - at_hz)))
-    db = lambda x: float(20 * np.log10(abs(x) + 1e-30))
-    sdd21, sdd11 = db(Smm[k, 1, 0]), db(Smm[k, 0, 0])
-    rows = [{"pins": " ".join(info["pins"]), "f_MHz": f[k] / 1e6, "SDD21_dB": sdd21, "SDD11_dB": sdd11, "SCD21_dB": db(Smm[k, 3, 0]), "pass": bool(sdd21 >= min_sdd21_db and sdd11 <= max_sdd11_db)}]
+def sparams(runs: list[Path], *, at_hz: float, min_sdd21_db: float, max_sdd11_db: float, out: Path | None) -> list[dict]:
+    """Mixed-mode insertion and return loss of 4-port pairs (pair: each run's name) at ``at_hz``
+    (e.g. its Nyquist)."""
+    rows = []
+    for run in runs:
+        info = json.loads((run / "sparam.json").read_text())
+        f, S = plots.read_touchstone(run / info["file"])
+        if S.shape[1] != 4:
+            continue
+        M = np.array([[1, -1, 0, 0], [0, 0, 1, -1], [1, 1, 0, 0], [0, 0, 1, 1]]) / np.sqrt(2)
+        Smm = M @ S @ M.T
+        k = int(np.argmin(abs(f - at_hz)))
+        db = lambda x: float(20 * np.log10(abs(x) + 1e-30))
+        sdd21, sdd11 = db(Smm[k, 1, 0]), db(Smm[k, 0, 0])
+        rows += [{"pair": run.name, "pins": " ".join(info["pins"]), "f_MHz": f[k] / 1e6, "SDD21_dB": sdd21, "SDD11_dB": sdd11, "SCD21_dB": db(Smm[k, 3, 0]), "pass": bool(sdd21 >= min_sdd21_db and sdd11 <= max_sdd11_db)}]
     return table(f"S-parameters at {at_hz / 1e6:.0f} MHz (limits: SDD21 >= {min_sdd21_db} dB, SDD11 <= {max_sdd11_db} dB)", rows, out)
 
 
-def tdr(run: Path, *, rise_ps: float, er_eff: float, out: Path | None) -> list[dict]:
-    """Per port and pair of an S-parameter run (plots.tdr): the reference impedance, the lowest
-    and highest impedance seen and where (distance), and the impedance at the far end."""
-    r = plots.tdr(run, rise_ps=rise_ps, er_eff=er_eff)
+def tdr(runs: list[Path], *, rise_ps: float, er_eff: float, out: Path | None) -> list[dict]:
+    """Per port and pair of S-parameter runs (plots.tdr; pair: each run's name): the reference
+    impedance, the lowest and highest impedance seen and where (distance), the impedance at the
+    far end, and the line's one-way delay."""
     rows = []
-    for label, t in r["traces"].items():
-        inside = t["t"] <= 2 * r["delay_s"]  # the line itself, up to its round trip
-        z, d = t["Z"][inside], t["d"][inside]
-        lo, hi = int(np.argmin(z)), int(np.argmax(z))
-        rows.append({"trace": label, "Z0_ohm": t["z0"], "Z_min_ohm": float(z[lo]), "at_min_mm": float(d[lo] * 1e3), "Z_max_ohm": float(z[hi]), "at_max_mm": float(d[hi] * 1e3), "Z_end_ohm": float(t["Z"][-1])})
-    return table(f"TDR ({run.name}; {r['rise_ps']:.0f} ps step, one-way delay {r['delay_s'] * 1e9:.2f} ns)", rows, out)
+    for run in runs:
+        r = plots.tdr(run, rise_ps=rise_ps, er_eff=er_eff)
+        for label, t in r["traces"].items():
+            inside = t["t"] <= 2 * r["delay_s"]  # the line itself, up to its round trip
+            z, d = t["Z"][inside], t["d"][inside]
+            lo, hi = int(np.argmin(z)), int(np.argmax(z))
+            rows.append({"pair": run.name, "trace": label, "Z0_ohm": t["z0"], "Z_min_ohm": float(z[lo]), "at_min_mm": float(d[lo] * 1e3), "Z_max_ohm": float(z[hi]), "at_max_mm": float(d[hi] * 1e3), "Z_end_ohm": float(t["Z"][-1]), "delay_ns": r["delay_s"] * 1e9})
+    return table(f"TDR ({rise_ps:.0f} ps step asked; no sharper than the data's bandwidth)", rows, out)

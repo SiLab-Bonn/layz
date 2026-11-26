@@ -350,8 +350,8 @@ def test_hyperlynx_analysis(tmp_path):
     (eye,) = analysis.eyes([si], min_height=0.2, min_width_ui=0.7, at=None, skip_ui=4, centre_window=0.05, edge_levels=(0.2, 0.8), out=tmp_path / "eyes.csv")
     assert eye["height_mV"] > 700 and eye["width_ui"] > 0.9 and eye["pass"]
     assert 0 < eye["rise_ps"] <= 50 and 0 < eye["fall_ps"] <= 50  # one 50 ps sample per edge
-    assert analysis.crosstalk(si, max_noise=0.1, at=None, settle=0.1, out=None)[0]["pass"] is False  # an eye is no quiet line
-    assert analysis.sparams(sp, at_hz=1e9, min_sdd21_db=-3, max_sdd11_db=-10, out=None) == []  # a 2-port: no mixed mode
+    assert analysis.crosstalk([si], max_noise=0.1, at=None, settle=0.1, out=None)[0]["pass"] is False  # an eye is no quiet line
+    assert analysis.sparams([sp], at_hz=1e9, min_sdd21_db=-3, max_sdd11_db=-10, out=None) == []  # a 2-port: no mixed mode
 
 
 def test_current_density(tmp_path):

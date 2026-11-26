@@ -203,7 +203,16 @@ function stage(d, t, i) {
   if (isBoard) right.push(["3D", async () => view3d(await board())]);
   const REPLACES = { dc: ["dc_current_density", "dc_loss_map", "dc_pin_voltage", "dc_via_current"] };  // maps an overlay draws on the board
   const replaced = new Set((t.overlays || []).flatMap((o) => REPLACES[base(o).split("_")[0]] || []));
-  for (const p of t.plots) if (!replaced.has(base(p.png).replace(/\.png$/, ""))) right.push([plotLabel(p.png), async () => plotPane(d.name, p)]);
+  // a figure per pair (eye__D1, eye__D2, ...): one tab per kind, the pair picked in it
+  const groups = new Map();
+  for (const p of t.plots) {
+    const stem = base(p.png).replace(/\.png$/, "");
+    if (replaced.has(stem)) continue;
+    const [kind, pair] = stem.includes("__") ? stem.split("__") : [stem, null];
+    if (!groups.has(kind)) groups.set(kind, []);
+    groups.get(kind).push([pair, p]);
+  }
+  for (const [kind, items] of groups) right.push([kind.replace(/_/g, " "), async () => (items.length === 1 && !items[0][0] ? plotPane(d.name, items[0][1]) : plotGroup(d.name, items))]);
 
   // left: numbers
   const mark = (row, head) => {
@@ -309,7 +318,7 @@ function logLine(line) {
 
 // ---------------------------------------------------------------- interactive plots (Plotly)
 
-async function plotPane(design, p) {
+async function plotPane(design, p, lead = null) {
   const png = fileUrl(design, p.png);
   if (!p.data || !window.Plotly) return h("img", { src: png, class: "plotpng" });
   const fig = await once(fileUrl(design, p.data));
@@ -388,11 +397,20 @@ async function plotPane(design, p) {
   themeListeners.add(draw);
   requestAnimationFrame(draw);
   // the same controls as the layout views: fit, and the flow's own PNG and PDF of the figure
-  const tools = h("div", { class: "tools row" }, select,
+  const tools = h("div", { class: "tools row" }, lead, select,
     h("button", { class: "fit", title: "back to the whole plot", onclick: () => window.Plotly.relayout(el, Object.fromEntries(Object.keys(el.layout || {}).filter((k) => /^[xy]axis\d*$/.test(k)).map((k) => [`${k}.autorange`, true]))) }, "fit"),
     h("a", { class: "fit", href: png, target: "_blank", title: "the figure as PNG" }, "png"),
     h("a", { class: "fit", href: png.replace(/\.png$/, ".pdf"), target: "_blank", title: "the figure as PDF" }, "pdf"));
   return h("div", {}, tools, el);
+}
+
+// figures of one kind, one per pair (net): a list to pick the pair, its figure below
+async function plotGroup(design, items) {
+  const holder = h("div");
+  const show = async (k) => holder.replaceChildren(await plotPane(design, items[k][1], pick));
+  const pick = h("select", { class: "panelpick", title: "the pair (net)", onchange: (e) => show(Number(e.target.value)) }, items.map(([pair], k) => h("option", { value: k }, pair || "—")));
+  await show(0);
+  return holder;
 }
 
 // ---------------------------------------------------------------- KiCad drawings, inline
