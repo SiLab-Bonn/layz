@@ -142,9 +142,10 @@ def resistance(run: Path, *, out: Path | None) -> list[dict]:
     return table(f"Resistance VRM -> sink ({run.name})", rows, out, quiet=True)
 
 
-def _at(run: Path, at: str | None) -> list[dict]:
-    """The run's (differential) waveforms, only those whose name contains ``at`` if given."""
-    return [w for w in plots._diff_waves(run) if at is None or at in w["name"]]
+def _at(run: Path, at: str | list[str] | None) -> list[dict]:
+    """The run's (differential) waveforms, only those whose name contains ``at`` (or one of a
+    list) if given."""
+    return [w for w in plots._diff_waves(run) if plots.names_at(w["name"], at)]
 
 
 def eyes(runs: list[Path], *, min_height: float, min_width_ui: float, at: str | None, skip_ui: float, centre_window: float, edge_levels: tuple[float, float], out: Path | None) -> list[dict]:

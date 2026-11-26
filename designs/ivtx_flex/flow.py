@@ -166,6 +166,7 @@ def signal_integrity():
             sparameter_coupling={"connector": False, "connector_threshold": -20.0, "package": False, "package_threshold": -20.0, "em": False, "em_threshold": -20.0, "fmin": 1e5, "fmax": 2e10},
             driver_states={},
             aggressors=[],
+            models={},
         )
 
         # eye with loss, roughness, crosstalk (traces within 0.5 mm, area fills), and jitter:
@@ -199,6 +200,7 @@ def signal_integrity():
             sparameter_coupling={"connector": False, "connector_threshold": -20.0, "package": False, "package_threshold": -20.0, "em": False, "em_threshold": -20.0, "fmin": 1e5, "fmax": 2e10},
             driver_states={},
             aggressors=[],
+            models={},
         )
 
         # chip 4's data pair quiet (its pins have no model in the project: passive) while CLK (from the
@@ -233,6 +235,7 @@ def signal_integrity():
             sparameter_coupling={"connector": False, "connector_threshold": -20.0, "package": False, "package_threshold": -20.0, "em": False, "em_threshold": -20.0, "fmin": 1e5, "fmax": 2e10},
             driver_states={},
             aggressors=[{"driver": p["gpio"][0], "receivers": [p["gpio"][1]], "lib": "modvsez.ibs", "device": "MODvsEZIBIS", "model": "3"}] + ([{"driver": "J1.36", "receivers": ["iVTX1.18"], "lib": "modvsez.ibs", "device": "MODvsEZIBIS", "model": "3"}] if pair == "DATA_CHIP_4" else []),
+            models={},
         )
         eyes += [ideal, real]
         xts.append(xt)

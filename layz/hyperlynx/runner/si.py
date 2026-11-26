@@ -37,6 +37,16 @@ for g in job["aggressors"]:
         if io == h.hlIoDirOutput:
             p.Model.DrvState = h.hlDrvStateSwitching
     say(f"aggressor {g['driver']} -> {', '.join(g['receivers'])}")
+for pin, m in job.get("models", {}).items():  # the net's own pins, where the project has no model
+    p = d.FindPin(pin)
+    if p is None:
+        raise SystemExit(f"pin {pin!r} not found")
+    if not p.AssignModel(m["lib"], m["device"], m["model"]):
+        raise SystemExit(f"cannot give {pin} the model {m['lib']} {m['device']} {m['model']}: {app.LastError}")
+    p.Model.IoDir = h.hlIoDirOutput if m["io"] == "output" else h.hlIoDirInput
+    if m["io"] == "output":
+        p.Model.DrvState = h.hlDrvStateSwitching
+    say(f"{pin}: {m['device']} ({m['io']})")
 for pin, state in job["driver_states"].items():
     p = d.FindPin(pin)
     if p is None or p.Model is None:
@@ -140,6 +150,7 @@ settings = {
     "area_fill_coupling": {"enabled": xt.AreaFillCoupling.Enabled, "grid": xt.AreaFillCoupling.Grid, "search_distance": xt.AreaFillCoupling.SearchDist},
     "driver_states": job["driver_states"],
     "aggressors": job["aggressors"],
+    "models": job.get("models", {}),
 }
 say("settings: " + ", ".join(f"{k}={v}" for k, v in settings.items() if k not in ("aggressors", "trace_coupling", "area_fill_coupling")))
 if not sim.Run():

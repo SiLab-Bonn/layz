@@ -47,8 +47,8 @@ def _run(kind: str, board, out, options: dict, display: bool = False) -> Path:
     out.mkdir(parents=True, exist_ok=True)
     # model libraries the job names that aren't beside the board: from HyperLynx's own Libs/
     extra = []
-    for g in options.get("aggressors", []):
-        if not (Path(board).parent / g["lib"]).exists():
+    for g in options.get("aggressors", []) + list(options.get("models", {}).values()):
+        if not (Path(board).parent / g["lib"]).exists() and (install / "hyperlynx" / "Libs" / g["lib"]).exists():
             extra.append(install / "hyperlynx" / "Libs" / g["lib"])
     copy = copy_board(Path(board), out / "board", extra)
     job = {"kind": kind, "board": str(copy), "out": str(out), "source": str(Path(board).resolve()), **options}
@@ -102,7 +102,7 @@ def dc(board, out, *, license: str, nets: list[str], include_ref: bool, vrms: di
     return _run("dc", board, out, options)
 
 
-def si(board, out, *, license: str, net: str, operation: str, simulator: str, corner: str, probe: str, stimulus_scope: str, bit_sequence: str, prbs_order: int, repetitions: int, frequency: float, duty_cycle: float, initial_state: str, stop_s, step_s, jitter: dict, lossy: bool, roughness: bool, trapezoid: bool, nonfunctional_pads: bool, crosstalk: bool, trace_coupling: dict, area_fill_coupling: dict, sparameter_coupling: dict, driver_states: dict, aggressors: list[dict]) -> Path:
+def si(board, out, *, license: str, net: str, operation: str, simulator: str, corner: str, probe: str, stimulus_scope: str, bit_sequence: str, prbs_order: int, repetitions: int, frequency: float, duty_cycle: float, initial_state: str, stop_s, step_s, jitter: dict, lossy: bool, roughness: bool, trapezoid: bool, nonfunctional_pads: bool, crosstalk: bool, trace_coupling: dict, area_fill_coupling: dict, sparameter_coupling: dict, driver_states: dict, aggressors: list[dict], models: dict) -> Path:
     """Signal integrity (BoardSim): waveforms or an eye of a net, at full resolution.
 
     net                  the net to simulate (HyperLynx brings its differential partner along)
@@ -132,6 +132,8 @@ def si(board, out, *, license: str, net: str, operation: str, simulator: str, co
     aggressors           [{"driver": pin, "receivers": [pins], "lib", "device", "model"}]: these
                          pins get that IBIS model and the driver switches (a lib not beside the
                          board comes from HyperLynx's Libs/, e.g. modvsez.ibs, MODvsEZIBIS, "3")
+    models               {pin: {"lib", "device", "model", "io": "output" | "input"}}: the net's own
+                         pins' models where the board's project has none (an output switches)
     """
     options = {k: v for k, v in locals().items() if k not in ("board", "out")}
     return _run("si", board, out, options, display=True)

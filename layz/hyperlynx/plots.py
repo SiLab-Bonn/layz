@@ -447,13 +447,18 @@ def _label(run: Path) -> str:
 
 
 @mpl.rc_context(PLOT_STYLE)
+def names_at(name: str, at: str | list[str] | None) -> bool:
+    """Whether a waveform's name is at ``at``: contains it, or one of a list; None: any."""
+    return at is None or any(a in name for a in ([at] if isinstance(at, str) else at))
+
+
 def _stem(kind: str, name: str | None) -> str:
     """A figure's file name: its kind, and the pair (net) it is of: eye__D1 (`layz web` shows one
     tab per kind, the pairs to pick from)."""
     return f"{kind}__{name}" if name else kind
 
 
-def plot_si(runs: list[Path], out: Path, *, at: str | None, skip_ui: float, centre_window: float, edge_levels: tuple[float, float], settle: float, name: str | None = None) -> list[Path]:
+def plot_si(runs: list[Path], out: Path, *, at: str | list[str] | None, skip_ui: float, centre_window: float, edge_levels: tuple[float, float], settle: float, name: str | None = None) -> list[Path]:
     """The eyes at the receiver (waveforms naming ``at``; None: every one), one per eye run, side by
     side; crosstalk runs (those with aggressors) on their own; every run's waveforms, per pair.
     skip_ui, centre_window, edge_levels: as for eye(); settle: share of a crosstalk run's time
@@ -470,7 +475,7 @@ def plot_si(runs: list[Path], out: Path, *, at: str | None, skip_ui: float, cent
     eyes = [r for r in signal if json.loads((r / "si.json").read_text()).get("mode") == "eye"]
     if eyes:
         first = eyes[0]
-        here = [n for n in names if at is None or at in n] or names
+        here = [n for n in names if names_at(n, at)] or names
         panels = [(r, name) for name in here for r in eyes]  # each eye run at the receiver, side by side
         fig, axes = plt.subplots(1, len(panels), figsize=(4.8 * len(panels), 3.8), squeeze=False, sharex=True, sharey=True)
         t0, v0 = wave(first / waves[first][0]["file"])
