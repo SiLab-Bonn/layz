@@ -110,6 +110,8 @@ def drop_map(run: Path) -> dict:
     # the VRM's pins: its power pins on a supply run; on a return run (layz's runner/dc.py moves the
     # VRM to the old reference pins) its reference pins
     src_pins = [(p, v["power_net"]) for v in vrms for p in v["power_pins"]] + [(p, v["ref_net"]) for v in vrms_all if v["ref_net"] in solved for p in v["ref_pins"]]
+    if not src_pins:  # a VRM the flow defined (vrms.json holds the board's own): the pins delivering current
+        src_pins = [(p["pin"], p["net"]) for p in ports.values() if p["net"] in net_of and float(p["current_A"]) < 0]
     sources = [n for p, net in src_pins if (n := pin_node(p, net)) >= 0]
     v_src = {net: float(ports[p]["voltage_V"]) for p, net in src_pins if p in ports}
     graph = coo_matrix((np.concatenate(w), (np.concatenate(rows), np.concatenate(cols))), shape=(count, count)).tocsr() if rows else None
