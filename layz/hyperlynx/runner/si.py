@@ -37,6 +37,12 @@ for g in job["aggressors"]:
         if io == h.hlIoDirOutput:
             p.Model.DrvState = h.hlDrvStateSwitching
     say(f"aggressor {g['driver']} -> {', '.join(g['receivers'])}")
+for ref, value in job.get("component_values", {}).items():  # passives the project has no value for
+    c = d.FindComponent(ref)
+    if c is None:
+        raise SystemExit(f"component {ref!r} not found")
+    c.Value = value
+    say(f"{ref} = {value:g}")
 for pin, m in job.get("models", {}).items():  # the net's own pins, where the project has no model
     p = d.FindPin(pin)
     if p is None:
@@ -167,6 +173,7 @@ settings = {
     "driver_states": job["driver_states"],
     "aggressors": job["aggressors"],
     "models": job.get("models", {}),
+    "component_values": job.get("component_values", {}),
 }
 say("settings: " + ", ".join(f"{k}={v}" for k, v in settings.items() if k not in ("aggressors", "trace_coupling", "area_fill_coupling")))
 if not sim.Run():

@@ -32,6 +32,9 @@ PAIRS = {f"D{k}": {"driver": [f"V{k}.101", f"V{k}.102"], "receiver": [f"VTX2.{99
 # Their S-parameters run to chip 4's capacitors (the farthest), the other branches as stubs.
 FAST = {"like": "V1.101"}  # the project's SPICE driver on D1, its ports wired as there
 RCV = {"like": "VTX2.101"}  # and its receiver
+# the coupling capacitors CLK and CMD pass to each chip: 0.2 nF (the schematic's; the HyperLynx
+# project has no values for them, an open)
+COUPLING = {f"C{base + i}": 0.2e-9 for base in (0, 100, 200, 300) for i in (1, 2, 3, 4)}
 CHIPS = ["V1-", "V2-", "V3-", "V4-"]  # the chips' waveforms (HyperLynx names them V(V1-123,V1-124))
 BUSES = {
     name: {"pin": pin, "driver": [f"VTX2.{pin}", f"VTX2.{pin + 1}"], "chips": [f"V{k}.{pin}" for k in (1, 2, 3, 4)] + [f"V{k}.{pin + 1}" for k in (1, 2, 3, 4)], "far": [f"C{cap}.2", f"C{cap + 1}.2"]}
@@ -197,6 +200,7 @@ def signal_integrity():
             driver_states={},
             aggressors=[],
             models={},
+            component_values={},
         )
 
         # the pair's drivers held low while every ADC line and rst switch as an 80 MHz clock
@@ -232,6 +236,7 @@ def signal_integrity():
             driver_states={pin: "low" for pin in p["driver"]},
             aggressors=[{"driver": q["adc"][0], "receivers": [q["adc"][1]], "lib": "modvsez.ibs", "device": "MODvsEZIBIS", "model": "3"} for q in PAIRS.values()] + [{"driver": "VTX2.100", "receivers": ["V1.100", "V2.100", "V3.100", "V4.100"], "lib": "modvsez.ibs", "device": "MODvsEZIBIS", "model": "3"}],
             models={},
+            component_values={},
         )
         eyes.append(real)
         xts.append(xt)
@@ -272,6 +277,7 @@ def signal_integrity():
             driver_states={},
             aggressors=[],
             models={**{pin: dict(FAST, io="output") for pin in b["driver"]}, **{pin: dict(RCV, io="input") for pin in b["chips"]}},
+            component_values=COUPLING,
         )
         # each chip's differential wave at its receiver's input (HyperLynx has no pair of these pins)
         plots.pair_waves(real, {f"V(V{k}-{b['pin']},V{k}-{b['pin'] + 1})": (f"V(V{k}_{b['pin']}-Vin_x)", f"V(V{k}_{b['pin'] + 1}-Vin_x)") for k in (1, 2, 3, 4)})

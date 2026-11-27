@@ -168,6 +168,7 @@ def signal_integrity():
             driver_states={},
             aggressors=[],
             models={},
+            component_values={},
         )
 
         # chip 4's data pair quiet (its pins have no model in the project: passive) while CLK (from the
@@ -203,6 +204,7 @@ def signal_integrity():
             driver_states={},
             aggressors=[{"driver": q["gpio"][0], "receivers": [q["gpio"][1]], "lib": "modvsez.ibs", "device": "MODvsEZIBIS", "model": "3"} for q in PAIRS.values()] + [{"driver": "J1.36", "receivers": ["iVTX1.18"], "lib": "modvsez.ibs", "device": "MODvsEZIBIS", "model": "3"}],
             models={},
+            component_values={},
         )
         eyes.append(real)
         xts.append(xt)

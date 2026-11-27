@@ -102,7 +102,7 @@ def dc(board, out, *, license: str, nets: list[str], include_ref: bool, vrms: di
     return _run("dc", board, out, options)
 
 
-def si(board, out, *, license: str, net: str, operation: str, simulator: str, corner: str, probe: str, stimulus_scope: str, bit_sequence: str, prbs_order: int, repetitions: int, frequency: float, duty_cycle: float, initial_state: str, stop_s, step_s, jitter: dict, lossy: bool, roughness: bool, trapezoid: bool, nonfunctional_pads: bool, crosstalk: bool, trace_coupling: dict, area_fill_coupling: dict, sparameter_coupling: dict, driver_states: dict, aggressors: list[dict], models: dict) -> Path:
+def si(board, out, *, license: str, net: str, operation: str, simulator: str, corner: str, probe: str, stimulus_scope: str, bit_sequence: str, prbs_order: int, repetitions: int, frequency: float, duty_cycle: float, initial_state: str, stop_s, step_s, jitter: dict, lossy: bool, roughness: bool, trapezoid: bool, nonfunctional_pads: bool, crosstalk: bool, trace_coupling: dict, area_fill_coupling: dict, sparameter_coupling: dict, driver_states: dict, aggressors: list[dict], models: dict, component_values: dict) -> Path:
     """Signal integrity (BoardSim): waveforms or an eye of a net, at full resolution.
 
     net                  the net to simulate (HyperLynx brings its differential partner along)
@@ -136,6 +136,8 @@ def si(board, out, *, license: str, net: str, operation: str, simulator: str, co
                          {"like": another pin, "io": ...}}: the net's own pins' models where the
                          board's project has none (an output switches); "like" copies that pin's
                          model and how its SPICE ports connect (stimulus, the pin, ground)
+    component_values     {ref: value}: passives the project has none for (F, ohm, H), e.g. the
+                         coupling capacitors a net runs through
     """
     options = {k: v for k, v in locals().items() if k not in ("board", "out")}
     return _run("si", board, out, options, display=True)
