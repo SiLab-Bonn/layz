@@ -266,10 +266,35 @@ def _plot_loss(maps, out: Path) -> list[Path]:
 
 
 def _diff_waves(run: Path) -> list[dict]:
+    """A run's differential waveforms: the pairs layz made (pair_waves), else HyperLynx's own
+    (named V(A,B)), else every waveform."""
     si = json.loads((run / "si.json").read_text())
+    if si.get("pairs"):
+        return si["pairs"]
     waves = si.get("waves", [])
     diff = [w for w in waves if "," in w["name"]]
     return diff or waves
+
+
+def pair_waves(run: Path, pairs: dict[str, tuple[str, str]]) -> list[dict]:
+    """Differential waveforms of a run made from its single-ended ones, {name: (P wave, N wave)}
+    (HyperLynx's names): P - N, written into the run; from then on they are its differential
+    waveforms (_diff_waves). For pins HyperLynx pairs wrongly or not at all, e.g. a multi-drop
+    net's receivers behind coupling capacitors (their model's input nodes, V(V1_121-Vin_x))."""
+    si = json.loads((run / "si.json").read_text())
+    files = {w["name"]: w["file"] for w in si.get("waves", [])}
+    made = []
+    for name, (p, n) in pairs.items():
+        if p not in files or n not in files:
+            raise SystemExit(f"{run}: no waveform {p if p not in files else n} to pair (has {', '.join(sorted(files))})")
+        tp, vp = wave(run / files[p])
+        tn, vn = wave(run / files[n])
+        f = "pair_" + "".join(c if c.isalnum() or c in "-_" else "_" for c in name) + ".csv"
+        (run / f).write_text("".join(f"{t:.6e},{v:.6e}\n" for t, v in zip(tp, vp - np.interp(tp, tn, vn))))
+        made.append({"name": name, "file": f})
+    si["pairs"] = made
+    (run / "si.json").write_text(json.dumps(si, indent=1))
+    return made
 
 
 def unit_interval(t, v) -> tuple[float, float]:

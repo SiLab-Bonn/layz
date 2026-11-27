@@ -477,3 +477,21 @@ def test_tdr(tmp_path):
         else:  # once the edge has settled
             assert np.allclose(tr["rho"][tr["t"] > 0.5e-9], -0.999, atol=0.01)
         assert abs(tr["d"][-1] / tr["t"][-1] - 2.998e8 / 2 / 2) < 1e3  # v/2 at er 4
+
+
+def test_pair_waves(tmp_path):
+    """P - N of two single-ended waveforms becomes the run's differential waveform."""
+    import json
+
+    import numpy as np
+
+    from layz.hyperlynx import plots
+
+    t = np.linspace(0, 1e-9, 11)
+    (tmp_path / "p.csv").write_text("".join(f"{a},{b}\n" for a, b in zip(t, 1 + t * 1e9)))
+    (tmp_path / "n.csv").write_text("".join(f"{a},{b}\n" for a, b in zip(t, 1 - t * 1e9)))
+    (tmp_path / "si.json").write_text(json.dumps({"waves": [{"name": "V(A_1-Vin_x)", "file": "p.csv"}, {"name": "V(A_2-Vin_x)", "file": "n.csv"}, {"name": "V(X,Y)", "file": "p.csv"}]}))
+    (made,) = plots.pair_waves(tmp_path, {"V(A-1,A-2)": ("V(A_1-Vin_x)", "V(A_2-Vin_x)")})
+    assert plots._diff_waves(tmp_path) == [made]  # the made pair, not HyperLynx's V(X,Y)
+    _, v = plots.wave(tmp_path / made["file"])
+    assert np.allclose(v, 2 * t * 1e9)

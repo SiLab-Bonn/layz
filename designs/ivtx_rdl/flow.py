@@ -34,7 +34,7 @@ FAST = {"lib": "fast_drv.sp", "device": "fast_drv", "model": "fast_drv"}  # as t
 RCV = {"lib": "fast_rcv.sp", "device": "Fast_Rcv", "model": "Fast_Rcv"}
 CHIPS = ["V1-", "V2-", "V3-", "V4-"]  # the chips' waveforms (HyperLynx names them V(V1-123,V1-124))
 BUSES = {
-    name: {"driver": [f"VTX2.{pin}", f"VTX2.{pin + 1}"], "chips": [f"V{k}.{pin}" for k in (1, 2, 3, 4)] + [f"V{k}.{pin + 1}" for k in (1, 2, 3, 4)], "far": [f"C{cap}.2", f"C{cap + 1}.2"]}
+    name: {"pin": pin, "driver": [f"VTX2.{pin}", f"VTX2.{pin + 1}"], "chips": [f"V{k}.{pin}" for k in (1, 2, 3, 4)] + [f"V{k}.{pin + 1}" for k in (1, 2, 3, 4)], "far": [f"C{cap}.2", f"C{cap + 1}.2"]}
     for name, pin, cap in (("CLK", 123, 303), ("CMD", 121, 301))
 }
 
@@ -273,6 +273,8 @@ def signal_integrity():
             aggressors=[],
             models={**{pin: dict(FAST, io="output") for pin in b["driver"]}, **{pin: dict(RCV, io="input") for pin in b["chips"]}},
         )
+        # each chip's differential wave at its receiver's input (HyperLynx has no pair of these pins)
+        plots.pair_waves(real, {f"V(V{k}-{b['pin']},V{k}-{b['pin'] + 1})": (f"V(V{k}_{b['pin']}-Vin_x)", f"V(V{k}_{b['pin'] + 1}-Vin_x)") for k in (1, 2, 3, 4)})
         bus_eyes.append(real)
         plots.plot_si([real], out, at=CHIPS, skip_ui=4, centre_window=0.05, edge_levels=(0.2, 0.8), settle=0.1, name=name)
 
