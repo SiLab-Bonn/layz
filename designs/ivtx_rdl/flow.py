@@ -279,8 +279,8 @@ def signal_integrity():
             models={**{pin: dict(FAST, io="output") for pin in b["driver"]}, **{pin: dict(RCV, io="input") for pin in b["chips"]}},
             component_values=COUPLING,
         )
-        # each chip's differential wave at its receiver's input (HyperLynx has no pair of these pins)
-        plots.pair_waves(real, {f"V(V{k}-{b['pin']},V{k}-{b['pin'] + 1})": (f"V(V{k}_{b['pin']}-Vin_x)", f"V(V{k}_{b['pin'] + 1}-Vin_x)") for k in (1, 2, 3, 4)})
+        # each chip's differential wave at its pins (HyperLynx pairs these pins wrongly)
+        plots.pair_waves(real, {f"V(V{k}-{b['pin']},V{k}-{b['pin'] + 1})": tuple([f"V(V{k}-{b['pin'] + j})", f"V(V{k}_{b['pin'] + j}-Vin_x)"] for j in (0, 1)) for k in (1, 2, 3, 4)})
         bus_eyes.append(real)
         plots.plot_si([real], out, at=CHIPS, skip_ui=4, centre_window=0.05, edge_levels=(0.2, 0.8), settle=0.1, name=name)
 

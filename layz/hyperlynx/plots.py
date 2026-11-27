@@ -276,17 +276,21 @@ def _diff_waves(run: Path) -> list[dict]:
     return diff or waves
 
 
-def pair_waves(run: Path, pairs: dict[str, tuple[str, str]]) -> list[dict]:
+def pair_waves(run: Path, pairs: dict[str, tuple[str | list[str], str | list[str]]]) -> list[dict]:
     """Differential waveforms of a run made from its single-ended ones, {name: (P wave, N wave)}
     (HyperLynx's names): P - N, written into the run; from then on they are its differential
     waveforms (_diff_waves). For pins HyperLynx pairs wrongly or not at all, e.g. a multi-drop
-    net's receivers behind coupling capacitors (their model's input nodes, V(V1_121-Vin_x))."""
+    net's receivers behind coupling capacitors. P and N may each be a list of names, the first
+    the run has taken: the pin's probe V(V1-121), else its model's input node V(V1_121-Vin_x)."""
     si = json.loads((run / "si.json").read_text())
     files = {w["name"]: w["file"] for w in si.get("waves", [])}
     made = []
-    for name, (p, n) in pairs.items():
-        if p not in files or n not in files:
-            raise SystemExit(f"{run}: no waveform {p if p not in files else n} to pair (has {', '.join(sorted(files))})")
+    for name, ends in pairs.items():
+        found = [next((c for c in ([e] if isinstance(e, str) else e) if c in files), None) for e in ends]
+        if None in found:
+            missing = ends[found.index(None)]
+            raise SystemExit(f"{run}: no waveform {missing} to pair (has {', '.join(sorted(files))})")
+        p, n = found
         tp, vp = wave(run / files[p])
         tn, vn = wave(run / files[n])
         f = "pair_" + "".join(c if c.isalnum() or c in "-_" else "_" for c in name) + ".csv"
