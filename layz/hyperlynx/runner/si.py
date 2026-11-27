@@ -41,12 +41,28 @@ for pin, m in job.get("models", {}).items():  # the net's own pins, where the pr
     p = d.FindPin(pin)
     if p is None:
         raise SystemExit(f"pin {pin!r} not found")
-    if not p.AssignModel(m["lib"], m["device"], m["model"]):
-        raise SystemExit(f"cannot give {pin} the model {m['lib']} {m['device']} {m['model']}: {app.LastError}")
+    ref = None
+    if "like" in m:  # another pin's model, with its SPICE ports wired the same way to this pin
+        ref = d.FindPin(m["like"])
+        if ref is None or ref.Model is None:
+            raise SystemExit(f"pin {m['like']!r} not found, or without a model")
+        ref = ref.Model
+        lib, device, model = ref.LibFile, ref.Device, ref.PinModel
+    else:
+        lib, device, model = m["lib"], m["device"], m["model"]
+    if not p.AssignModel(lib, device, model):
+        raise SystemExit(f"cannot give {pin} the model {lib} {device} {model}: {app.LastError}")
+    if ref is not None and ref.SpicePorts is not None and p.Model.SpicePorts is not None:
+        mine, theirs = p.Model.SpicePorts, ref.SpicePorts
+        conn = {theirs.Item(j).Name: theirs.Item(j).CktConn for j in range(1, theirs.Count + 1)}
+        for i in range(1, mine.Count + 1):
+            port = mine.Item(i)
+            if port.Name in conn:
+                port.CktConn = conn[port.Name].replace(m["like"], pin)  # its pin for the other's
     p.Model.IoDir = h.hlIoDirOutput if m["io"] == "output" else h.hlIoDirInput
     if m["io"] == "output":
         p.Model.DrvState = h.hlDrvStateSwitching
-    say(f"{pin}: {m['device']} ({m['io']})")
+    say(f"{pin}: {device} ({m['io']})" + (f", as {m['like']}" if "like" in m else ""))
 for pin, state in job["driver_states"].items():
     p = d.FindPin(pin)
     if p is None or p.Model is None:

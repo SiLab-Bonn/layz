@@ -47,7 +47,7 @@ def _run(kind: str, board, out, options: dict, display: bool = False) -> Path:
     out.mkdir(parents=True, exist_ok=True)
     # model libraries the job names that aren't beside the board: from HyperLynx's own Libs/
     extra = []
-    for g in options.get("aggressors", []) + list(options.get("models", {}).values()):
+    for g in [g for g in options.get("aggressors", []) + list(options.get("models", {}).values()) if "lib" in g]:
         if not (Path(board).parent / g["lib"]).exists() and (install / "hyperlynx" / "Libs" / g["lib"]).exists():
             extra.append(install / "hyperlynx" / "Libs" / g["lib"])
     copy = copy_board(Path(board), out / "board", extra)
@@ -132,8 +132,10 @@ def si(board, out, *, license: str, net: str, operation: str, simulator: str, co
     aggressors           [{"driver": pin, "receivers": [pins], "lib", "device", "model"}]: these
                          pins get that IBIS model and the driver switches (a lib not beside the
                          board comes from HyperLynx's Libs/, e.g. modvsez.ibs, MODvsEZIBIS, "3")
-    models               {pin: {"lib", "device", "model", "io": "output" | "input"}}: the net's own
-                         pins' models where the board's project has none (an output switches)
+    models               {pin: {"lib", "device", "model", "io": "output" | "input"}}, or {pin:
+                         {"like": another pin, "io": ...}}: the net's own pins' models where the
+                         board's project has none (an output switches); "like" copies that pin's
+                         model and how its SPICE ports connect (stimulus, the pin, ground)
     """
     options = {k: v for k, v in locals().items() if k not in ("board", "out")}
     return _run("si", board, out, options, display=True)
